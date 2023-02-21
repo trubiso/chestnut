@@ -26,6 +26,7 @@ pub enum Token {
 	StringLiteral(String),
 	#[token("public", |_| Keyword::Public)]
 	#[token("func", |_| Keyword::Function)]
+	#[token("pure", |_| Keyword::Pure)]
 	#[token("return", |_| Keyword::Return)]
 	#[token("->", |_| Keyword::Arrow)]
 	#[token("=>", |_| Keyword::FatArrow)]
@@ -167,6 +168,7 @@ impl Display for Punctuation {
 pub enum Keyword {
 	Public,
 	Function,
+	Pure,
 	Return,
 	Arrow,
 	FatArrow,
@@ -184,6 +186,7 @@ impl Display for Keyword {
 		f.write_str(match *self {
 			Self::Public => "public",
 			Self::Function => "func",
+			Self::Pure => "pure",
 			Self::Return => "return",
 			Self::Arrow => "->",
 			Self::FatArrow => "=>",

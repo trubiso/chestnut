@@ -11,6 +11,36 @@ pub mod macros;
 
 type ScopeRecursive<'a> = Recursive<'a, Token, Scope, Simple<Token>>;
 
+macro_rules! func_attribs {
+	($($kw:ident => $prop:ident)*) => {
+		choice(($(jkeyword!($kw),)*))
+		.repeated()
+		.map(|attribs| {
+			let mut final_attribs = FuncAttribs::default();
+			for attrib in attribs {
+				match force_token!(attrib => Keyword) {
+					$(
+						Keyword::$kw => {
+							if final_attribs.$prop {
+								panic!("cannot apply attribute twice"); // TODO: diagnostics
+							}
+							final_attribs.$prop = true;
+						}
+					)*
+					_ => unreachable!(),
+				}
+			}
+			final_attribs
+		})
+	};
+}
+
+fn func_attribs() -> impl TokenParser<FuncAttribs> {
+	func_attribs!(
+		Pure => is_pure
+	)
+}
+
 /// Parses `<ty ident>, ...` into Vec<TypedIdent>
 fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
 	parened!(ty_ident(),)
@@ -18,16 +48,18 @@ fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
 
 /// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
 fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
-	ty_ident()
+	func_attribs()
+		.then(ty_ident())
 		.then(func_args())
 		.then(braced!(scope))
-		.map(|((ty_ident, args), body)| {
+		.map(|(((attribs, ty_ident), args), body)| {
 			Stmt::Func(
 				ty_ident.ident,
 				Func {
 					return_ty: ty_ident.ty,
 					args,
 					body,
+					attribs,
 				},
 			)
 		})
@@ -35,18 +67,20 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 
 /// Parses `func <ident>(<ty ident>, ...) -> <ty> { <scope> }` into Stmt::Func
 fn func_stmt_alt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
-	jkeyword!(Function)
-		.ignore_then(ident())
+	func_attribs()
+		.then_ignore(jkeyword!(Function))
+		.then(ident())
 		.then(func_args())
 		.then(jkeyword!(Arrow).ignore_then(ty()).or_not())
 		.then(braced!(scope))
-		.map(|(((ident, args), ty), body)| {
+		.map(|((((attribs, ident), args), ty), body)| {
 			Stmt::Func(
 				ident,
 				Func {
 					return_ty: ty.unwrap_or(builtin!(Void)),
 					args,
 					body,
+					attribs,
 				},
 			)
 		})
@@ -56,17 +90,16 @@ fn func_stmt_alt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 #[allow(dead_code)]
 /// Parses `func (<ty ident>, ...) -> <ty> { <scope> }` into Expr::Func
 fn func_expr() -> impl TokenParser<Expr> {
-	jkeyword!(Function)
-		.ignore_then(func_args())
+	func_attribs()
+		.then_ignore(jkeyword!(Function))
+		.then(func_args())
 		.then(braced!(parser()))
-		.map(|(args, scope)| {
+		.map(|((attribs, args), scope)| {
 			Expr::Func(Func {
-				return_ty: Type::BareType(BareType {
-					ident: ident!("void"),
-					generics: vec![],
-				}), // TODO: this is stupid
+				return_ty: builtin!(Void),
 				args,
 				body: scope,
+				attribs,
 			})
 		})
 }

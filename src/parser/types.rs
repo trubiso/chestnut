@@ -42,11 +42,17 @@ pub struct TypedIdent {
 	pub ident: Ident,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct FuncAttribs {
+	pub is_pure: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct Func {
 	pub return_ty: Type,
 	pub args: Vec<TypedIdent>, // TODO: perhaps we might need to change this
 	pub body: Scope,
+	pub attribs: FuncAttribs,
 }
 
 #[derive(Debug, Clone)]
@@ -111,10 +117,17 @@ impl fmt::Display for Type {
 	}
 }
 
+impl fmt::Display for FuncAttribs {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_fmt(format_args!("{}", if self.is_pure { "pure " } else { "" }))
+	}
+}
+
 impl fmt::Display for Func {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.write_fmt(format_args!(
-			"func ({}) -> {}: {{{}{}}};",
+			"{}func ({}) -> {}: {{{}{}}};",
+			self.attribs,
 			join_comma(&self.args).unwrap_or("".to_string()),
 			self.return_ty,
 			if self.body.stmts.is_empty() { "" } else { "\n" },

@@ -1,4 +1,4 @@
-void print_position(Tuple<int[]&, int?>[3]?& position) {}
+pure void print_position(Tuple<int[]&, int?>[3]?& position) {}
 
 func print_grid(GridPiece&[3][4]?[] pieces) {}
 
