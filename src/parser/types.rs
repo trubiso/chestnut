@@ -1,0 +1,165 @@
+use crate::lexer::{Operator, Token};
+use chumsky::prelude::*;
+use derive_more::Display;
+use std::fmt;
+
+pub trait TokenParser<T> = Parser<Token, T, Error = Simple<Token>>;
+
+#[derive(Debug, Display, Clone)]
+pub enum Generic {
+	Type(Type),
+	Expr(Expr),
+}
+
+#[derive(Debug, Display, Clone)]
+pub struct Ident(pub String);
+
+#[derive(Debug, Clone)]
+pub struct BareType {
+	pub ident: Ident,           // typename
+	pub generics: Vec<Generic>, // generics
+}
+
+#[derive(Debug, Clone)]
+pub enum Type {
+	BareType(BareType),
+	Array(Box<Type>, Option<Box<Expr>>),
+	Ref(Box<Type>),
+}
+
+#[derive(Debug, Display, Clone)]
+#[display(fmt = "{ty} {ident}")]
+pub struct TypedIdent {
+	pub ty: Type,
+	pub ident: Ident,
+}
+
+#[derive(Debug, Clone)]
+pub struct Func {
+	pub return_ty: Type,
+	pub args: Vec<TypedIdent>, // TODO: perhaps we might need to change this
+	pub body: Scope,
+}
+
+#[derive(Debug, Clone)]
+pub enum Expr {
+	CharLiteral(String),
+	StringLiteral(String),
+	NumberLiteral(String),
+	Identifier(Ident),
+	BinaryOp(Box<Expr>, Operator, Box<Expr>),
+	UnaryOp(Operator, Box<Expr>),
+	Func(Func),
+	Call(Box<Expr>, Vec<Expr>),
+}
+
+#[derive(Debug, Display, Clone)]
+pub enum Stmt {
+	#[display(fmt = "let {_0} = {_1}")]
+	Let(Ident, Expr),
+	#[display(fmt = "{_0} = {_1}")]
+	Create(TypedIdent, Expr),
+	#[display(fmt = "{_0} = {_1}")]
+	Set(Ident, Expr),
+	#[display(fmt = "{_0} = {_1}")]
+	Func(Ident, Func),
+	BareExpr(Expr),
+}
+
+#[derive(Debug, Clone)]
+pub struct Scope {
+	pub stmts: Vec<Stmt>,
+}
+
+impl fmt::Display for BareType {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_fmt(format_args!(
+			"{}{}",
+			self.ident,
+			match join_comma(&self.generics) {
+				None => "".to_string(),
+				Some(x) => format!("<{x}>"),
+			},
+		))
+	}
+}
+
+impl Type {
+	pub fn get_root(&self) -> &BareType {
+		match self {
+			Type::BareType(ty) => ty,
+			Type::Array(ty, _) => ty.get_root(),
+			Type::Ref(ty) => ty.get_root(),
+		}
+	}
+
+	pub fn get_mut_root(&mut self) -> &mut BareType {
+		match self {
+			Type::BareType(ty) => ty,
+			Type::Array(ty, _) => ty.get_mut_root(),
+			Type::Ref(ty) => ty.get_mut_root(),
+		}
+	}
+}
+
+impl fmt::Display for Type {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Type::BareType(x) => f.write_fmt(format_args!("{x}")),
+			Type::Array(x, len) => f.write_fmt(format_args!(
+				"{x}{}",
+				if let Some(len) = len {
+					format!("[{len}]")
+				} else {
+					"[]".to_string()
+				}
+			)),
+			Type::Ref(x) => f.write_fmt(format_args!("{x}&")),
+		}
+	}
+}
+
+impl fmt::Display for Func {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_fmt(format_args!(
+			"function({}) -> {}: {{{}{}}};",
+			join_comma(&self.args).unwrap_or("".to_string()),
+			self.return_ty,
+			if self.body.stmts.is_empty() { "" } else { "\n" },
+			self.body,
+		))
+	}
+}
+
+impl fmt::Display for Expr {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Expr::CharLiteral(x) => f.write_fmt(format_args!("{x}")),
+			Expr::StringLiteral(x) => f.write_fmt(format_args!("{x}")),
+			Expr::NumberLiteral(x) => f.write_fmt(format_args!("{x}")),
+			Expr::Identifier(x) => f.write_fmt(format_args!("{x}")),
+			Expr::BinaryOp(lhs, op, rhs) => f.write_fmt(format_args!("({lhs} {op} {rhs})")),
+			Expr::UnaryOp(op, expr) => f.write_fmt(format_args!("({op}{expr})")),
+			Expr::Func(func) => f.write_fmt(format_args!("{func}")),
+			Expr::Call(callee, args) => f.write_fmt(format_args!(
+				"{callee}({})",
+				join_comma(args).unwrap_or("".to_string())
+			)),
+		}
+	}
+}
+
+impl fmt::Display for Scope {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		for stmt in &self.stmts {
+			f.write_fmt(format_args!("{stmt}\n"))?;
+		}
+		Ok(())
+	}
+}
+
+fn join_comma<T: fmt::Display>(vec: &[T]) -> Option<String> {
+	vec.iter()
+		.map(|x| format!("{x}"))
+		.reduce(|acc, b| acc + ", " + &b)
+}

@@ -1,0 +1,11 @@
+void print_position(Tuple<int[]&, int?>[3]?& position) {}
+
+void print_grid(GridPiece&[3][4]?[] pieces) {}
+
+int main(string[4+4] args, int[34] arg) {
+	int[5]& x = 2 + (3 - 4);
+	let a = 3 + 5 + (2 - 3) * -9 + 4/2;
+	a *= 9 + 10;
+	print("Hello World!", 9+3-4);
+	4+2+4;
+}
