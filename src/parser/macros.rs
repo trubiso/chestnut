@@ -16,16 +16,41 @@ macro_rules! token_gen {
 		#[macro_export]
 		macro_rules! $jname {
 			($var:ident) => {
-				just(Token::$ident($ident::$var))
+				just($name!($var))
 			};
 		}
 	};
 }
 
 token_gen!(_keyword, jkeyword => Keyword);
-token_gen!(_punct, jpunct => Punctuation);
+token_gen!(punct, jpunct => Punctuation);
 token_gen!(_assg_op, jassg_op => AssignmentOp);
 token_gen!(_op, jop => Operator);
+
+macro_rules! delim_gen {
+	($name:ident => $wmac:ident + $l:ident, $r:ident) => {
+		#[macro_export]
+		macro_rules! $name {
+			($arg:expr) => {
+				$arg.delimited_by($wmac!($l), $wmac!($r))
+			};
+			($arg:expr, $sep:ident) => {
+				$name!($arg.separated_by(jpunct!($sep)))
+			};
+			($arg:expr,) => {
+				$name!($arg, Comma)
+			};
+		}
+	};
+	($name:ident => $l:ident, $r:ident) => {
+		delim_gen!($name => jpunct + $l, $r);
+	};
+}
+
+delim_gen!(parened => LParen, RParen);
+delim_gen!(braced => LBrace, RBrace);
+delim_gen!(bracketed => LBracket, RBracket);
+delim_gen!(angled => jop + Lt, Gt);
 
 #[macro_export]
 macro_rules! builtin {

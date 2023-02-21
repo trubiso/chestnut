@@ -11,17 +11,16 @@ pub mod macros;
 
 type ScopeRecursive<'a> = Recursive<'a, Token, Scope, Simple<Token>>;
 
+/// Parses `<ty ident>, ...` into Vec<TypedIdent>
 fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
-	ty_ident()
-		.separated_by(jpunct!(Comma))
-		.delimited_by(jpunct!(LParen), jpunct!(RParen))
+	parened!(ty_ident(),)
 }
 
-/// Parses a function of the format `<ty_ident>(<ty ident>, ...) { <scope> }`
+/// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
 fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 	ty_ident()
 		.then(func_args())
-		.then(scope.delimited_by(jpunct!(LBrace), jpunct!(RBrace)))
+		.then(braced!(scope))
 		.map(|((ty_ident, args), body)| {
 			Stmt::Func(
 				ty_ident.ident,
@@ -34,14 +33,13 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 		})
 }
 
-/// Parses a function of the format `func <ident>(<ty ident>, ...) -> <ty> {
-/// <scope> }`
+/// Parses `func <ident>(<ty ident>, ...) -> <ty> { <scope> }` into Stmt::Func
 fn func_stmt_alt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 	jkeyword!(Function)
 		.ignore_then(ident())
 		.then(func_args())
 		.then(jkeyword!(Arrow).ignore_then(ty()).or_not())
-		.then(scope.delimited_by(jpunct!(LBrace), jpunct!(RBrace)))
+		.then(braced!(scope))
 		.map(|(((ident, args), ty), body)| {
 			Stmt::Func(
 				ident,
@@ -56,10 +54,11 @@ fn func_stmt_alt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 
 // TODO: use this
 #[allow(dead_code)]
+/// Parses `func (<ty ident>, ...) -> <ty> { <scope> }` into Expr::Func
 fn func_expr() -> impl TokenParser<Expr> {
 	jkeyword!(Function)
 		.ignore_then(func_args())
-		.then(parser().delimited_by(jpunct!(LBrace), jpunct!(RBrace)))
+		.then(braced!(parser()))
 		.map(|(args, scope)| {
 			Expr::Func(Func {
 				return_ty: Type::BareType(BareType {
@@ -72,21 +71,18 @@ fn func_expr() -> impl TokenParser<Expr> {
 		})
 }
 
+/// Parses an expression into Expr
 fn expr() -> impl TokenParser<Expr> {
 	// () then - then ! then == != <= >= < > then && then || then *÷ then +-
 	recursive(|e| {
 		let atom = || {
 			choice((
-				e.clone().delimited_by(jpunct!(LParen), jpunct!(RParen)),
+				parened!(e.clone()),
 				literal_parser!(StringLiteral),
 				literal_parser!(NumberLiteral),
 				literal_parser!(CharLiteral),
 				ident()
-					.then(
-						e.clone()
-							.separated_by(jpunct!(Comma))
-							.delimited_by(jpunct!(LParen), jpunct!(RParen)),
-					)
+					.then(parened!(e.clone(),))
 					.map(|(ident, args)| Expr::Call(Box::new(Expr::Identifier(ident)), args)),
 				// func_expr()
 				// 	.then(
@@ -108,19 +104,17 @@ fn expr() -> impl TokenParser<Expr> {
 	})
 }
 
+/// Parses an ident token into Ident
 fn ident() -> impl TokenParser<Ident> {
 	filter(|x| matches!(x, Token::Identifier(_))).map(|x| Ident(force_token!(x => Identifier)))
 }
 
+/// Parses an ident token into Type
 fn ty() -> impl TokenParser<Type> {
 	type PostfixOp = Either<Option<Expr>, Operator>;
 	recursive(|ty| {
 		filter(|x| matches!(x, Token::Identifier(_)))
-			.then(
-				ty.separated_by(jpunct!(Comma))
-					.delimited_by(jop!(Lt), jop!(Gt))
-					.or_not(),
-			)
+			.then(angled!(ty,).or_not())
 			.map(|(ident, generics)| {
 				Type::BareType(BareType {
 					ident: Ident(force_token!(ident => Identifier)),
@@ -133,52 +127,53 @@ fn ty() -> impl TokenParser<Type> {
 			})
 			.then(
 				choice((
-					expr()
-						.or_not()
-						.delimited_by(jpunct!(LBracket), jpunct!(RBracket))
-						.map(PostfixOp::Left),
+					bracketed!(expr().or_not()).map(PostfixOp::Left),
 					jop!(Question).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 					jop!(Amp).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 					jop!(And).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 				))
 				.repeated(),
 			)
-			.foldl(|mut ty, new_info| match new_info {
+			.foldl(|ty, new_info| match new_info {
 				PostfixOp::Left(x) => Type::Array(Box::new(ty), x.map(Box::new)),
-				PostfixOp::Right(x) => {
-					match x {
-						Operator::Question => ty = Type::Optional(Box::new(ty)),
-						Operator::Amp => ty = Type::Ref(Box::new(ty)),
-						Operator::And => ty = Type::Ref(Box::new(Type::Ref(Box::new(ty)))),
-						_ => unreachable!(),
-					}
-					ty
-				}
+				PostfixOp::Right(x) => match x {
+					Operator::Question => Type::Optional(Box::new(ty)),
+					Operator::Amp => Type::Ref(Box::new(ty)),
+					Operator::And => Type::Ref(Box::new(Type::Ref(Box::new(ty)))),
+					_ => unreachable!(),
+				},
 			})
 	})
 }
 
+/// Parses `<ty> <ident>` into TypedIdent
 fn ty_ident() -> impl TokenParser<TypedIdent> {
 	ty().then(ident())
 		.map(|(ty, ident)| TypedIdent { ty, ident })
 }
 
+/// Parses `let <ident> = <expr>;` into Stmt::Let
 fn let_stmt() -> impl TokenParser<Stmt> {
 	jkeyword!(Let)
 		.ignore_then(assg!(ignore Set))
 		.map(|(lhs, value)| Stmt::Let(lhs, value))
 }
 
+/// Parses `<ty ident> = <expr>;` into Stmt::Create
 fn create_stmt() -> impl TokenParser<Stmt> {
 	ty_ident()
 		.then(assg!(noident ignore Set))
 		.map(|(lhs, value)| Stmt::Create(lhs, value))
 }
 
+/// Parses `<expr>;` into Stmt::BareExpr
+///
+/// Useful, for example, for function calls where the return value is discarded
 fn bare_expr_stmt() -> impl TokenParser<Stmt> {
 	expr().then_ignore(jpunct!(Semicolon)).map(Stmt::BareExpr)
 }
 
+/// Parses a bare scope (not wrapped in curly braces) into Scope
 pub fn parser() -> impl TokenParser<Scope> {
 	recursive(|scope| {
 		choice((
