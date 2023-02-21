@@ -17,6 +17,7 @@ fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
 		.delimited_by(jpunct!(LParen), jpunct!(RParen))
 }
 
+/// Parses a function of the format `<ty_ident>(<ty ident>, ...) { <scope> }`
 fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 	ty_ident()
 		.then(func_args())
@@ -26,6 +27,26 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 				ty_ident.ident,
 				Func {
 					return_ty: ty_ident.ty,
+					args,
+					body,
+				},
+			)
+		})
+}
+
+/// Parses a function of the format `func <ident>(<ty ident>, ...) -> <ty> {
+/// <scope> }`
+fn func_stmt_alt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
+	jkeyword!(Function)
+		.ignore_then(ident())
+		.then(func_args())
+		.then(jkeyword!(Arrow).ignore_then(ty()).or_not())
+		.then(scope.delimited_by(jpunct!(LBrace), jpunct!(RBrace)))
+		.map(|(((ident, args), ty), body)| {
+			Stmt::Func(
+				ident,
+				Func {
+					return_ty: ty.unwrap_or(builtin!(Void)),
 					args,
 					body,
 				},
@@ -126,18 +147,9 @@ fn ty() -> impl TokenParser<Type> {
 				PostfixOp::Left(x) => Type::Array(Box::new(ty), x.map(Box::new)),
 				PostfixOp::Right(x) => {
 					match x {
-						Operator::Question => {
-							ty = Type::BareType(BareType {
-								ident: ident!("Optional"),
-								generics: vec![Generic::Type(ty)],
-							})
-						}
-						Operator::Amp => {
-							ty = Type::Ref(Box::new(ty));
-						}
-						Operator::And => {
-							ty = Type::Ref(Box::new(Type::Ref(Box::new(ty))));
-						}
+						Operator::Question => ty = Type::Optional(Box::new(ty)),
+						Operator::Amp => ty = Type::Ref(Box::new(ty)),
+						Operator::And => ty = Type::Ref(Box::new(Type::Ref(Box::new(ty)))),
 						_ => unreachable!(),
 					}
 					ty
@@ -172,7 +184,8 @@ pub fn parser() -> impl TokenParser<Scope> {
 		choice((
 			let_stmt(),
 			create_stmt(),
-			func_stmt(scope),
+			func_stmt(scope.clone()),
+			func_stmt_alt(scope),
 			assg_stmt!(Set),
 			assg_stmt!(NegSet => Neg),
 			assg_stmt!(StarSet => Star),

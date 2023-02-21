@@ -20,11 +20,19 @@ pub struct BareType {
 	pub generics: Vec<Generic>, // generics
 }
 
+#[derive(Debug, Display, Clone)]
+pub enum BuiltinType {
+	#[display(fmt = "void")]
+	Void,
+}
+
 #[derive(Debug, Clone)]
 pub enum Type {
 	BareType(BareType),
+	Builtin(BuiltinType),
 	Array(Box<Type>, Option<Box<Expr>>),
 	Ref(Box<Type>),
+	Optional(Box<Type>),
 }
 
 #[derive(Debug, Display, Clone)]
@@ -84,28 +92,11 @@ impl fmt::Display for BareType {
 	}
 }
 
-impl Type {
-	pub fn get_root(&self) -> &BareType {
-		match self {
-			Type::BareType(ty) => ty,
-			Type::Array(ty, _) => ty.get_root(),
-			Type::Ref(ty) => ty.get_root(),
-		}
-	}
-
-	pub fn get_mut_root(&mut self) -> &mut BareType {
-		match self {
-			Type::BareType(ty) => ty,
-			Type::Array(ty, _) => ty.get_mut_root(),
-			Type::Ref(ty) => ty.get_mut_root(),
-		}
-	}
-}
-
 impl fmt::Display for Type {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			Type::BareType(x) => f.write_fmt(format_args!("{x}")),
+			Type::Builtin(x) => f.write_fmt(format_args!("{x}")),
 			Type::Array(x, len) => f.write_fmt(format_args!(
 				"{x}{}",
 				if let Some(len) = len {
@@ -115,6 +106,7 @@ impl fmt::Display for Type {
 				}
 			)),
 			Type::Ref(x) => f.write_fmt(format_args!("{x}&")),
+			Type::Optional(x) => f.write_fmt(format_args!("{x}?")),
 		}
 	}
 }
@@ -122,7 +114,7 @@ impl fmt::Display for Type {
 impl fmt::Display for Func {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.write_fmt(format_args!(
-			"function({}) -> {}: {{{}{}}};",
+			"func ({}) -> {}: {{{}{}}};",
 			join_comma(&self.args).unwrap_or("".to_string()),
 			self.return_ty,
 			if self.body.stmts.is_empty() { "" } else { "\n" },

@@ -28,6 +28,13 @@ token_gen!(_assg_op, jassg_op => AssignmentOp);
 token_gen!(_op, jop => Operator);
 
 #[macro_export]
+macro_rules! builtin {
+	($var:ident) => {
+		Type::Builtin(BuiltinType::$var)
+	};
+}
+
+#[macro_export]
 macro_rules! force_token {
 	($value:expr => $kind:ident) => {
 		match $value {

@@ -27,7 +27,8 @@ pub enum Token {
 	#[token("public", |_| Keyword::Public)]
 	#[token("func", |_| Keyword::Function)]
 	#[token("return", |_| Keyword::Return)]
-	#[token("=>", |_| Keyword::Arrow)]
+	#[token("->", |_| Keyword::Arrow)]
+	#[token("=>", |_| Keyword::FatArrow)]
 	#[token("let", |_| Keyword::Let)]
 	#[token("const", |_| Keyword::Const)]
 	#[token("for", |_| Keyword::For)]
@@ -168,6 +169,7 @@ pub enum Keyword {
 	Function,
 	Return,
 	Arrow,
+	FatArrow,
 	Let,
 	Const,
 	For,
@@ -183,7 +185,8 @@ impl Display for Keyword {
 			Self::Public => "public",
 			Self::Function => "func",
 			Self::Return => "return",
-			Self::Arrow => "=>",
+			Self::Arrow => "->",
+			Self::FatArrow => "=>",
 			Self::Let => "let",
 			Self::Const => "const",
 			Self::For => "for",
