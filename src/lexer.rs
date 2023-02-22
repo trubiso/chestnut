@@ -1,5 +1,5 @@
 use codespan_reporting::diagnostic::{Diagnostic, Label};
-use logos::{Logos, Span};
+use logos::Logos;
 use std::fmt::Display;
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Hash)]
@@ -203,9 +203,68 @@ impl Display for Keyword {
 
 pub type Spanned<T> = (T, Span);
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct Span {
+	pub file_id: usize,
+	pub start: usize,
+	pub end: usize,
+}
+
+impl Span {
+	pub fn new(file_id: usize, range: std::ops::Range<usize>) -> Self {
+		Self {
+			file_id,
+			start: range.start,
+			end: range.end,
+		}
+	}
+
+	pub fn range(&self) -> std::ops::Range<usize> {
+		self.start..self.end
+	}
+}
+
+impl std::ops::Add for Span {
+	type Output = Span;
+
+	fn add(self, rhs: Self) -> Self::Output {
+		assert!(self.file_id == rhs.file_id);
+		Self {
+			file_id: self.file_id,
+			start: if rhs.start < self.start { rhs.start } else { self.start },
+			end: if rhs.end > self.end { rhs.end } else { self.end },
+		}
+	}
+}
+
+impl<'a> chumsky::Span for Span {
+	type Context = usize; // file id
+	type Offset = usize; // start
+
+	fn new(context: Self::Context, range: std::ops::Range<Self::Offset>) -> Self {
+		Self {
+			file_id: context,
+			start: range.start,
+			end: range.end,
+		}
+	}
+
+	fn context(&self) -> Self::Context {
+		return self.file_id;
+	}
+
+	fn start(&self) -> Self::Offset {
+		return self.start;
+	}
+
+	fn end(&self) -> Self::Offset {
+		return self.end;
+	}
+}
+
 pub fn lex(code: &str, file_id: usize) -> Result<Vec<Spanned<Token>>, Vec<Diagnostic<usize>>> {
 	let lex = Token::lexer(code).spanned();
-	let tokens = lex.collect::<Vec<Spanned<Token>>>();
+	let tokens = lex.map(|(token, range)| (token, Span::new(file_id, range))).collect::<Vec<Spanned<Token>>>();
 	let mut diagnostics = vec![];
 	for token in tokens.clone() {
 		if token.0 == Token::Error {
@@ -213,7 +272,7 @@ pub fn lex(code: &str, file_id: usize) -> Result<Vec<Spanned<Token>>, Vec<Diagno
 				Diagnostic::error()
 					.with_message("could not parse token")
 					.with_labels(vec![
-						Label::primary(file_id, token.1).with_message("invalid token")
+						Label::primary(token.1.file_id, token.1.range()).with_message("invalid token")
 					]),
 			)
 		}

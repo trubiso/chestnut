@@ -1,9 +1,9 @@
-use crate::lexer::{Operator, Token};
+use crate::lexer::{Operator, Token, Span};
 use chumsky::prelude::*;
 use derive_more::Display;
 use std::fmt;
 
-pub trait TokenParser<T> = Parser<Token, T, Error = Simple<Token>>;
+pub trait TokenParser<T> = Parser<Token, T, Error = Simple<Token, Span>>;
 
 #[derive(Debug, Display, Clone)]
 pub enum Generic {

@@ -7,6 +7,9 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use std::fs;
 
+use crate::lexer::Span;
+use crate::parser::CodeStream;
+
 pub mod lexer;
 pub mod parser;
 
@@ -28,7 +31,7 @@ fn main() {
 		Err(x) => return emit_errors(&files, x),
 	};
 
-	let lexed_iter = Stream::from_iter(code.len()..code.len(), lexed.into_iter());
+	let lexed_iter: CodeStream = Stream::from_iter(Span::new(file_id, code.len()..code.len()), lexed.into_iter());
 	let _parsed = match parser::parse(lexed_iter, file_id) {
 		Ok(x) => x,
 		Err(x) => return emit_errors(&files, x),

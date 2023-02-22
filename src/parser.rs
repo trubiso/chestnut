@@ -1,8 +1,8 @@
-use crate::lexer::{AssignmentOp, Keyword, Operator, Punctuation, Spanned, Token};
+use crate::lexer::{AssignmentOp, Keyword, Operator, Punctuation, Span, Spanned, Token};
 use chumsky::{error::SimpleReason, prelude::*, Stream};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use either::Either;
-use std::{ops::Range, vec::IntoIter};
+use std::vec::IntoIter;
 use types::*;
 
 pub mod types;
@@ -139,14 +139,14 @@ fn expr() -> impl TokenParser<Expr> {
 
 /// Parses an ident token into Ident
 fn ident() -> impl TokenParser<Ident> {
-	filter(|x| matches!(x, Token::Identifier(_))).map(|x| Ident(force_token!(x => Identifier)))
+	filter(|token| matches!(token, Token::Identifier(_))).map(|token| Ident(force_token!(token => Identifier)))
 }
 
 /// Parses an ident token into Type
 fn ty() -> impl TokenParser<Type> {
 	type PostfixOp = Either<Option<Expr>, Operator>;
 	recursive(|ty| {
-		filter(|x| matches!(x, Token::Identifier(_)))
+		filter(|token| matches!(token, Token::Identifier(_)))
 			.then(angled!(ty,).or_not())
 			.map(|(ident, generics)| {
 				Type::BareType(BareType {
@@ -226,7 +226,7 @@ pub fn parser() -> impl TokenParser<Scope> {
 	})
 }
 
-type CodeStream<'a> = Stream<'a, Token, Range<usize>, IntoIter<Spanned<Token>>>;
+pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
 
 pub fn parse(code_stream: CodeStream, file_id: usize) -> Result<Scope, Vec<Diagnostic<usize>>> {
 	let parsed = parser().parse(code_stream);
@@ -239,14 +239,14 @@ pub fn parse(code_stream: CodeStream, file_id: usize) -> Result<Scope, Vec<Diagn
 					SimpleReason::Unexpected => diagnostics.push(
 						Diagnostic::error()
 							.with_message("unexpected token")
-							.with_labels(vec![Label::primary(file_id, err.span())
+							.with_labels(vec![Label::primary(err.span().file_id, err.span().range())
 								.with_message("this token is invalid")]),
 					),
 					SimpleReason::Unclosed { span, delimiter } => diagnostics.push(
 						Diagnostic::error()
 							.with_message(format!("unclosed delimiter {delimiter:?}"))
 							.with_labels(vec![
-								Label::primary(file_id, span.clone()).with_message("culprit")
+								Label::primary(span.file_id, span.range()).with_message("culprit")
 							]),
 					),
 					_ => panic!("unhandled error"),
