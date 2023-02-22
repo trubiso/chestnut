@@ -231,9 +231,26 @@ impl std::ops::Add for Span {
 		assert!(self.file_id == rhs.file_id);
 		Self {
 			file_id: self.file_id,
-			start: if rhs.start < self.start { rhs.start } else { self.start },
-			end: if rhs.end > self.end { rhs.end } else { self.end },
+			start: if rhs.start < self.start {
+				rhs.start
+			} else {
+				self.start
+			},
+			end: if rhs.end > self.end {
+				rhs.end
+			} else {
+				self.end
+			},
 		}
+	}
+}
+
+impl Display for Span {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_fmt(format_args!(
+			"file id {} @ {}..{}",
+			self.file_id, self.start, self.end
+		))
 	}
 }
 
@@ -264,16 +281,17 @@ impl<'a> chumsky::Span for Span {
 
 pub fn lex(code: &str, file_id: usize) -> Result<Vec<Spanned<Token>>, Vec<Diagnostic<usize>>> {
 	let lex = Token::lexer(code).spanned();
-	let tokens = lex.map(|(token, range)| (token, Span::new(file_id, range))).collect::<Vec<Spanned<Token>>>();
+	let tokens = lex
+		.map(|(token, range)| (token, Span::new(file_id, range)))
+		.collect::<Vec<Spanned<Token>>>();
 	let mut diagnostics = vec![];
 	for token in tokens.clone() {
 		if token.0 == Token::Error {
 			diagnostics.push(
 				Diagnostic::error()
 					.with_message("could not parse token")
-					.with_labels(vec![
-						Label::primary(token.1.file_id, token.1.range()).with_message("invalid token")
-					]),
+					.with_labels(vec![Label::primary(token.1.file_id, token.1.range())
+						.with_message("invalid token")]),
 			)
 		}
 	}

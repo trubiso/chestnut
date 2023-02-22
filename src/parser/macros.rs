@@ -25,32 +25,45 @@ macro_rules! token_gen {
 token_gen!(_keyword, jkeyword => Keyword);
 token_gen!(punct, jpunct => Punctuation);
 token_gen!(_assg_op, jassg_op => AssignmentOp);
-token_gen!(_op, jop => Operator);
+token_gen!(op, jop => Operator);
+
+macro_rules! all_delim_tuples {
+	() => {
+		[
+			(punct!(LBrace), punct!(RBrace)),
+			(punct!(LBracket), punct!(RBracket)),
+			(punct!(LParen), punct!(RParen)),
+			(op!(Lt), op!(Gt)),
+		]
+	};
+}
 
 macro_rules! delim_gen {
-	($name:ident => $wmac:ident + $l:ident, $r:ident) => {
+	($name:ident => ($mac:ident, $wmac:ident) + $l:ident, $r:ident) => {
 		#[macro_export]
 		macro_rules! $name {
-			($arg:expr) => {
-				$arg.delimited_by($wmac!($l), $wmac!($r))
+			($arg:expr; $recovery:expr) => {
+				$arg.delimited_by($wmac!($l), $wmac!($r)).recover_with(
+					nested_delimiters($mac!($l), $mac!($r), all_delim_tuples!(), $recovery)
+				)
 			};
-			($arg:expr, $sep:ident) => {
-				$name!($arg.separated_by(jpunct!($sep)))
+			($arg:expr, $sep:ident; $recovery:expr) => {
+				$name!($arg.separated_by(jpunct!($sep)).allow_trailing(); $recovery)
 			};
-			($arg:expr,) => {
-				$name!($arg, Comma)
+			($arg:expr,; $recovery:expr) => {
+				$name!($arg, Comma; $recovery)
 			};
 		}
 	};
 	($name:ident => $l:ident, $r:ident) => {
-		delim_gen!($name => jpunct + $l, $r);
+		delim_gen!($name => (punct, jpunct) + $l, $r);
 	};
 }
 
 delim_gen!(parened => LParen, RParen);
 delim_gen!(braced => LBrace, RBrace);
 delim_gen!(bracketed => LBracket, RBracket);
-delim_gen!(angled => jop + Lt, Gt);
+delim_gen!(angled => (op, jop) + Lt, Gt);
 
 #[macro_export]
 macro_rules! builtin {

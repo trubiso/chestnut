@@ -11,18 +11,49 @@ pub mod macros;
 
 type ScopeRecursive<'a> = Recursive<'a, Token, Scope, Simple<Token, Span>>;
 
+fn vec_ty_recovery() -> Vec<Type> {
+	vec![builtin!(Error)]
+}
+
+fn ty_ident_recovery() -> TypedIdent {
+	TypedIdent {
+		ty: builtin!(Error),
+		ident: ident!("error"),
+	}
+}
+
+fn vec_ty_ident_recovery() -> Vec<TypedIdent> {
+	vec![ty_ident_recovery()]
+}
+
+fn scope_recovery() -> Scope {
+	Scope { stmts: vec![] }
+}
+
+fn expr_recovery() -> Expr {
+	Expr::Error
+}
+
+fn opt_expr_recovery() -> Option<Expr> {
+	None
+}
+
+fn vec_expr_recovery() -> Vec<Expr> {
+	vec![Expr::Error]
+}
+
 macro_rules! func_attribs {
 	($($kw:ident => $prop:ident)*) => {
 		choice(($(jkeyword!($kw),)*))
 		.repeated()
-		.map(|attribs| {
+		.validate(|attribs, span: Span, emit| {
 			let mut final_attribs = FuncAttribs::default();
-			for attrib in attribs {
-				match force_token!(attrib => Keyword) {
+			for i in 0..attribs.len() {
+				match force_token!(attribs[i] => Keyword) {
 					$(
 						Keyword::$kw => {
 							if final_attribs.$prop {
-								panic!("cannot apply attribute twice"); // TODO: diagnostics
+								emit(chumsky::error::Simple::custom(span.clone(), "cannot apply attribute twice"))
 							}
 							final_attribs.$prop = true;
 						}
@@ -43,7 +74,7 @@ fn func_attribs() -> impl TokenParser<FuncAttribs> {
 
 /// Parses `<ty ident>, ...` into Vec<TypedIdent>
 fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
-	parened!(ty_ident(),)
+	parened!(ty_ident(),; |_| vec_ty_ident_recovery())
 }
 
 /// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
@@ -51,7 +82,7 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 	func_attribs()
 		.then(ty_ident())
 		.then(func_args())
-		.then(braced!(scope))
+		.then(braced!(scope; |_| scope_recovery()))
 		.map(|(((attribs, ty_ident), args), body)| {
 			Stmt::Func(
 				ty_ident.ident,
@@ -72,7 +103,7 @@ fn func_stmt_alt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 		.then(ident())
 		.then(func_args())
 		.then(jkeyword!(Arrow).ignore_then(ty()).or_not())
-		.then(braced!(scope))
+		.then(braced!(scope; |_| scope_recovery()))
 		.map(|((((attribs, ident), args), ty), body)| {
 			Stmt::Func(
 				ident,
@@ -93,7 +124,7 @@ fn func_expr() -> impl TokenParser<Expr> {
 	func_attribs()
 		.then_ignore(jkeyword!(Function))
 		.then(func_args())
-		.then(braced!(parser()))
+		.then(braced!(parser(); |_| scope_recovery()))
 		.map(|((attribs, args), scope)| {
 			Expr::Func(Func {
 				return_ty: builtin!(Void),
@@ -110,12 +141,12 @@ fn expr() -> impl TokenParser<Expr> {
 	recursive(|e| {
 		let atom = || {
 			choice((
-				parened!(e.clone()),
+				parened!(e.clone(); |_| expr_recovery()),
 				literal_parser!(StringLiteral),
 				literal_parser!(NumberLiteral),
 				literal_parser!(CharLiteral),
 				ident()
-					.then(parened!(e.clone(),))
+					.then(parened!(e.clone(),; |_| vec_expr_recovery()))
 					.map(|(ident, args)| Expr::Call(Box::new(Expr::Identifier(ident)), args)),
 				// func_expr()
 				// 	.then(
@@ -139,7 +170,8 @@ fn expr() -> impl TokenParser<Expr> {
 
 /// Parses an ident token into Ident
 fn ident() -> impl TokenParser<Ident> {
-	filter(|token| matches!(token, Token::Identifier(_))).map(|token| Ident(force_token!(token => Identifier)))
+	filter(|token| matches!(token, Token::Identifier(_)))
+		.map(|token| Ident(force_token!(token => Identifier)))
 }
 
 /// Parses an ident token into Type
@@ -147,7 +179,7 @@ fn ty() -> impl TokenParser<Type> {
 	type PostfixOp = Either<Option<Expr>, Operator>;
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)))
-			.then(angled!(ty,).or_not())
+			.then(angled!(ty,; |_| vec_ty_recovery()).or_not())
 			.map(|(ident, generics)| {
 				Type::BareType(BareType {
 					ident: Ident(force_token!(ident => Identifier)),
@@ -160,7 +192,7 @@ fn ty() -> impl TokenParser<Type> {
 			})
 			.then(
 				choice((
-					bracketed!(expr().or_not()).map(PostfixOp::Left),
+					bracketed!(expr().or_not(); |_| opt_expr_recovery()).map(PostfixOp::Left),
 					jop!(Question).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 					jop!(Amp).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 					jop!(And).map(|x| PostfixOp::Right(force_token!(x => Operator))),
@@ -229,30 +261,32 @@ pub fn parser() -> impl TokenParser<Scope> {
 pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
 
 pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
-	let parsed = parser().parse(code_stream);
-	match parsed {
-		Ok(scope) => Ok(scope),
-		Err(errors) => {
-			let mut diagnostics = vec![];
-			for err in errors {
-				match err.reason() {
-					SimpleReason::Unexpected => diagnostics.push(
-						Diagnostic::error()
-							.with_message("unexpected token")
-							.with_labels(vec![Label::primary(err.span().file_id, err.span().range())
-								.with_message("this token is invalid")]),
-					),
-					SimpleReason::Unclosed { span, delimiter } => diagnostics.push(
-						Diagnostic::error()
-							.with_message(format!("unclosed delimiter {delimiter:?}"))
-							.with_labels(vec![
-								Label::primary(span.file_id, span.range()).with_message("culprit")
-							]),
-					),
-					_ => panic!("unhandled error"),
-				}
-			}
-			Err(diagnostics)
+	let (parsed, errors) = parser().parse_recovery(code_stream);
+	let mut diagnostics = vec![];
+	if errors.len() == 0 {
+		return Ok(parsed.expect("what"));
+	}
+	for err in errors {
+		match err.reason() {
+			SimpleReason::Unclosed { span, delimiter } => diagnostics.push(
+				Diagnostic::error()
+					.with_message(format!("unclosed delimiter {delimiter:?}"))
+					.with_labels(vec![
+						Label::primary(span.file_id, span.range()).with_message("culprit")
+					]),
+			),
+			SimpleReason::Unexpected => diagnostics.push(
+				Diagnostic::error()
+					.with_message("unexpected token")
+					.with_labels(vec![Label::primary(err.span().file_id, err.span().range())
+						.with_message("this token is invalid")]),
+			),
+			SimpleReason::Custom(label) => diagnostics.push(
+				Diagnostic::error()
+					.with_message(label)
+					.with_labels(vec![Label::primary(err.span().file_id, err.span().range())]),
+			),
 		}
 	}
+	Err(diagnostics)
 }

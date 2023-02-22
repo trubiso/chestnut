@@ -1,4 +1,4 @@
-use crate::lexer::{Operator, Token, Span};
+use crate::lexer::{Operator, Span, Token};
 use chumsky::prelude::*;
 use derive_more::Display;
 use std::fmt;
@@ -24,6 +24,8 @@ pub struct BareType {
 pub enum BuiltinType {
 	#[display(fmt = "void")]
 	Void,
+	#[display(fmt = "error")]
+	Error,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +67,7 @@ pub enum Expr {
 	UnaryOp(Operator, Box<Expr>),
 	Func(Func),
 	Call(Box<Expr>, Vec<Expr>),
+	Error,
 }
 
 #[derive(Debug, Display, Clone)]
@@ -150,6 +153,7 @@ impl fmt::Display for Expr {
 				"{callee}({})",
 				join_comma(args).unwrap_or("".to_string())
 			)),
+			Expr::Error => f.write_str("[ERROR]"),
 		}
 	}
 }
