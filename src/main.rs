@@ -32,10 +32,10 @@ fn main() {
 	};
 
 	let lexed_iter: CodeStream = Stream::from_iter(Span::new(file_id, code.len()..code.len()), lexed.into_iter());
-	let _parsed = match parser::parse(lexed_iter, file_id) {
+	let parsed = match parser::parse(lexed_iter) {
 		Ok(x) => x,
 		Err(x) => return emit_errors(&files, x),
 	};
 
-	println!("{_parsed}");
+	println!("{parsed}");
 }

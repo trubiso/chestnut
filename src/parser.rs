@@ -9,7 +9,7 @@ pub mod types;
 #[macro_use]
 pub mod macros;
 
-type ScopeRecursive<'a> = Recursive<'a, Token, Scope, Simple<Token>>;
+type ScopeRecursive<'a> = Recursive<'a, Token, Scope, Simple<Token, Span>>;
 
 macro_rules! func_attribs {
 	($($kw:ident => $prop:ident)*) => {
@@ -228,7 +228,7 @@ pub fn parser() -> impl TokenParser<Scope> {
 
 pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
 
-pub fn parse(code_stream: CodeStream, file_id: usize) -> Result<Scope, Vec<Diagnostic<usize>>> {
+pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 	let parsed = parser().parse(code_stream);
 	match parsed {
 		Ok(scope) => Ok(scope),
