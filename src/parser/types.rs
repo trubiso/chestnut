@@ -1,4 +1,5 @@
-use crate::lexer::{Operator, Span, Token};
+use crate::lexer::{Operator, Token};
+use crate::span::Span;
 use chumsky::prelude::*;
 use derive_more::Display;
 use std::fmt;
@@ -21,7 +22,10 @@ pub enum Ident {
 
 impl Ident {
 	pub fn infer_type(&self) -> TypedIdent {
-		TypedIdent { ty: Type::Inferred, ident: self.clone() }
+		TypedIdent {
+			ty: Type::Inferred,
+			ident: self.clone(),
+		}
 	}
 }
 
@@ -46,7 +50,7 @@ pub enum Type {
 	Array(Box<Type>, Option<Box<Expr>>),
 	Ref(Box<Type>),
 	Optional(Box<Type>),
-	Inferred
+	Inferred,
 }
 
 #[derive(Debug, Display, Clone)]

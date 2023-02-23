@@ -1,4 +1,4 @@
-use crate::lexer::{AssignmentOp, Keyword, Operator, Punctuation, Span, Spanned, Token};
+use crate::{lexer::{AssignmentOp, Keyword, Operator, Punctuation, Token}, span::{Span, Spanned}};
 use chumsky::{error::SimpleReason, prelude::*, Stream};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use either::Either;

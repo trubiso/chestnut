@@ -7,9 +7,10 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use std::fs;
 
-use crate::lexer::Span;
+use crate::span::{Span};
 use crate::parser::CodeStream;
 
+pub mod span;
 pub mod lexer;
 pub mod parser;
 
