@@ -1,8 +1,9 @@
 use codespan_reporting::diagnostic::{Diagnostic, Label};
+use derive_more::Display;
 use logos::Logos;
 use std::fmt::Display;
 
-#[derive(Logos, Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Logos, Debug, Display, PartialEq, Eq, Clone, Hash)]
 pub enum Token {
 	#[error]
 	#[regex(r"\s+", logos::skip)]

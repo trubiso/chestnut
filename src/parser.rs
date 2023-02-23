@@ -96,33 +96,14 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 		})
 }
 
-/// Parses `func <ident>(<ty ident>, ...) -> <ty> { <scope> }` into Stmt::Func
-fn func_stmt_alt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
-	func_attribs()
-		.then_ignore(jkeyword!(Function))
-		.then(ident())
-		.then(func_args())
-		.then(jkeyword!(Arrow).ignore_then(ty()).or_not())
-		.then(braced!(scope; |_| scope_recovery()))
-		.map(|((((attribs, ident), args), ty), body)| {
-			Stmt::Func(
-				ident,
-				Func {
-					return_ty: ty.unwrap_or(builtin!(Void)),
-					args,
-					body,
-					attribs,
-				},
-			)
-		})
-}
-
 // TODO: use this
 #[allow(dead_code)]
 /// Parses `func (<ty ident>, ...) -> <ty> { <scope> }` into Expr::Func
 fn func_expr() -> impl TokenParser<Expr> {
 	func_attribs()
-		.then_ignore(jkeyword!(Function))
+		.then_ignore(jkeyword!(
+			Function // TODO: will be renamed to Lambda, this will be a lambda function
+		))
 		.then(func_args())
 		.then(braced!(parser(); |_| scope_recovery()))
 		.map(|((attribs, args), scope)| {
@@ -255,8 +236,7 @@ pub fn parser() -> impl TokenParser<Scope> {
 		choice((
 			let_stmt(),
 			create_stmt(),
-			func_stmt(scope.clone()),
-			func_stmt_alt(scope),
+			func_stmt(scope),
 			assg_stmt!(Set),
 			assg_stmt!(NegSet => Neg),
 			assg_stmt!(StarSet => Star),
@@ -267,6 +247,7 @@ pub fn parser() -> impl TokenParser<Scope> {
 		.repeated()
 		.map(|x| Scope { stmts: x })
 	})
+	.then_ignore(end())
 }
 
 pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
@@ -281,9 +262,12 @@ pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 		match err.reason() {
 			SimpleReason::Unclosed { span, delimiter } => diagnostics.push(
 				Diagnostic::error()
-					.with_message(format!("unclosed delimiter {delimiter:?}"))
+					.with_message(format!("unclosed delimiter {delimiter}"))
 					.with_labels(vec![
-						Label::primary(span.file_id, span.range()).with_message("culprit")
+						Label::primary(err.span().file_id, err.span().range())
+							.with_message("invalid delimiter"),
+						Label::secondary(span.file_id, span.range())
+							.with_message("opening delimiter here"),
 					]),
 			),
 			SimpleReason::Unexpected => diagnostics.push(
