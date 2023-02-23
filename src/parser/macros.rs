@@ -1,7 +1,7 @@
 #[macro_export]
 macro_rules! ident {
 	($str:expr) => {
-		Ident($str.to_string())
+		Ident::Named($str.to_string())
 	};
 }
 
@@ -22,7 +22,7 @@ macro_rules! token_gen {
 	};
 }
 
-token_gen!(_keyword, jkeyword => Keyword);
+token_gen!(keyword, jkeyword => Keyword);
 token_gen!(punct, jpunct => Punctuation);
 token_gen!(_assg_op, jassg_op => AssignmentOp);
 token_gen!(op, jop => Operator);

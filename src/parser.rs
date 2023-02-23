@@ -170,25 +170,36 @@ fn expr() -> impl TokenParser<Expr> {
 
 /// Parses an ident token into Ident
 fn ident() -> impl TokenParser<Ident> {
-	filter(|token| matches!(token, Token::Identifier(_)))
-		.map(|token| Ident(force_token!(token => Identifier)))
+	filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare)).map(
+		|token| {
+			if token == keyword!(DontCare) {
+				Ident::Discarded
+			} else {
+				Ident::Named(force_token!(token => Identifier))
+			}
+		},
+	)
 }
 
 /// Parses an ident token into Type
 fn ty() -> impl TokenParser<Type> {
 	type PostfixOp = Either<Option<Expr>, Operator>;
 	recursive(|ty| {
-		filter(|token| matches!(token, Token::Identifier(_)))
+		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
 			.then(angled!(ty,; |_| vec_ty_recovery()).or_not())
 			.map(|(ident, generics)| {
-				Type::BareType(BareType {
-					ident: Ident(force_token!(ident => Identifier)),
-					generics: generics
-						.unwrap_or(vec![])
-						.iter()
-						.map(|x: &Type| Generic::Type(x.clone()))
-						.collect(),
-				})
+				if ident == keyword!(DontCare) {
+					Type::Inferred
+				} else {
+					Type::BareType(BareType {
+						ident: Ident::Named(force_token!(ident => Identifier)),
+						generics: generics
+							.unwrap_or(vec![])
+							.iter()
+							.map(|x: &Type| Generic::Type(x.clone()))
+							.collect(),
+					})
+				}
 			})
 			.then(
 				choice((
@@ -221,7 +232,7 @@ fn ty_ident() -> impl TokenParser<TypedIdent> {
 fn let_stmt() -> impl TokenParser<Stmt> {
 	jkeyword!(Let)
 		.ignore_then(assg!(ignore Set))
-		.map(|(lhs, value)| Stmt::Let(lhs, value))
+		.map(|(lhs, value): (Ident, Expr)| Stmt::Create(lhs.infer_type(), value))
 }
 
 /// Parses `<ty ident> = <expr>;` into Stmt::Create

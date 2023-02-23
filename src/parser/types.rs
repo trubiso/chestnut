@@ -12,7 +12,18 @@ pub enum Generic {
 }
 
 #[derive(Debug, Display, Clone)]
-pub struct Ident(pub String);
+pub enum Ident {
+	#[display(fmt = "{_0}")]
+	Named(String),
+	#[display(fmt = "~")]
+	Discarded,
+}
+
+impl Ident {
+	pub fn infer_type(&self) -> TypedIdent {
+		TypedIdent { ty: Type::Inferred, ident: self.clone() }
+	}
+}
 
 #[derive(Debug, Clone)]
 pub struct BareType {
@@ -35,6 +46,7 @@ pub enum Type {
 	Array(Box<Type>, Option<Box<Expr>>),
 	Ref(Box<Type>),
 	Optional(Box<Type>),
+	Inferred
 }
 
 #[derive(Debug, Display, Clone)]
@@ -72,8 +84,6 @@ pub enum Expr {
 
 #[derive(Debug, Display, Clone)]
 pub enum Stmt {
-	#[display(fmt = "let {_0} = {_1}")]
-	Let(Ident, Expr),
 	#[display(fmt = "{_0} = {_1}")]
 	Create(TypedIdent, Expr),
 	#[display(fmt = "{_0} = {_1}")]
@@ -116,6 +126,7 @@ impl fmt::Display for Type {
 			)),
 			Type::Ref(x) => f.write_fmt(format_args!("{x}&")),
 			Type::Optional(x) => f.write_fmt(format_args!("{x}?")),
+			Type::Inferred => f.write_str("~"),
 		}
 	}
 }

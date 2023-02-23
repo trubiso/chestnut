@@ -37,6 +37,7 @@ pub enum Token {
 	#[token("while", |_| Keyword::While)]
 	#[token("loop", |_| Keyword::Loop)]
 	#[token("if", |_| Keyword::If)]
+	#[token("~", |_| Keyword::DontCare)]
 	Keyword(Keyword),
 	#[token("?", |_| Operator::Question)]
 	#[token("!", |_| Operator::Bang)]
@@ -179,6 +180,7 @@ pub enum Keyword {
 	While,
 	Loop,
 	If,
+	DontCare,
 }
 
 impl Display for Keyword {
@@ -197,6 +199,7 @@ impl Display for Keyword {
 			Self::While => "while",
 			Self::Loop => "loop",
 			Self::If => "if",
+			Self::DontCare => "~",
 		})
 	}
 }
