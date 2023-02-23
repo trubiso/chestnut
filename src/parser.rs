@@ -255,7 +255,7 @@ pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
 pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 	let (parsed, errors) = parser().parse_recovery(code_stream);
 	let mut diagnostics = vec![];
-	if errors.len() == 0 {
+	if errors.is_empty() {
 		return Ok(parsed.expect("what"));
 	}
 	for err in errors {

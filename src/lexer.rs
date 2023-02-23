@@ -5,11 +5,11 @@ use logos::{Lexer, Logos};
 use regex::Regex;
 use std::fmt::Display;
 
-fn lex_to_str<'source>(lexer: &Lexer<'source, Token>) -> String {
+fn lex_to_str(lexer: &Lexer<'_, Token>) -> String {
 	lexer.slice().trim().to_string()
 }
 
-fn parse_number_literal<'source>(lexer: &Lexer<'source, Token>) -> NumberLiteral {
+fn parse_number_literal(lexer: &Lexer<'_, Token>) -> NumberLiteral {
 	let number_str = lex_to_str(lexer);
 	let suffix =
 		Regex::new(r"i(?:z|8|16|32|64|128)|u(?:z|8|16|32|64|128)?|f(?:16|32|64|128)?").unwrap();
@@ -27,9 +27,7 @@ fn parse_number_literal<'source>(lexer: &Lexer<'source, Token>) -> NumberLiteral
 			NumberLiteralRepr::Octal
 		} else if hex.is_match(string) {
 			NumberLiteralRepr::Hex
-		} else if flt.is_match(string) {
-			NumberLiteralRepr::Decimal
-		} else if int.is_match(string) {
+		} else if flt.is_match(string) || int.is_match(string) {
 			NumberLiteralRepr::Decimal
 		} else {
 			unreachable!()
@@ -77,7 +75,7 @@ fn parse_number_literal<'source>(lexer: &Lexer<'source, Token>) -> NumberLiteral
 		.unwrap()
 		.replace_all(actual_number, "")
 		.to_string();
-	let actual_number = actual_number.replace("_", "");
+	let actual_number = actual_number.replace('_', "");
 
 	NumberLiteral {
 		repr,

@@ -53,7 +53,7 @@ impl Display for Span {
 	}
 }
 
-impl<'a> chumsky::Span for Span {
+impl chumsky::Span for Span {
 	type Context = usize; // file id
 	type Offset = usize; // start
 
@@ -66,14 +66,14 @@ impl<'a> chumsky::Span for Span {
 	}
 
 	fn context(&self) -> Self::Context {
-		return self.file_id;
+		self.file_id
 	}
 
 	fn start(&self) -> Self::Offset {
-		return self.start;
+		self.start
 	}
 
 	fn end(&self) -> Self::Offset {
-		return self.end;
+		self.end
 	}
 }
