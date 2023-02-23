@@ -1,4 +1,4 @@
-use crate::lexer::{Operator, Token};
+use crate::lexer::{Operator, Token, NumberLiteral};
 use crate::span::Span;
 use chumsky::prelude::*;
 use derive_more::Display;
@@ -77,7 +77,7 @@ pub struct Func {
 pub enum Expr {
 	CharLiteral(String),
 	StringLiteral(String),
-	NumberLiteral(String),
+	NumberLiteral(NumberLiteral),
 	Identifier(Ident),
 	BinaryOp(Box<Expr>, Operator, Box<Expr>),
 	UnaryOp(Operator, Box<Expr>),

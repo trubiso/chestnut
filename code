@@ -13,5 +13,5 @@ int main(string[4+4] args, int[34] arg) {
 	a *= 9 + 10;
 	print("Hello World!", 9+3-4);
 	4+2+4;
-	.3 + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
+	.3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
 }
