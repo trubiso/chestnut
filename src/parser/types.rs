@@ -1,4 +1,4 @@
-use crate::lexer::{Operator, Token, NumberLiteral};
+use crate::lexer::{NumberLiteral, Operator, Token};
 use crate::span::Span;
 use chumsky::prelude::*;
 use derive_more::Display;

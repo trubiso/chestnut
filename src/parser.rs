@@ -1,4 +1,7 @@
-use crate::{lexer::{AssignmentOp, Keyword, Operator, Punctuation, Token}, span::{Span, Spanned}};
+use crate::{
+	lexer::{AssignmentOp, Keyword, Operator, Punctuation, Token},
+	span::{Span, Spanned},
+};
 use chumsky::{error::SimpleReason, prelude::*, Stream};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use either::Either;
@@ -274,7 +277,14 @@ pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 				Diagnostic::error()
 					.with_message("unexpected token")
 					.with_labels(vec![Label::primary(err.span().file_id, err.span().range())
-						.with_message("this token is invalid")]),
+						.with_message(format!("this token is invalid"))])
+					.with_notes(vec![format!(
+						"expected one of {}",
+						err.expected()
+							.map(|x| format!("'{}'", x.as_ref().unwrap()))
+							.reduce(|acc, b| acc + ", " + &b)
+							.unwrap_or("".into())
+					)]),
 			),
 			SimpleReason::Custom(label) => diagnostics.push(
 				Diagnostic::error()

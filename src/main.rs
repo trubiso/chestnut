@@ -7,12 +7,12 @@ use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use std::fs;
 
-use crate::span::{Span};
 use crate::parser::CodeStream;
+use crate::span::Span;
 
-pub mod span;
 pub mod lexer;
 pub mod parser;
+pub mod span;
 
 fn emit_errors(files: &SimpleFiles<&str, &String>, diagnostics: Vec<Diagnostic<usize>>) {
 	let writer = StandardStream::stderr(ColorChoice::Always);
@@ -32,7 +32,10 @@ fn main() {
 		Err(x) => return emit_errors(&files, x),
 	};
 
-	let lexed_iter: CodeStream = Stream::from_iter(Span::new(file_id, code.len()..code.len()), lexed.into_iter());
+	let lexed_iter: CodeStream = Stream::from_iter(
+		Span::new(file_id, code.len()..code.len()),
+		lexed.into_iter(),
+	);
 	let parsed = match parser::parse(lexed_iter) {
 		Ok(x) => x,
 		Err(x) => return emit_errors(&files, x),
