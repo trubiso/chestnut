@@ -81,7 +81,7 @@ pub enum Expr {
 	Identifier(Ident),
 	BinaryOp(Box<Expr>, Operator, Box<Expr>),
 	UnaryOp(Operator, Box<Expr>),
-	Func(Func),
+	Lambda(Func),
 	Call(Box<Expr>, Vec<Expr>),
 	Error,
 }
@@ -175,7 +175,7 @@ impl fmt::Display for Expr {
 			Expr::Identifier(x) => f.write_fmt(format_args!("{x}")),
 			Expr::BinaryOp(lhs, op, rhs) => f.write_fmt(format_args!("({lhs} {op} {rhs})")),
 			Expr::UnaryOp(op, expr) => f.write_fmt(format_args!("({op}{expr})")),
-			Expr::Func(func) => f.write_fmt(format_args!("{func}")),
+			Expr::Lambda(func) => f.write_fmt(format_args!("lambda {func}")),
 			Expr::Call(callee, args) => f.write_fmt(format_args!(
 				"{callee}({})",
 				join_comma(args).unwrap_or("".to_string())

@@ -14,37 +14,6 @@ pub mod macros;
 
 type ScopeRecursive<'a> = Recursive<'a, Token, Scope, Simple<Token, Span>>;
 
-fn vec_ty_recovery() -> Vec<Type> {
-	vec![builtin!(Error)]
-}
-
-fn ty_ident_recovery() -> TypedIdent {
-	TypedIdent {
-		ty: builtin!(Error),
-		ident: ident!("error"),
-	}
-}
-
-fn vec_ty_ident_recovery() -> Vec<TypedIdent> {
-	vec![ty_ident_recovery()]
-}
-
-fn scope_recovery() -> Scope {
-	Scope { stmts: vec![] }
-}
-
-fn expr_recovery() -> Expr {
-	Expr::Error
-}
-
-fn opt_expr_recovery() -> Option<Expr> {
-	None
-}
-
-fn vec_expr_recovery() -> Vec<Expr> {
-	vec![Expr::Error]
-}
-
 macro_rules! func_attribs {
 	($($kw:ident => $prop:ident)*) => {
 		choice(($(jkeyword!($kw),)*))
@@ -77,7 +46,7 @@ fn func_attribs() -> impl TokenParser<FuncAttribs> {
 
 /// Parses `<ty ident>, ...` into Vec<TypedIdent>
 fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
-	parened!(ty_ident(),; |_| vec_ty_ident_recovery())
+	parened!(ty_ident(),)
 }
 
 /// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
@@ -85,7 +54,7 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 	func_attribs()
 		.then(ty_ident())
 		.then(func_args())
-		.then(braced!(scope; |_| scope_recovery()))
+		.then(braced!(scope))
 		.map(|(((attribs, ty_ident), args), body)| {
 			Stmt::Func(
 				ty_ident.ident,
@@ -99,39 +68,16 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 		})
 }
 
-// TODO: use this
-#[allow(dead_code)]
-/// Parses `func (<ty ident>, ...) -> <ty> { <scope> }` into Expr::Func
-fn func_expr() -> impl TokenParser<Expr> {
-	func_attribs()
-		.then_ignore(jkeyword!(
-			Function // TODO: will be renamed to Lambda, this will be a lambda function
-		))
-		.then(func_args())
-		.then(braced!(parser(); |_| scope_recovery()))
-		.map(|((attribs, args), scope)| {
-			Expr::Func(Func {
-				return_ty: builtin!(Void),
-				args,
-				body: scope,
-				attribs,
-			})
-		})
-}
-
 /// Parses an expression into Expr
 fn expr() -> impl TokenParser<Expr> {
 	// () then - then ! then == != <= >= < > then && then || then *÷ then +-
 	recursive(|e| {
 		let atom = || {
 			choice((
-				parened!(e.clone(); |_| expr_recovery()),
+				parened!(e.clone()),
 				literal_parser!(StringLiteral),
 				literal_parser!(NumberLiteral),
 				literal_parser!(CharLiteral),
-				/*ident()
-				.then(parened!(e.clone(),; |_| vec_expr_recovery()))
-				.map(|(ident, args)| Expr::Call(Box::new(Expr::Identifier(ident)), args)),*/
 				literal_parser!(Identifier),
 			))
 		};
@@ -142,12 +88,12 @@ fn expr() -> impl TokenParser<Expr> {
 		let or_parser = binop_parser!(Or => and_parser);
 		let sd_parser = binop_parser!(Star Div => or_parser);
 		let pn_parser = binop_parser!(Plus Neg => sd_parser);
-		let fn_parser = || {
+		let fc_parser = || {
 			pn_parser()
-				.then(parened!(e.clone(),; |_| vec_expr_recovery()).repeated())
+				.then(parened!(e.clone(),).repeated())
 				.foldl(|lhs, args| Expr::Call(Box::new(lhs), args))
 		};
-		fn_parser().boxed()
+		fc_parser().boxed()
 	})
 }
 
@@ -169,7 +115,7 @@ fn ty() -> impl TokenParser<Type> {
 	type PostfixOp = Either<Option<Expr>, Operator>;
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
-			.then(angled!(ty,; |_| vec_ty_recovery()).or_not())
+			.then(angled!(ty,).or_not())
 			.map(|(ident, generics)| {
 				if ident == keyword!(DontCare) {
 					Type::Inferred
@@ -186,7 +132,7 @@ fn ty() -> impl TokenParser<Type> {
 			})
 			.then(
 				choice((
-					bracketed!(expr().or_not(); |_| opt_expr_recovery()).map(PostfixOp::Left),
+					bracketed!(expr().or_not()).map(PostfixOp::Left),
 					jop!(Question).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 					jop!(Amp).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 					jop!(And).map(|x| PostfixOp::Right(force_token!(x => Operator))),
@@ -261,8 +207,12 @@ pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
 }
 
 /// Parses a bare scope (not wrapped in curly braces) into Scope
+pub fn bare_scope() -> impl TokenParser<Scope> {
+	recursive(|scope| stmt(scope, true).repeated().map(|x| Scope { stmts: x }))
+}
+
 pub fn parser() -> impl TokenParser<Scope> {
-	recursive(|scope| stmt(scope, true).repeated().map(|x| Scope { stmts: x })).then_ignore(end())
+	bare_scope().then_ignore(end())
 }
 
 pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
