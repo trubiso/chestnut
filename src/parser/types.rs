@@ -146,12 +146,22 @@ impl fmt::Display for FuncAttribs {
 impl fmt::Display for Func {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.write_fmt(format_args!(
-			"{}func ({}) -> {}: {{{}{}}};",
+			"{}func ({}) -> {}: {{{}}}",
 			self.attribs,
-			join_comma(&self.args).unwrap_or("".to_string()),
+			join_comma(&self.args).unwrap_or("".into()),
 			self.return_ty,
-			if self.body.stmts.is_empty() { "" } else { "\n" },
-			self.body,
+			if self.body.stmts.is_empty() {
+				"".into()
+			} else {
+				format!(
+					"\n{}",
+					format!("{}", self.body)
+						.split('\n')
+						.map(|x: &str| -> String { format!("\t{}\n", x) })
+						.reduce(|acc, b| acc + &b)
+						.unwrap()
+				)
+			},
 		))
 	}
 }

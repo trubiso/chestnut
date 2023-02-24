@@ -94,23 +94,19 @@ macro_rules! assg {
 		ident()
 			.then(jassg_op!($ident))
 			.then(expr())
-			.then_ignore(jpunct!(Semicolon))
 	};
 	(ignore $ident:ident) => {
 		ident()
 			.then_ignore(jassg_op!($ident))
 			.then(expr())
-			.then_ignore(jpunct!(Semicolon))
 	};
 	(noident $ident:ident) => {
 		jassg_op!($ident)
 			.then(expr())
-			.then_ignore(jpunct!(Semicolon))
 	};
 	(noident ignore $ident:ident) => {
 		jassg_op!($ident)
 			.ignore_then(expr())
-			.then_ignore(jpunct!(Semicolon))
 	};
 }
 

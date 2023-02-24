@@ -16,5 +16,9 @@ int main(string[4+4] args, int[34] arg) {
 	.3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
 	(hello + world)(foo + bar);
 
+	void goofy_void() {
+		print("hello from the goofy void");
+	}
+
 	return -a + 3;
 }

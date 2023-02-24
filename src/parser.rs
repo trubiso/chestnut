@@ -130,8 +130,8 @@ fn expr() -> impl TokenParser<Expr> {
 				literal_parser!(NumberLiteral),
 				literal_parser!(CharLiteral),
 				/*ident()
-					.then(parened!(e.clone(),; |_| vec_expr_recovery()))
-					.map(|(ident, args)| Expr::Call(Box::new(Expr::Identifier(ident)), args)),*/
+				.then(parened!(e.clone(),; |_| vec_expr_recovery()))
+				.map(|(ident, args)| Expr::Call(Box::new(Expr::Identifier(ident)), args)),*/
 				literal_parser!(Identifier),
 			))
 		};
@@ -145,9 +145,7 @@ fn expr() -> impl TokenParser<Expr> {
 		let fn_parser = || {
 			pn_parser()
 				.then(parened!(e.clone(),; |_| vec_expr_recovery()).repeated())
-				.foldl(|lhs, args| {
-					Expr::Call(Box::new(lhs), args)
-				})
+				.foldl(|lhs, args| Expr::Call(Box::new(lhs), args))
 		};
 		fn_parser().boxed()
 	})
@@ -231,35 +229,40 @@ fn create_stmt() -> impl TokenParser<Stmt> {
 ///
 /// Useful, for example, for function calls where the return value is discarded
 fn bare_expr_stmt() -> impl TokenParser<Stmt> {
-	expr().then_ignore(jpunct!(Semicolon)).map(Stmt::BareExpr)
+	expr().map(Stmt::BareExpr)
 }
 
 fn return_stmt() -> impl TokenParser<Stmt> {
-	jkeyword!(Return)
-		.ignore_then(expr())
-		.then_ignore(jpunct!(Semicolon))
-		.map(Stmt::Return)
+	jkeyword!(Return).ignore_then(expr()).map(Stmt::Return)
+}
+
+pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
+	let s = if semi { 1 } else { 0 };
+	macro_rules! semi {
+		(Y $thing:expr) => {
+			$thing.then_ignore(jpunct!(Semicolon).repeated().at_least(s))
+		};
+		(N $thing:expr) => {
+			$thing.then_ignore(jpunct!(Semicolon).repeated())
+		};
+	}
+	choice((
+		semi!(Y let_stmt()),
+		semi!(Y create_stmt()),
+		semi!(N func_stmt(scope)),
+		semi!(Y return_stmt()),
+		semi!(Y assg_stmt!(Set)),
+		semi!(Y assg_stmt!(NegSet => Neg)),
+		semi!(Y assg_stmt!(StarSet => Star)),
+		semi!(Y assg_stmt!(PlusSet => Plus)),
+		semi!(Y assg_stmt!(DivSet => Div)),
+		semi!(Y bare_expr_stmt()),
+	))
 }
 
 /// Parses a bare scope (not wrapped in curly braces) into Scope
 pub fn parser() -> impl TokenParser<Scope> {
-	recursive(|scope| {
-		choice((
-			let_stmt(),
-			create_stmt(),
-			func_stmt(scope),
-			return_stmt(),
-			assg_stmt!(Set),
-			assg_stmt!(NegSet => Neg),
-			assg_stmt!(StarSet => Star),
-			assg_stmt!(PlusSet => Plus),
-			assg_stmt!(DivSet => Div),
-			bare_expr_stmt(),
-		))
-		.repeated()
-		.map(|x| Scope { stmts: x })
-	})
-	.then_ignore(end())
+	recursive(|scope| stmt(scope, true).repeated().map(|x| Scope { stmts: x })).then_ignore(end())
 }
 
 pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
@@ -290,7 +293,7 @@ pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 					.with_notes(vec![format!(
 						"expected one of {}",
 						err.expected()
-							.map(|x| format!("'{}'", x.as_ref().unwrap()))
+							.map(|x| format!("'{}'", x.as_ref().unwrap_or(&Token::Error)))
 							.reduce(|acc, b| acc + ", " + &b)
 							.unwrap_or("".into())
 					)]),
