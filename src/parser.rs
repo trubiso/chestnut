@@ -132,6 +132,7 @@ fn expr() -> impl TokenParser<Expr> {
 				ident()
 					.then(parened!(e.clone(),; |_| vec_expr_recovery()))
 					.map(|(ident, args)| Expr::Call(Box::new(Expr::Identifier(ident)), args)),
+				literal_parser!(Identifier),
 				// func_expr()
 				// 	.then(
 				// 		e.clone()
@@ -159,7 +160,7 @@ fn ident() -> impl TokenParser<Ident> {
 			if token == keyword!(DontCare) {
 				Ident::Discarded
 			} else {
-				Ident::Named(force_token!(token => Identifier))
+				force_token!(token => Identifier)
 			}
 		},
 	)
@@ -176,7 +177,7 @@ fn ty() -> impl TokenParser<Type> {
 					Type::Inferred
 				} else {
 					Type::BareType(BareType {
-						ident: Ident::Named(force_token!(ident => Identifier)),
+						ident: force_token!(ident => Identifier),
 						generics: generics
 							.unwrap_or(vec![])
 							.iter()

@@ -74,6 +74,12 @@ macro_rules! builtin {
 
 #[macro_export]
 macro_rules! force_token {
+	($value:expr => Identifier) => {
+		match $value {
+			Token::Identifier(x) => Ident::Named(x),
+			_ => unreachable!(),
+		}
+	};
 	($value:expr => $kind:ident) => {
 		match $value {
 			Token::$kind(x) => x,
