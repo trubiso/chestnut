@@ -129,17 +129,10 @@ fn expr() -> impl TokenParser<Expr> {
 				literal_parser!(StringLiteral),
 				literal_parser!(NumberLiteral),
 				literal_parser!(CharLiteral),
-				ident()
+				/*ident()
 					.then(parened!(e.clone(),; |_| vec_expr_recovery()))
-					.map(|(ident, args)| Expr::Call(Box::new(Expr::Identifier(ident)), args)),
+					.map(|(ident, args)| Expr::Call(Box::new(Expr::Identifier(ident)), args)),*/
 				literal_parser!(Identifier),
-				// func_expr()
-				// 	.then(
-				// 		e.clone()
-				// 			.separated_by(jpunct!(Comma))
-				// 			.delimited_by(jpunct!(LParen), jpunct!(RParen)),
-				// 	)
-				// 	.map(|(func, args)| Expr::Call(Box::new(func), args)),
 			))
 		};
 		let neg_parser = unop_parser!(Neg => atom);
@@ -149,7 +142,14 @@ fn expr() -> impl TokenParser<Expr> {
 		let or_parser = binop_parser!(Or => and_parser);
 		let sd_parser = binop_parser!(Star Div => or_parser);
 		let pn_parser = binop_parser!(Plus Neg => sd_parser);
-		pn_parser().boxed()
+		let fn_parser = || {
+			pn_parser()
+				.then(parened!(e.clone(),; |_| vec_expr_recovery()).repeated())
+				.foldl(|lhs, args| {
+					Expr::Call(Box::new(lhs), args)
+				})
+		};
+		fn_parser().boxed()
 	})
 }
 
