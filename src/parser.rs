@@ -233,6 +233,13 @@ fn bare_expr_stmt() -> impl TokenParser<Stmt> {
 	expr().then_ignore(jpunct!(Semicolon)).map(Stmt::BareExpr)
 }
 
+fn return_stmt() -> impl TokenParser<Stmt> {
+	jkeyword!(Return)
+		.ignore_then(expr())
+		.then_ignore(jpunct!(Semicolon))
+		.map(Stmt::Return)
+}
+
 /// Parses a bare scope (not wrapped in curly braces) into Scope
 pub fn parser() -> impl TokenParser<Scope> {
 	recursive(|scope| {
@@ -240,6 +247,7 @@ pub fn parser() -> impl TokenParser<Scope> {
 			let_stmt(),
 			create_stmt(),
 			func_stmt(scope),
+			return_stmt(),
 			assg_stmt!(Set),
 			assg_stmt!(NegSet => Neg),
 			assg_stmt!(StarSet => Star),
@@ -277,7 +285,7 @@ pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 				Diagnostic::error()
 					.with_message("unexpected token")
 					.with_labels(vec![Label::primary(err.span().file_id, err.span().range())
-						.with_message(format!("this token is invalid"))])
+						.with_message("this token is invalid")])
 					.with_notes(vec![format!(
 						"expected one of {}",
 						err.expected()

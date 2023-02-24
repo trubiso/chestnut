@@ -94,6 +94,8 @@ pub enum Stmt {
 	Set(Ident, Expr),
 	#[display(fmt = "{_0} = {_1}")]
 	Func(Ident, Func),
+	#[display(fmt = "return {_0}")]
+	Return(Expr),
 	BareExpr(Expr),
 }
 
