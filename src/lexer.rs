@@ -219,6 +219,7 @@ def_token!(
 		"{" => LBrace,
 		"}" => RBrace,
 		"," => Comma,
+		":" => Colon,
 		";" => Semicolon,
 	}
 );

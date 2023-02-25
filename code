@@ -20,5 +20,13 @@ int main(string[4+4] args, int[34] arg) {
 		print("hello from the goofy void");
 	}
 
+	silly(9)(a(3), b(5), c(8));
+
+	a + b();
+
+	set_error_callback((err) => print(err));
+
 	return -a + 3;
 }
+
+int divided_by_two(int x) => x / 2;
