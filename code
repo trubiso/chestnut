@@ -6,6 +6,18 @@ bool do_thing(Array<~> arr) {
 	
 }
 
+void print() {
+
+}
+
+void silly() {
+
+}
+
+void set_error_callback() {
+	
+}
+
 int main(string[4+4] args, int[34] arg) {
 	let ~ = do_thing();
 	int[5]& x = 2 + (3 - 4);
@@ -14,11 +26,13 @@ int main(string[4+4] args, int[34] arg) {
 	print("Hello World!", 9+3-4);
 	4+2+4;
 	.3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
-	(hello + world)(foo + bar);
 
 	void goofy_void() {
 		print("hello from the goofy void");
 	}
+
+	let b = 'b';
+	let c = 'c';
 
 	silly(9)(a(3), b(5), c(8));
 

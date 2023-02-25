@@ -12,6 +12,7 @@ use crate::span::Span;
 
 pub mod lexer;
 pub mod parser;
+pub mod resolve;
 pub mod span;
 
 fn emit_errors(files: &SimpleFiles<&str, &String>, diagnostics: Vec<Diagnostic<usize>>) {
@@ -41,5 +42,7 @@ fn main() {
 		Err(x) => return emit_errors(&files, x),
 	};
 
-	println!("{parsed}");
+	resolve::resolve(parsed, false, None);
+
+	// println!("{parsed}");
 }

@@ -12,7 +12,7 @@ pub enum Generic {
 	Expr(Expr),
 }
 
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum Ident {
 	#[display(fmt = "{_0}")]
 	Named(String),
@@ -26,6 +26,10 @@ impl Ident {
 			ty: Type::Inferred,
 			ident: self.clone(),
 		}
+	}
+
+	pub fn is_discarded(&self) -> bool {
+		*self == Ident::Discarded
 	}
 }
 
@@ -58,6 +62,12 @@ pub enum Type {
 pub struct TypedIdent {
 	pub ty: Type,
 	pub ident: Ident,
+}
+
+impl TypedIdent {
+	pub fn ident_str(&self) -> String {
+		self.ident.to_string()
+	}
 }
 
 #[derive(Debug, Clone, Default)]
