@@ -1,11 +1,22 @@
-use std::collections::HashMap;
-
 use crate::parser::types::{Expr, Func, Ident, Scope, Stmt, Type, TypedIdent};
+use codespan_reporting::diagnostic::{Diagnostic, Label};
+use lazy_static::lazy_static;
+use std::{collections::HashMap, sync::Mutex};
 
 #[derive(Debug, Default, Clone)]
 pub struct ResolvedScope {
+	// TODO: assign each var a usize to know declaration order.
+	// funcs don't need order, they can be arbitrarily defined.
 	pub vars: HashMap<String, ResolvedVar>,
 	pub funcs: HashMap<String, ResolvedFunc>,
+}
+
+lazy_static! {
+	static ref DIAGNOSTICS: Mutex<Vec<Diagnostic<usize>>> = Mutex::new(vec![]);
+}
+
+pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
+	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
 impl ResolvedScope {
@@ -23,7 +34,16 @@ impl ResolvedScope {
 		if ident.is_discarded() {
 			return;
 		} // TODO: ?
-		self.vars.get_mut(&ident.to_string()).unwrap().value = Some(expr);
+		if let Some(x) = self.vars.get_mut(&ident.to_string()) {
+			x.value = Some(expr);
+		} else {
+			let span = ident.span() + expr.span();
+			add_diagnostic(
+				Diagnostic::error()
+					.with_message("tried to set non-existing symbol")
+					.with_labels(vec![Label::primary(span.file_id, span.range())]),
+			)
+		}
 	}
 
 	pub fn set_func(&mut self, ident: Ident, func: Func) {
@@ -48,8 +68,13 @@ impl ResolvedScope {
 		let vars_has = self.vars.contains_key(&ident.to_string());
 		let funcs_has = self.funcs.contains_key(&ident.to_string());
 		if !vars_has && !funcs_has {
-			
-			panic!("Ident {ident} not found in scope!");
+			let span = ident.span();
+			add_diagnostic(
+				Diagnostic::error()
+					.with_message("tried to access non-existing symbol")
+					.with_labels(vec![Label::primary(span.file_id, span.range())
+						.with_message(format!("couldn't find symbol in current scope"))]),
+			)
 		}
 	}
 
@@ -101,8 +126,11 @@ pub struct ResolvedArg {
 	pub ty: Type, // TODO: ResolvedTy
 }
 
-pub fn resolve(scope: Scope, is_func: bool, inherit_scope: Option<ResolvedScope>) -> ResolvedScope {
-	println!("resolving scope!");
+pub fn resolve(
+	scope: Scope,
+	is_func: bool,
+	inherit_scope: Option<ResolvedScope>,
+) -> Result<ResolvedScope, Vec<Diagnostic<usize>>> {
 	let mut resolved_scope = ResolvedScope::default();
 	if let Some(scope) = inherit_scope {
 		resolved_scope.funcs = scope.funcs;
@@ -125,12 +153,18 @@ pub fn resolve(scope: Scope, is_func: bool, inherit_scope: Option<ResolvedScope>
 				for arg in func.clone().args {
 					frs.add_var(arg, None);
 				}
-				resolve(func.clone().body, true, Some(frs));
+				// TODO: use resolved scope
+				let _ = resolve(func.clone().body, true, Some(frs));
 				resolved_scope.set_func(ident, func);
 			}
-			Stmt::Return(_, expr) => {
+			Stmt::Return(span, expr) => {
 				if !is_func {
-					panic!("Returned from non-func");
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("tried to return from non-function")
+							.with_labels(vec![Label::primary(span.file_id, span.range())
+								.with_message(format!("return statement in global scope"))]),
+					);
 				}
 				resolved_scope.check_expr(expr.clone());
 				return_value = Some(expr);
@@ -141,7 +175,15 @@ pub fn resolve(scope: Scope, is_func: bool, inherit_scope: Option<ResolvedScope>
 			}
 		}
 	}
-	println!("{return_value:?}");
-	// println!("{resolved_scope:?}")
-	resolved_scope
+	// TODO: idk how we should use this LOL this code is absolutely useless
+	match return_value {
+		Some(_) => {}
+		None => {}
+	}
+	if !DIAGNOSTICS.lock().unwrap().is_empty() {
+		let diagnostics = DIAGNOSTICS.lock().unwrap();
+		Err(diagnostics.clone())
+	} else {
+		Ok(resolved_scope)
+	}
 }

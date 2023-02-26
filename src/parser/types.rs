@@ -106,6 +106,22 @@ pub enum Expr {
 	Error(Span),
 }
 
+impl Expr {
+	pub fn span(&self) -> Span {
+		match self {
+			Self::CharLiteral(x, _)
+			| Self::StringLiteral(x, _)
+			| Self::NumberLiteral(x, _)
+			| Self::Identifier(x, _)
+			| Self::BinaryOp(x, _, _, _)
+			| Self::UnaryOp(x, _, _)
+			| Self::Lambda(x, _)
+			| Self::Call(x, _, _)
+			| Self::Error(x) => x.clone(),
+		}
+	}
+}
+
 #[derive(Debug, Display, Clone)]
 pub enum Stmt {
 	#[display(fmt = "{_1} = {_2}")]
