@@ -5,6 +5,13 @@ macro_rules! ident {
 	};
 }
 
+#[macro_export]
+macro_rules! span {
+	($x:expr) => {
+		$x.map_with_span(|x, s| (x, s))
+	};
+}
+
 macro_rules! token_gen {
 	($name:ident, $jname:ident => $ident:ident) => {
 		#[macro_export]
@@ -61,9 +68,9 @@ macro_rules! builtin {
 
 #[macro_export]
 macro_rules! force_token {
-	($value:expr => Identifier) => {
+	($value:expr => Identifier, $span:expr) => {
 		match $value {
-			Token::Identifier(x) => Ident::Named(x),
+			Token::Identifier(x) => Ident::Named($span, x),
 			_ => unreachable!(),
 		}
 	};
@@ -73,41 +80,40 @@ macro_rules! force_token {
 			_ => unreachable!(),
 		}
 	};
+	($value:expr => $kind:ident, $span:expr) => {
+		force_token!($value => $kind)
+	};
 }
 
 #[macro_export]
 macro_rules! assg {
 	($ident:ident) => {
-		ident()
-			.then(jassg_op!($ident))
-			.then(expr())
+		ident().then(jassg_op!($ident)).then(expr())
 	};
 	(ignore $ident:ident) => {
-		ident()
-			.then_ignore(jassg_op!($ident))
-			.then(expr())
+		ident().then_ignore(jassg_op!($ident)).then(expr())
 	};
 	(noident $ident:ident) => {
-		jassg_op!($ident)
-			.then(expr())
+		jassg_op!($ident).then(expr())
 	};
 	(noident ignore $ident:ident) => {
-		jassg_op!($ident)
-			.ignore_then(expr())
+		jassg_op!($ident).ignore_then(expr())
 	};
 }
 
 #[macro_export]
 macro_rules! assg_stmt {
 	($ident:ident) => {
-		assg!($ident).map(|((lhs, _), rhs)| Stmt::Set(lhs, rhs))
+		assg!($ident).map_with_span(|((lhs, _), rhs), span| Stmt::Set(span, lhs, rhs))
 	};
 	($ident:ident => $op:ident) => {
-		assg!($ident).map(|((lhs, _), rhs)| {
+		assg!($ident).map_with_span(|((lhs, _), rhs), span| {
 			Stmt::Set(
+				span.clone(),
 				lhs.clone(),
 				Expr::BinaryOp(
-					Box::new(Expr::Identifier(lhs.clone())),
+					span,
+					Box::new(Expr::Identifier(lhs.clone().span(), lhs)),
 					Operator::$op,
 					Box::new(rhs),
 				),
@@ -121,26 +127,29 @@ macro_rules! binop_parser {
 	($($op:ident)* => $next:ident) => {
 		|| $next()
 			.then(
-				choice(($(jop!($op),)*))
+				span!(choice(($(jop!($op),)*)))
 				.then($next()).repeated())
-			.foldl(|lhs, (op, rhs)| Expr::BinaryOp(Box::new(lhs), force_token!(op => Operator), Box::new(rhs)))
+				// FIXME: get the proper span of lhs + op + rhs
+			.foldl(|lhs, ((op, span), rhs)| Expr::BinaryOp(span, Box::new(lhs), force_token!(op => Operator), Box::new(rhs)))
 	};
 }
 
 #[macro_export]
 macro_rules! unop_parser {
 	($($op:ident)* => $next:ident) => {
-		|| choice(($(jop!($op),)*)).repeated()
+		|| span!(choice(($(jop!($op),)*))).repeated()
 			.then($next())
-			.foldr(|op, rhs| Expr::UnaryOp(force_token!(op => Operator), Box::new(rhs)))
+			// NOTE: i don't know if this span is correct?
+			// TODO: perhaps get rhs span
+			.foldr(|(op, s), rhs| Expr::UnaryOp(s, force_token!(op => Operator), Box::new(rhs)))
 	};
 }
 
 #[macro_export]
 macro_rules! literal_parser {
 	($kind:ident) => {
-		filter(|x| matches!(x, Token::$kind(_))).map(|x| {
-			Expr::$kind(force_token!(x => $kind))
+		filter(|x| matches!(x, Token::$kind(_))).map_with_span(|x, span: Span| {
+			Expr::$kind(span.clone(), force_token!(x => $kind, span))
 		})
 	};
 }

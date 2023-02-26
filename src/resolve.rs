@@ -48,35 +48,36 @@ impl ResolvedScope {
 		let vars_has = self.vars.contains_key(&ident.to_string());
 		let funcs_has = self.funcs.contains_key(&ident.to_string());
 		if !vars_has && !funcs_has {
+			
 			panic!("Ident {ident} not found in scope!");
 		}
 	}
 
 	pub fn check_expr(&self, expr: Expr) {
 		match expr {
-			Expr::CharLiteral(_) => {}
-			Expr::StringLiteral(_) => {}
-			Expr::NumberLiteral(_) => {}
-			Expr::Identifier(ident) => {
+			Expr::CharLiteral(_, _) => {}
+			Expr::StringLiteral(_, _) => {}
+			Expr::NumberLiteral(_, _) => {}
+			Expr::Identifier(_, ident) => {
 				self.check_ident_exists(ident);
 			}
-			Expr::BinaryOp(lhs, _op, rhs) => {
+			Expr::BinaryOp(_, lhs, _op, rhs) => {
 				self.check_expr(*lhs);
 				self.check_expr(*rhs);
 			}
-			Expr::UnaryOp(_op, val) => {
+			Expr::UnaryOp(_, _op, val) => {
 				self.check_expr(*val);
 			}
-			Expr::Lambda(_func) => {
+			Expr::Lambda(_, _func) => {
 				// TODO: resolve lambda
 			}
-			Expr::Call(ident, args) => {
+			Expr::Call(_, ident, args) => {
 				self.check_expr(*ident);
 				for arg in args {
 					self.check_expr(arg);
 				}
 			}
-			Expr::Error => panic!("???"),
+			Expr::Error(_) => panic!("???"),
 		}
 	}
 }
@@ -110,16 +111,16 @@ pub fn resolve(scope: Scope, is_func: bool, inherit_scope: Option<ResolvedScope>
 	let mut return_value = None;
 	for stmt in scope.stmts {
 		match stmt {
-			Stmt::Create(ty_ident, expr) => {
+			Stmt::Create(_, ty_ident, expr) => {
 				resolved_scope.check_expr(expr.clone());
 				resolved_scope.add_var(ty_ident, Some(expr));
 			}
-			Stmt::Set(ident, expr) => {
+			Stmt::Set(_, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
 				resolved_scope.check_expr(expr.clone());
 				resolved_scope.set_var(ident, expr);
 			}
-			Stmt::Func(ident, func) => {
+			Stmt::Func(_, ident, func) => {
 				let mut frs = resolved_scope.clone();
 				for arg in func.clone().args {
 					frs.add_var(arg, None);
@@ -127,7 +128,7 @@ pub fn resolve(scope: Scope, is_func: bool, inherit_scope: Option<ResolvedScope>
 				resolve(func.clone().body, true, Some(frs));
 				resolved_scope.set_func(ident, func);
 			}
-			Stmt::Return(expr) => {
+			Stmt::Return(_, expr) => {
 				if !is_func {
 					panic!("Returned from non-func");
 				}
@@ -135,7 +136,7 @@ pub fn resolve(scope: Scope, is_func: bool, inherit_scope: Option<ResolvedScope>
 				return_value = Some(expr);
 				break;
 			}
-			Stmt::BareExpr(expr) => {
+			Stmt::BareExpr(_, expr) => {
 				resolved_scope.check_expr(expr);
 			}
 		}

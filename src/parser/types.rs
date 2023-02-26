@@ -14,22 +14,30 @@ pub enum Generic {
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum Ident {
-	#[display(fmt = "{_0}")]
-	Named(String),
+	#[display(fmt = "{_1}")]
+	Named(Span, String),
 	#[display(fmt = "~")]
-	Discarded,
+	Discarded(Span),
 }
 
 impl Ident {
+	pub fn span(&self) -> Span {
+		match self.clone() {
+			Self::Named(x, _) => x,
+			Self::Discarded(x) => x,
+		}
+	}
+
 	pub fn infer_type(&self) -> TypedIdent {
 		TypedIdent {
-			ty: Type::Inferred,
+			span: self.span(),
+			ty: Type::Inferred(self.span()),
 			ident: self.clone(),
 		}
 	}
 
 	pub fn is_discarded(&self) -> bool {
-		*self == Ident::Discarded
+		matches!(self, Ident::Discarded(_))
 	}
 }
 
@@ -49,17 +57,18 @@ pub enum BuiltinType {
 
 #[derive(Debug, Clone)]
 pub enum Type {
-	BareType(BareType),
-	Builtin(BuiltinType),
-	Array(Box<Type>, Option<Box<Expr>>),
-	Ref(Box<Type>),
-	Optional(Box<Type>),
-	Inferred,
+	BareType(Span, BareType),
+	Builtin(Span, BuiltinType),
+	Array(Span, Box<Type>, Option<Box<Expr>>),
+	Ref(Span, Box<Type>),
+	Optional(Span, Box<Type>),
+	Inferred(Span),
 }
 
 #[derive(Debug, Display, Clone)]
 #[display(fmt = "{ty} {ident}")]
 pub struct TypedIdent {
+	pub span: Span,
 	pub ty: Type,
 	pub ident: Ident,
 }
@@ -77,6 +86,7 @@ pub struct FuncAttribs {
 
 #[derive(Debug, Clone)]
 pub struct Func {
+	pub span: Span,
 	pub return_ty: Type,
 	pub args: Vec<TypedIdent>, // TODO: perhaps we might need to change this
 	pub body: Scope,
@@ -85,32 +95,34 @@ pub struct Func {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-	CharLiteral(String),
-	StringLiteral(String),
-	NumberLiteral(NumberLiteral),
-	Identifier(Ident),
-	BinaryOp(Box<Expr>, Operator, Box<Expr>),
-	UnaryOp(Operator, Box<Expr>),
-	Lambda(Func),
-	Call(Box<Expr>, Vec<Expr>),
-	Error,
+	CharLiteral(Span, String),
+	StringLiteral(Span, String),
+	NumberLiteral(Span, NumberLiteral),
+	Identifier(Span, Ident),
+	BinaryOp(Span, Box<Expr>, Operator, Box<Expr>),
+	UnaryOp(Span, Operator, Box<Expr>),
+	Lambda(Span, Func),
+	Call(Span, Box<Expr>, Vec<Expr>),
+	Error(Span),
 }
 
 #[derive(Debug, Display, Clone)]
 pub enum Stmt {
-	#[display(fmt = "{_0} = {_1}")]
-	Create(TypedIdent, Expr),
-	#[display(fmt = "{_0} = {_1}")]
-	Set(Ident, Expr),
-	#[display(fmt = "{_0} = {_1}")]
-	Func(Ident, Func),
-	#[display(fmt = "return {_0}")]
-	Return(Expr),
-	BareExpr(Expr),
+	#[display(fmt = "{_1} = {_2}")]
+	Create(Span, TypedIdent, Expr),
+	#[display(fmt = "{_1} = {_2}")]
+	Set(Span, Ident, Expr),
+	#[display(fmt = "{_1} = {_2}")]
+	Func(Span, Ident, Func),
+	#[display(fmt = "return {_1}")]
+	Return(Span, Expr),
+	#[display(fmt = "{_1}")]
+	BareExpr(Span, Expr),
 }
 
 #[derive(Debug, Clone)]
 pub struct Scope {
+	pub span: Span,
 	pub stmts: Vec<Stmt>,
 }
 
@@ -130,9 +142,9 @@ impl fmt::Display for BareType {
 impl fmt::Display for Type {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Type::BareType(x) => f.write_fmt(format_args!("{x}")),
-			Type::Builtin(x) => f.write_fmt(format_args!("{x}")),
-			Type::Array(x, len) => f.write_fmt(format_args!(
+			Type::BareType(_, x) => f.write_fmt(format_args!("{x}")),
+			Type::Builtin(_, x) => f.write_fmt(format_args!("{x}")),
+			Type::Array(_, x, len) => f.write_fmt(format_args!(
 				"{x}{}",
 				if let Some(len) = len {
 					format!("[{len}]")
@@ -140,9 +152,9 @@ impl fmt::Display for Type {
 					"[]".to_string()
 				}
 			)),
-			Type::Ref(x) => f.write_fmt(format_args!("{x}&")),
-			Type::Optional(x) => f.write_fmt(format_args!("{x}?")),
-			Type::Inferred => f.write_str("~"),
+			Type::Ref(_, x) => f.write_fmt(format_args!("{x}&")),
+			Type::Optional(_, x) => f.write_fmt(format_args!("{x}?")),
+			Type::Inferred(_) => f.write_str("~"),
 		}
 	}
 }
@@ -179,18 +191,18 @@ impl fmt::Display for Func {
 impl fmt::Display for Expr {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Expr::CharLiteral(x) => f.write_fmt(format_args!("{x}")),
-			Expr::StringLiteral(x) => f.write_fmt(format_args!("{x}")),
-			Expr::NumberLiteral(x) => f.write_fmt(format_args!("{x}")),
-			Expr::Identifier(x) => f.write_fmt(format_args!("{x}")),
-			Expr::BinaryOp(lhs, op, rhs) => f.write_fmt(format_args!("({lhs} {op} {rhs})")),
-			Expr::UnaryOp(op, expr) => f.write_fmt(format_args!("({op}{expr})")),
-			Expr::Lambda(func) => f.write_fmt(format_args!("lambda {func}")),
-			Expr::Call(callee, args) => f.write_fmt(format_args!(
+			Expr::CharLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			Expr::StringLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			Expr::NumberLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			Expr::Identifier(_, x) => f.write_fmt(format_args!("{x}")),
+			Expr::BinaryOp(_, lhs, op, rhs) => f.write_fmt(format_args!("({lhs} {op} {rhs})")),
+			Expr::UnaryOp(_, op, expr) => f.write_fmt(format_args!("({op}{expr})")),
+			Expr::Lambda(_, func) => f.write_fmt(format_args!("lambda {func}")),
+			Expr::Call(_, callee, args) => f.write_fmt(format_args!(
 				"{callee}({})",
 				join_comma(args).unwrap_or("".to_string())
 			)),
-			Expr::Error => f.write_str("[ERROR]"),
+			Expr::Error(_) => f.write_str("[ERROR]"),
 		}
 	}
 }

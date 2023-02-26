@@ -57,13 +57,18 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 		.then(ty_ident(None))
 		.then(func_args())
 		.then(choice((
-			jkeyword!(FatArrow).ignore_then(expr()).map(|expr| Scope { stmts: vec![Stmt::Return(expr)] }),
+			jkeyword!(FatArrow).ignore_then(expr()).map_with_span(|expr, span| Scope {
+				span: span.clone(),
+				stmts: vec![Stmt::Return(span, expr)],
+			}),
 			braced!(scope),
 		)))
-		.map(|(((attribs, ty_ident), args), body)| {
+		.map_with_span(|(((attribs, ty_ident), args), body), span| {
 			Stmt::Func(
+				span.clone(),
 				ty_ident.ident,
 				Func {
+					span,
 					return_ty: ty_ident.ty,
 					args,
 					body,
@@ -87,9 +92,13 @@ fn expr() -> impl TokenParser<Expr> {
 			))
 		};
 		let fc_parser = || {
-			atom()
-				.then(parened!(e.clone(),).repeated())
-				.foldl(|lhs, args| Expr::Call(Box::new(lhs), args))
+			span!(atom())
+				.then(span!(parened!(e.clone(),)).repeated())
+				.foldl(|(lhs, ls), (args, rs)| {
+					let span: Span = ls + rs;
+					(Expr::Call(span.clone(), Box::new(lhs), args), span)
+				})
+				.map(|(x, _)| x)
 		};
 		let neg_parser = unop_parser!(Neg => fc_parser);
 		let not_parser = unop_parser!(Bang => neg_parser);
@@ -99,28 +108,37 @@ fn expr() -> impl TokenParser<Expr> {
 		let sd_parser = binop_parser!(Star Div => or_parser);
 		let pn_parser = binop_parser!(Plus Neg => sd_parser);
 		let lambda = || {
-			parened!(choice((ty_ident(Some(e.clone())), ident().map(|x| x.infer_type()))),)
-				.then(choice((
-					// bare_scope(),
-					jkeyword!(FatArrow)
-						.ignore_then(pn_parser())
-						.map(|expr| Scope {
-							stmts: vec![Stmt::Return(expr)],
-						}),
-					jkeyword!(FatArrow)
-						.ignore_then(pn_parser())
-						.map(|expr| Scope {
-							stmts: vec![Stmt::Return(expr)],
-						}),
-				)))
-				.map(|(args, body)| {
-					Expr::Lambda(Func {
-						return_ty: Type::Inferred,
+			parened!(choice((
+				ty_ident(Some(e.clone())),
+				ident().map(|x| x.infer_type())
+			)),)
+			.then(choice((
+				// bare_scope(),
+				jkeyword!(FatArrow)
+					.ignore_then(pn_parser())
+					.map_with_span(|expr, span| Scope {
+						span: span.clone(),
+						stmts: vec![Stmt::Return(span, expr)],
+					}),
+				jkeyword!(FatArrow)
+					.ignore_then(pn_parser())
+					.map_with_span(|expr, span| Scope {
+						span: span.clone(),
+						stmts: vec![Stmt::Return(span, expr)],
+					}),
+			)))
+			.map_with_span(|(args, body), span| {
+				Expr::Lambda(
+					span.clone(),
+					Func {
+						span: span.clone(),
+						return_ty: Type::Inferred(span), // NOTE: there's no span for this type
 						body,
 						args,
 						attribs: FuncAttribs::default(),
-					})
-				})
+					},
+				)
+			})
 		};
 		choice((lambda(), pn_parser())).boxed()
 	})
@@ -128,15 +146,14 @@ fn expr() -> impl TokenParser<Expr> {
 
 /// Parses an ident token into Ident
 fn ident() -> impl TokenParser<Ident> {
-	filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare)).map(
-		|token| {
+	filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
+		.map_with_span(|token, span| {
 			if token == keyword!(DontCare) {
-				Ident::Discarded
+				Ident::Discarded(span)
 			} else {
-				force_token!(token => Identifier)
+				force_token!(token => Identifier, span)
 			}
-		},
-	)
+		})
 }
 
 /// Parses an ident token into Type
@@ -145,35 +162,46 @@ fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
 			.then(angled!(ty,).or_not())
-			.map(|(ident, generics)| {
+			.map_with_span(|(ident, generics), span| {
 				if ident == keyword!(DontCare) {
-					Type::Inferred
+					Type::Inferred(span)
 				} else {
-					Type::BareType(BareType {
-						ident: force_token!(ident => Identifier),
-						generics: generics
-							.unwrap_or(vec![])
-							.iter()
-							.map(|x: &Type| Generic::Type(x.clone()))
-							.collect(),
-					})
+					Type::BareType(
+						span.clone(),
+						BareType {
+							ident: force_token!(ident => Identifier, span), // TODO: incorrect span
+							generics: generics
+								.unwrap_or(vec![])
+								.iter()
+								.map(|x: &Type| Generic::Type(x.clone()))
+								.collect(),
+						},
+					)
 				}
 			})
 			.then(
 				choice((
-					bracketed!(er.map(|x| x.boxed()).unwrap_or_else(|| expr().boxed()).or_not()).map(PostfixOp::Left),
+					bracketed!(er
+						.map(|x| x.boxed())
+						.unwrap_or_else(|| expr().boxed())
+						.or_not())
+					.map(PostfixOp::Left),
 					jop!(Question).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 					jop!(Amp).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 					jop!(And).map(|x| PostfixOp::Right(force_token!(x => Operator))),
 				))
+				.map_with_span(|x, s| (x, s))
 				.repeated(),
 			)
-			.foldl(|ty, new_info| match new_info {
-				PostfixOp::Left(x) => Type::Array(Box::new(ty), x.map(Box::new)),
+			.foldl(|ty, (new_info, span)| match new_info {
+				PostfixOp::Left(x) => Type::Array(span, Box::new(ty), x.map(Box::new)),
 				PostfixOp::Right(x) => match x {
-					Operator::Question => Type::Optional(Box::new(ty)),
-					Operator::Amp => Type::Ref(Box::new(ty)),
-					Operator::And => Type::Ref(Box::new(Type::Ref(Box::new(ty)))),
+					Operator::Question => Type::Optional(span, Box::new(ty)),
+					Operator::Amp => Type::Ref(span, Box::new(ty)),
+					Operator::And => {
+						Type::Ref(span.clone(), Box::new(Type::Ref(span, Box::new(ty))))
+					}
+					// TODO: merge span with ty.span, all of these spans are wrong LOL
 					_ => unreachable!(),
 				},
 			})
@@ -182,33 +210,36 @@ fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
 
 /// Parses `<ty> <ident>` into TypedIdent
 fn ty_ident(er: Option<ExprRecursive>) -> impl TokenParser<TypedIdent> + '_ {
-	ty(er).then(ident())
-		.map(|(ty, ident)| TypedIdent { ty, ident })
+	ty(er)
+		.then(ident())
+		.map_with_span(|(ty, ident), span| TypedIdent { span, ty, ident })
 }
 
 /// Parses `let <ident> = <expr>;` into Stmt::Let
 fn let_stmt() -> impl TokenParser<Stmt> {
-	jkeyword!(Let)
-		.ignore_then(assg!(ignore Set))
-		.map(|(lhs, value): (Ident, Expr)| Stmt::Create(lhs.infer_type(), value))
+	jkeyword!(Let).ignore_then(assg!(ignore Set)).map_with_span(
+		|(lhs, value): (Ident, Expr), span| Stmt::Create(span, lhs.infer_type(), value),
+	)
 }
 
 /// Parses `<ty ident> = <expr>;` into Stmt::Create
 fn create_stmt() -> impl TokenParser<Stmt> {
 	ty_ident(None)
 		.then(assg!(noident ignore Set))
-		.map(|(lhs, value)| Stmt::Create(lhs, value))
+		.map_with_span(|(lhs, value), span| Stmt::Create(span, lhs, value))
 }
 
 /// Parses `<expr>;` into Stmt::BareExpr
 ///
 /// Useful, for example, for function calls where the return value is discarded
 fn bare_expr_stmt() -> impl TokenParser<Stmt> {
-	expr().map(Stmt::BareExpr)
+	expr().map_with_span(|x, span| Stmt::BareExpr(span, x))
 }
 
 fn return_stmt() -> impl TokenParser<Stmt> {
-	jkeyword!(Return).ignore_then(expr()).map(Stmt::Return)
+	jkeyword!(Return)
+		.ignore_then(expr())
+		.map_with_span(|x, span| Stmt::Return(span, x))
 }
 
 pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
@@ -237,7 +268,11 @@ pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
 
 /// Parses a bare scope (not wrapped in curly braces) into Scope
 pub fn bare_scope() -> impl TokenParser<Scope> {
-	recursive(|scope| stmt(scope, true).repeated().map(|x| Scope { stmts: x }))
+	recursive(|scope| {
+		stmt(scope, true)
+			.repeated()
+			.map_with_span(|x, span| Scope { span, stmts: x })
+	})
 }
 
 pub fn parser() -> impl TokenParser<Scope> {
