@@ -27,7 +27,16 @@ macro_rules! func_attribs {
 					$(
 						Keyword::$kw => {
 							if final_attribs.$prop {
-								emit(chumsky::error::Simple::custom(span.clone(), "cannot apply attribute twice"))
+								emit(chumsky::error::Simple::custom(span.clone(), "cannot apply attribute twice"));
+							}
+							if Keyword::$kw == Keyword::Private
+							|| Keyword::$kw == Keyword::Protected
+							|| Keyword::$kw == Keyword::Public {
+								if final_attribs.is_private
+								|| final_attribs.is_protected
+								|| final_attribs.is_public {
+									emit(chumsky::error::Simple::custom(span.clone(), "too many privacy qualifiers"));
+								}
 							}
 							final_attribs.$prop = true;
 						}
@@ -42,6 +51,9 @@ macro_rules! func_attribs {
 
 fn func_attribs() -> impl TokenParser<FuncAttribs> {
 	func_attribs!(
+		Private => is_private
+		Protected => is_protected
+		Public => is_public
 		Pure => is_pure
 	)
 }
@@ -57,10 +69,12 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 		.then(ty_ident(None))
 		.then(func_args())
 		.then(choice((
-			jkeyword!(FatArrow).ignore_then(expr()).map_with_span(|expr, span| Scope {
-				span: span.clone(),
-				stmts: vec![Stmt::Return(span, expr)],
-			}),
+			jkeyword!(FatArrow)
+				.ignore_then(expr())
+				.map_with_span(|expr, span| Scope {
+					span: span.clone(),
+					stmts: vec![Stmt::Return(span, expr)],
+				}),
 			braced!(scope),
 		)))
 		.map_with_span(|(((attribs, ty_ident), args), body), span| {
@@ -287,9 +301,15 @@ pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 	if errors.is_empty() {
 		return Ok(parsed.expect("what"));
 	}
+	// try not to duplicate diagnostics challenge
+	let mut add_diagnostic = |diagnostic: Diagnostic<_>| {
+		if !diagnostics.contains(&diagnostic) {
+			diagnostics.push(diagnostic);
+		}
+	};
 	for err in errors {
 		match err.reason() {
-			SimpleReason::Unclosed { span, delimiter } => diagnostics.push(
+			SimpleReason::Unclosed { span, delimiter } => add_diagnostic(
 				Diagnostic::error()
 					.with_message(format!("unclosed delimiter {delimiter}"))
 					.with_labels(vec![
@@ -299,7 +319,7 @@ pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 							.with_message("opening delimiter here"),
 					]),
 			),
-			SimpleReason::Unexpected => diagnostics.push(
+			SimpleReason::Unexpected => add_diagnostic(
 				Diagnostic::error()
 					.with_message("unexpected token")
 					.with_labels(vec![Label::primary(err.span().file_id, err.span().range())
@@ -312,7 +332,7 @@ pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
 							.unwrap_or("".into())
 					)]),
 			),
-			SimpleReason::Custom(label) => diagnostics.push(
+			SimpleReason::Custom(label) => add_diagnostic(
 				Diagnostic::error()
 					.with_message(label)
 					.with_labels(vec![Label::primary(err.span().file_id, err.span().range())]),

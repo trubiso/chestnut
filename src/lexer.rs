@@ -167,6 +167,8 @@ macro_rules! def_token {
 
 def_token!(
 	Keyword {
+		"private" => Private,
+		"protected" => Protected,
 		"public" => Public,
 		"func" => Function,
 		"pure" => Pure,

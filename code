@@ -2,7 +2,7 @@ pure void print_position(Tuple<int[]&, int?>[3]?& position) {}
 
 void print_grid(GridPiece&[3][4]?[] pieces) {}
 
-bool do_thing(Array<~> arr) {
+public bool do_thing(Array<~> arr) {
 	
 }
 
