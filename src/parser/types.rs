@@ -66,6 +66,20 @@ pub enum Type {
 	Inferred(Span),
 }
 
+impl Type {
+	pub fn span(&self) -> Span {
+		match self {
+			Self::BareType(x, _)
+			| Self::Builtin(x, _)
+			| Self::Array(x, _, _)
+			| Self::Ref(x, _)
+			| Self::Optional(x, _)
+			| Self::Mut(x, _)
+			| Self::Inferred(x) => x.clone(),
+		}
+	}
+}
+
 #[derive(Debug, Display, Clone)]
 #[display(fmt = "{ty} {ident}")]
 pub struct TypedIdent {

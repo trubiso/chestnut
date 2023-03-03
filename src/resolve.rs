@@ -35,6 +35,15 @@ impl ResolvedScope {
 			return;
 		} // TODO: ?
 		if let Some(x) = self.vars.get_mut(&ident.to_string()) {
+			if !matches!(&x.ty, Type::Mut(_, _)) {
+				let span = x.ty.span();
+				add_diagnostic(
+					Diagnostic::error()
+						.with_message("tried to set non-mut symbol")
+						.with_labels(vec![Label::primary(span.file_id, span.range())]),
+				);
+				return;
+			}
 			x.value = Some(expr);
 		} else {
 			let span = ident.span() + expr.span();
@@ -42,7 +51,7 @@ impl ResolvedScope {
 				Diagnostic::error()
 					.with_message("tried to set non-existing symbol")
 					.with_labels(vec![Label::primary(span.file_id, span.range())]),
-			)
+			);
 		}
 	}
 
