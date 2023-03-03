@@ -4,7 +4,6 @@ use crate::{
 };
 use chumsky::{error::SimpleReason, prelude::*, Stream};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
-use either::Either;
 use std::vec::IntoIter;
 use types::*;
 
@@ -172,7 +171,11 @@ fn ident() -> impl TokenParser<Ident> {
 
 /// Parses an ident token into Type
 fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
-	type PostfixOp = Either<Option<Expr>, Operator>;
+	enum PostfixOp {
+		Expr(Option<Expr>),
+		Operator(Operator),
+		Keyword(Keyword),
+	}
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
 			.then(angled!(ty,).or_not())
@@ -199,23 +202,28 @@ fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
 						.map(|x| x.boxed())
 						.unwrap_or_else(|| expr().boxed())
 						.or_not())
-					.map(PostfixOp::Left),
-					jop!(Question).map(|x| PostfixOp::Right(force_token!(x => Operator))),
-					jop!(Amp).map(|x| PostfixOp::Right(force_token!(x => Operator))),
-					jop!(And).map(|x| PostfixOp::Right(force_token!(x => Operator))),
+					.map(PostfixOp::Expr),
+					jop!(Question).map(|x| PostfixOp::Operator(force_token!(x => Operator))),
+					jop!(Amp).map(|x| PostfixOp::Operator(force_token!(x => Operator))),
+					jop!(And).map(|x| PostfixOp::Operator(force_token!(x => Operator))),
+					jkeyword!(Mut).map(|x| PostfixOp::Keyword(force_token!(x => Keyword))),
 				))
 				.map_with_span(|x, s| (x, s))
 				.repeated(),
 			)
 			.foldl(|ty, (new_info, span)| match new_info {
-				PostfixOp::Left(x) => Type::Array(span, Box::new(ty), x.map(Box::new)),
-				PostfixOp::Right(x) => match x {
+				PostfixOp::Expr(x) => Type::Array(span, Box::new(ty), x.map(Box::new)),
+				PostfixOp::Operator(x) => match x {
 					Operator::Question => Type::Optional(span, Box::new(ty)),
 					Operator::Amp => Type::Ref(span, Box::new(ty)),
 					Operator::And => {
 						Type::Ref(span.clone(), Box::new(Type::Ref(span, Box::new(ty))))
 					}
 					// TODO: merge span with ty.span, all of these spans are wrong LOL
+					_ => unreachable!(),
+				},
+				PostfixOp::Keyword(x) => match x {
+					Keyword::Mut => Type::Mut(span, Box::new(ty)),
 					_ => unreachable!(),
 				},
 			})

@@ -176,7 +176,7 @@ def_token!(
 		"->" => Arrow,
 		"=>" => FatArrow,
 		"let" => Let,
-		"const" => Const,
+		"mut" => Mut,
 		"for" => For,
 		"in" => In,
 		"while" => While,

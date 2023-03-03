@@ -42,6 +42,8 @@ fn main() {
 		Err(x) => return emit_errors(&files, x),
 	};
 
+	println!("{parsed}");
+
 	let _resolved = match resolve::resolve(parsed, false, None) {
 		Ok(x) => x,
 		Err(x) => return emit_errors(&files, x),

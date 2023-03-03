@@ -62,6 +62,7 @@ pub enum Type {
 	Array(Span, Box<Type>, Option<Box<Expr>>),
 	Ref(Span, Box<Type>),
 	Optional(Span, Box<Type>),
+	Mut(Span, Box<Type>),
 	Inferred(Span),
 }
 
@@ -173,6 +174,7 @@ impl fmt::Display for Type {
 			)),
 			Type::Ref(_, x) => f.write_fmt(format_args!("{x}&")),
 			Type::Optional(_, x) => f.write_fmt(format_args!("{x}?")),
+			Type::Mut(_, x) => f.write_fmt(format_args!("{x} mut")),
 			Type::Inferred(_) => f.write_str("~"),
 		}
 	}
