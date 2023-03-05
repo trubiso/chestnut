@@ -9,7 +9,7 @@ pub trait TokenParser<T> = Parser<Token, T, Error = Simple<Token, Span>>;
 #[derive(Debug, Display, Clone)]
 pub enum Generic {
 	Type(Type),
-	Expr(Expr),
+	Expr(Expr), // TODO: remove the additional junk caused by this mistake of an enum
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]

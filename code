@@ -1,4 +1,4 @@
-void print_position(Tuple<int[]&, int?>[3]?& position) pure {}
+void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
 
 void print_grid(GridPiece&[3][4]?[] pieces) {}
 
@@ -22,9 +22,9 @@ public void set_element() mut {
 	
 }
 
-int main(string[4+4] args, int[34] arg) {
+i32 main(string[4+4] args, i32[34] arg) {
 	let ~ = do_thing();
-	int[5]& x = 2 + (3 - 4);
+	i32[5]& x = 2 + (3 - 4);
 	~mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a *= 9 + 10;
 	print("Hello World!", 9+3-4);
@@ -49,4 +49,4 @@ int main(string[4+4] args, int[34] arg) {
 	return -a + 3;
 }
 
-int divided_by_two(int x) => x / 2;
+i32 divided_by_two(i32 x) => x / 2;

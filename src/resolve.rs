@@ -1,7 +1,7 @@
-use crate::parser::types::{Expr, Func, Ident, Scope, Stmt, Type, TypedIdent};
+use crate::parser::types::{Expr, Func, Generic, Ident, Scope, Stmt, Type, TypedIdent};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use lazy_static::lazy_static;
-use std::{collections::HashMap, sync::Mutex};
+use std::{cmp::Ordering, collections::HashMap, sync::Mutex};
 
 #[derive(Debug, Default, Clone)]
 pub struct ResolvedScope {
@@ -9,6 +9,7 @@ pub struct ResolvedScope {
 	// funcs don't need order, they can be arbitrarily defined.
 	pub vars: HashMap<String, ResolvedVar>,
 	pub funcs: HashMap<String, ResolvedFunc>,
+	pub types: HashMap<String, ResolvedType>,
 }
 
 lazy_static! {
@@ -20,6 +21,58 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 }
 
 impl ResolvedScope {
+	pub fn check_type(&self, ty: Type) {
+		match ty {
+			Type::BareType(span, x) => {
+				if [
+					"i8", "i16", "i32", "i64", "i128", "iz", "u", "u8", "u16", "u32", "u64",
+					"u128", "uz", "f", "f16", "f32", "f64", "f128", "void", "bool", "string",
+				]
+				.contains(&x.ident.to_string().as_str())
+				{
+					if !x.generics.is_empty() {
+						add_diagnostic(
+							Diagnostic::error()
+								.with_message("tried to use generics on builtin")
+								.with_labels(vec![Label::primary(span.file_id, span.range())]),
+						)
+					}
+				} else if let Some(ty) = self.types.get(&x.ident.to_string()) {
+					if ty.generic_count != x.generics.len() {
+						add_diagnostic(
+							Diagnostic::error()
+								.with_message(match x.generics.len().cmp(&ty.generic_count) {
+									Ordering::Less => "not enough generics in type",
+									Ordering::Greater => "too many generics in type",
+									_ => unreachable!(),
+								})
+								.with_labels(vec![Label::primary(span.file_id, span.range())]),
+							// TODO: add note at the original declaration
+						);
+					}
+				} else {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("tried to use undeclared type")
+							.with_labels(vec![Label::primary(span.file_id, span.range())]),
+					);
+				}
+				for generic in x.generics {
+					let Generic::Type(ty) = generic else { panic!("haha you fell into the trap enum") };
+					self.check_type(ty);
+				}
+			}
+			Type::Ref(_, x) | Type::Mut(_, x) | Type::Optional(_, x) => self.check_type(*x),
+			Type::Array(_, x, size) => {
+				size.map(|x| self.check_expr(*x));
+				self.check_type(*x);
+			}
+			Type::Inferred(_) => {}
+			// we might have to remove inferred in some cases because type inference hehehe
+			x => todo!("{x}"),
+		}
+	}
+
 	pub fn add_var(&mut self, ty_ident: TypedIdent, value: Option<Expr>) {
 		if ty_ident.ident.is_discarded() {
 			return;
@@ -41,6 +94,7 @@ impl ResolvedScope {
 					Diagnostic::error()
 						.with_message("tried to set non-mut symbol")
 						.with_labels(vec![Label::primary(span.file_id, span.range())]),
+					// TODO: add note at the original variable declaration
 				);
 				return;
 			}
@@ -119,8 +173,16 @@ impl ResolvedScope {
 #[derive(Debug, Clone)]
 pub struct ResolvedVar {
 	pub name: String,
-	pub ty: Type,            // TODO: ResolvedTy
+	pub ty: Type,            // TODO: should we make another type?
 	pub value: Option<Expr>, // NOTE: in the future we might support uninitialized variables
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedType {
+	pub name: String,
+	pub generic_count: usize, // TODO: ResolvedGeneric
+	pub is_mut: bool,
+	pub fields: Vec<ResolvedType>,
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +211,7 @@ pub fn resolve(
 	for stmt in scope.stmts {
 		match stmt {
 			Stmt::Create(_, ty_ident, expr) => {
+				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.check_expr(expr.clone());
 				resolved_scope.add_var(ty_ident, Some(expr));
 			}
@@ -158,12 +221,15 @@ pub fn resolve(
 				resolved_scope.set_var(ident, expr);
 			}
 			Stmt::Func(_, ident, func) => {
+				// TODO: generics
+				resolved_scope.check_type(func.return_ty.clone());
 				let mut frs = resolved_scope.clone();
-				for arg in func.clone().args {
+				for arg in func.args.clone() {
+					resolved_scope.check_type(arg.ty.clone());
 					frs.add_var(arg, None);
 				}
 				// TODO: use resolved scope
-				let _ = resolve(func.clone().body, true, Some(frs));
+				let _ = resolve(func.body.clone(), true, Some(frs));
 				resolved_scope.set_func(ident, func);
 			}
 			Stmt::Return(span, expr) => {
