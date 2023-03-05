@@ -94,12 +94,18 @@ impl TypedIdent {
 	}
 }
 
+pub enum Privacy {
+	Private,
+	Protected,
+	Public,
+	Export,
+	Default,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct FuncAttribs {
-	pub is_private: bool,
-	pub is_protected: bool,
-	pub is_public: bool,
 	pub is_pure: bool,
+	pub is_mut: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -197,11 +203,9 @@ impl fmt::Display for Type {
 impl fmt::Display for FuncAttribs {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.write_fmt(format_args!(
-			"{}{}{}{}",
-			if self.is_private { "private " } else { "" },
-			if self.is_protected { "protected " } else { "" },
-			if self.is_public { "public " } else { "" },
+			"{}{}",
 			if self.is_pure { "pure " } else { "" },
+			if self.is_mut { "mut " } else { "" },
 		))
 	}
 }
@@ -209,9 +213,9 @@ impl fmt::Display for FuncAttribs {
 impl fmt::Display for Func {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.write_fmt(format_args!(
-			"{}func ({}) -> {}: {{{}}}",
-			self.attribs,
+			"func ({}) {}-> {}: {{{}}}",
 			join_comma(&self.args).unwrap_or("".into()),
+			self.attribs,
 			self.return_ty,
 			if self.body.stmts.is_empty() {
 				"".into()

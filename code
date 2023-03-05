@@ -1,4 +1,4 @@
-pure void print_position(Tuple<int[]&, int?>[3]?& position) {}
+void print_position(Tuple<int[]&, int?>[3]?& position) pure {}
 
 void print_grid(GridPiece&[3][4]?[] pieces) {}
 
@@ -15,6 +15,10 @@ void silly() {
 }
 
 void set_error_callback() {
+	
+}
+
+public void set_element() mut {
 	
 }
 

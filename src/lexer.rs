@@ -170,6 +170,7 @@ def_token!(
 		"private" => Private,
 		"protected" => Protected,
 		"public" => Public,
+		"export" => Export,
 		"func" => Function,
 		"pure" => Pure,
 		"return" => Return,

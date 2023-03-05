@@ -28,15 +28,6 @@ macro_rules! func_attribs {
 							if final_attribs.$prop {
 								emit(chumsky::error::Simple::custom(span.clone(), "cannot apply attribute twice"));
 							}
-							if Keyword::$kw == Keyword::Private
-							|| Keyword::$kw == Keyword::Protected
-							|| Keyword::$kw == Keyword::Public {
-								if final_attribs.is_private
-								|| final_attribs.is_protected
-								|| final_attribs.is_public {
-									emit(chumsky::error::Simple::custom(span.clone(), "too many privacy qualifiers"));
-								}
-							}
 							final_attribs.$prop = true;
 						}
 					)*
@@ -48,12 +39,35 @@ macro_rules! func_attribs {
 	};
 }
 
+macro_rules! privacy_qualifiers {
+	($($kw:ident)*) => {
+		choice(($(jkeyword!($kw),)*))
+		.repeated()
+		.validate(|attribs, span: Span, emit| {
+			if attribs.len() > 1 {
+				emit(chumsky::error::Simple::custom(span.clone(), "too many privacy qualifiers"));
+			}
+
+			if let Some(x) = attribs.get(0) {
+				match force_token!(x => Keyword) {
+					$(Keyword::$kw => Privacy::$kw,)*
+					_ => unreachable!()
+				}
+			} else {
+				Privacy::Default
+			}
+		})
+	};
+}
+
+fn privacy_attribs() -> impl TokenParser<Privacy> {
+	privacy_qualifiers!(Private Protected Public Export)
+}
+
 fn func_attribs() -> impl TokenParser<FuncAttribs> {
 	func_attribs!(
-		Private => is_private
-		Protected => is_protected
-		Public => is_public
 		Pure => is_pure
+		Mut => is_mut
 	)
 }
 
@@ -64,9 +78,10 @@ fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
 
 /// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
 fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
-	func_attribs()
+	privacy_attribs()
 		.then(ty_ident(None))
 		.then(func_args())
+		.then(func_attribs())
 		.then(choice((
 			jkeyword!(FatArrow)
 				.ignore_then(expr())
@@ -76,7 +91,7 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 				}),
 			braced!(scope),
 		)))
-		.map_with_span(|(((attribs, ty_ident), args), body), span| {
+		.map_with_span(|((((_privacy, ty_ident), args), attribs), body), span| {
 			Stmt::Func(
 				span.clone(),
 				ty_ident.ident,
