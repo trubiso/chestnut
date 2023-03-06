@@ -66,7 +66,7 @@ impl ResolvedScope {
 			}
 			Type::Ref(_, x) | Type::Mut(_, x) | Type::Optional(_, x) => self.check_type(*x),
 			Type::Array(_, x, size) => {
-				size.map(|x| self.check_expr(*x));
+				if let Some(x) = size { self.check_expr(*x) }
 				self.check_type(*x);
 			}
 			Type::Inferred(_) => {}
@@ -142,7 +142,7 @@ impl ResolvedScope {
 				Diagnostic::error()
 					.with_message("tried to access non-existing symbol")
 					.with_labels(vec![Label::primary(span.file_id, span.range())
-						.with_message(format!("couldn't find symbol in current scope"))]),
+						.with_message("couldn't find symbol in current scope")]),
 			)
 		}
 	}
@@ -272,7 +272,7 @@ pub fn resolve(
 						Diagnostic::error()
 							.with_message("tried to return from non-function")
 							.with_labels(vec![Label::primary(span.file_id, span.range())
-								.with_message(format!("return statement in global scope"))]),
+								.with_message("return statement in global scope")]),
 					);
 				}
 				resolved_scope.check_expr(expr.clone());
@@ -302,10 +302,7 @@ pub fn resolve(
 		}
 	}
 	// TODO: idk how we should use this LOL this code is absolutely useless
-	match return_value {
-		Some(_) => {}
-		None => {}
-	}
+	if return_value.is_some() {}
 	if !DIAGNOSTICS.lock().unwrap().is_empty() {
 		let diagnostics = DIAGNOSTICS.lock().unwrap();
 		Err(diagnostics.clone())
