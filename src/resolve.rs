@@ -9,6 +9,7 @@ pub struct ResolvedScope {
 	// TODO: assign each var a usize to know declaration order.
 	// funcs don't need order, they can be arbitrarily defined.
 	pub vars: HashMap<String, ResolvedVar>,
+	// TODO: top level analyzer
 	pub funcs: HashMap<String, ResolvedFunc>,
 	pub types: HashMap<String, ResolvedType>,
 }
@@ -82,6 +83,10 @@ impl ResolvedScope {
 		let ty = ty_ident.ty;
 		self.vars
 			.insert(name.clone(), ResolvedVar { name, ty, value });
+	}
+
+	pub fn add_type(&mut self, name: String, ty: ResolvedType) {
+		self.types.insert(name, ty);
 	}
 
 	pub fn set_var(&mut self, ident: Ident, expr: Expr) {
@@ -182,8 +187,8 @@ pub struct ResolvedVar {
 pub struct ResolvedType {
 	pub name: String,
 	pub generic_count: usize, // TODO: ResolvedGeneric
-	pub is_mut: bool,
-	pub fields: Vec<ResolvedType>,
+	pub fields: HashMap<String, ResolvedType>,
+	pub funcs: HashMap<String, ResolvedFunc>,
 }
 
 #[derive(Debug, Clone)]
@@ -219,7 +224,7 @@ fn check_privacy(privacy: Privacy, context: Context) {
 		add_diagnostic(Diagnostic::error().with_message(format!(
 			"invalid privacy qualifier {privacy}in {context} context"
 		))); // .with_labels(vec![Label::primary(file_id, range)]))
-		// TODO: range inside of Privacy::Public(x)
+		 // TODO: range inside of Privacy::Public(x)
 	}
 }
 
@@ -232,6 +237,7 @@ pub fn resolve(
 	if let Some(scope) = inherit_scope {
 		resolved_scope.funcs = scope.funcs;
 		resolved_scope.vars = scope.vars;
+		resolved_scope.types = scope.types;
 	}
 	let mut return_value = None;
 	for stmt in scope.stmts {
@@ -272,6 +278,22 @@ pub fn resolve(
 				resolved_scope.check_expr(expr.clone());
 				return_value = Some(expr);
 				break;
+			}
+			Stmt::Class(_, privacy, ident, body) => {
+				check_privacy(privacy, context.clone());
+				let name = ident.to_string();
+				let mut crs = resolved_scope.clone();
+				crs.add_type(
+					name.clone(),
+					ResolvedType {
+						name,
+						generic_count: 0, // TODO
+						fields: HashMap::new(), // TODO
+						funcs: HashMap::new(), // TODO
+					},
+				);
+				// TODO: use resolved scope
+				let _ = resolve(body.clone(), Context::Class, Some(crs));
 			}
 			Stmt::BareExpr(_, expr) => {
 				resolved_scope.check_expr(expr);
