@@ -1,5 +1,5 @@
 use crate::{
-	lexer::{Keyword, Operator, Token},
+	lexer::{Keyword, Token},
 	span::{Span, Spanned},
 };
 use chumsky::{error::SimpleReason, prelude::*, Stream};
@@ -8,6 +8,7 @@ use expr::expr;
 use ident::*;
 use privacy::privacy_attribs;
 use std::vec::IntoIter;
+use stmt::stmt;
 use ty_ident::*;
 use types::*;
 
@@ -17,6 +18,7 @@ pub mod macros;
 mod expr;
 mod ident;
 mod privacy;
+mod stmt;
 mod ty;
 mod ty_ident;
 
@@ -145,32 +147,6 @@ fn class_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 		.map_with_span(|(((privacy, ident), generics), body), span| {
 			Stmt::Class(span, privacy, ident, generics, body)
 		})
-}
-
-pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
-	let s = if semi { 1 } else { 0 };
-	macro_rules! semi {
-		(Y $thing:expr) => {
-			$thing.then_ignore(jpunct!(Semicolon).repeated().at_least(s))
-		};
-		(N $thing:expr) => {
-			$thing.then_ignore(jpunct!(Semicolon).repeated())
-		};
-	}
-	choice((
-		semi!(Y let_stmt()),
-		semi!(Y create_stmt()),
-		semi!(Y declare_stmt()),
-		semi!(N func_stmt(scope.clone())),
-		semi!(N class_stmt(scope)),
-		semi!(Y return_stmt()),
-		semi!(Y assg_stmt!(Set)),
-		semi!(Y assg_stmt!(NegSet => Neg)),
-		semi!(Y assg_stmt!(StarSet => Star)),
-		semi!(Y assg_stmt!(PlusSet => Plus)),
-		semi!(Y assg_stmt!(DivSet => Div)),
-		semi!(Y bare_expr_stmt()),
-	))
 }
 
 /// Parses a bare scope (not wrapped in curly braces) into Scope

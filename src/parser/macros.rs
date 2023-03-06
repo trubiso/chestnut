@@ -85,39 +85,21 @@ macro_rules! force_token {
 	};
 }
 
-#[macro_export]
 macro_rules! assg {
 	($ident:ident) => {
-		$crate::parser::ident::ident().then(jassg_op!($ident)).then(expr())
+		$crate::parser::ident::ident()
+			.then(jassg_op!($ident))
+			.then(expr())
 	};
 	(ignore $ident:ident) => {
-		$crate::parser::ident::ident().then_ignore(jassg_op!($ident)).then(expr())
+		$crate::parser::ident::ident()
+			.then_ignore(jassg_op!($ident))
+			.then(expr())
 	};
 	(noident $ident:ident) => {
 		jassg_op!($ident).then(expr())
 	};
 	(noident ignore $ident:ident) => {
 		jassg_op!($ident).ignore_then(expr())
-	};
-}
-
-#[macro_export]
-macro_rules! assg_stmt {
-	($ident:ident) => {
-		assg!($ident).map_with_span(|((lhs, _), rhs), span| Stmt::Set(span, lhs, rhs))
-	};
-	($ident:ident => $op:ident) => {
-		assg!($ident).map_with_span(|((lhs, _), rhs), span| {
-			Stmt::Set(
-				span.clone(),
-				lhs.clone(),
-				Expr::BinaryOp(
-					span,
-					Box::new(Expr::Identifier(lhs.clone().span(), lhs)),
-					Operator::$op,
-					Box::new(rhs),
-				),
-			)
-		})
 	};
 }
