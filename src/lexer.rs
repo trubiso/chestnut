@@ -171,6 +171,7 @@ def_token!(
 		"protected" => Protected,
 		"public" => Public,
 		"export" => Export,
+		"class" => Class,
 		"func" => Function,
 		"pure" => Pure,
 		"return" => Return,

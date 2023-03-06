@@ -22,6 +22,15 @@ public void set_element() mut {
 	
 }
 
+class Node {
+	Node& next;
+	pub i32 value;
+
+	pub Node traverse() {
+		
+	}
+}
+
 i32 main(string[4+4] args, i32[34] arg) {
 	let ~ = do_thing();
 	i32[5]& x = 2 + (3 - 4);
