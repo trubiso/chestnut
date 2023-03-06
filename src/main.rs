@@ -44,7 +44,7 @@ fn main() {
 
 	println!("{parsed}");
 
-	let _resolved = match resolve::resolve(parsed, false, None) {
+	let _resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None) {
 		Ok(x) => x,
 		Err(x) => return emit_errors(&files, x),
 	};

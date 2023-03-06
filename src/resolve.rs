@@ -197,9 +197,16 @@ pub struct ResolvedArg {
 	pub ty: Type, // TODO: ResolvedTy
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Context {
+	TopLevel,
+	Class,
+	Func
+}
+
 pub fn resolve(
 	scope: Scope,
-	is_func: bool,
+	context: Context,
 	inherit_scope: Option<ResolvedScope>,
 ) -> Result<ResolvedScope, Vec<Diagnostic<usize>>> {
 	let mut resolved_scope = ResolvedScope::default();
@@ -229,11 +236,11 @@ pub fn resolve(
 					frs.add_var(arg, None);
 				}
 				// TODO: use resolved scope
-				let _ = resolve(func.body.clone(), true, Some(frs));
+				let _ = resolve(func.body.clone(), Context::Func, Some(frs));
 				resolved_scope.set_func(ident, func);
 			}
 			Stmt::Return(span, expr) => {
-				if !is_func {
+				if context != Context::Func {
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("tried to return from non-function")
