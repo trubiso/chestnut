@@ -1,19 +1,20 @@
 use crate::{
-	lexer::{AssignmentOp, Keyword, Operator, Punctuation, Token},
+	lexer::{Keyword, Operator, Token},
 	span::{Span, Spanned},
 };
 use chumsky::{error::SimpleReason, prelude::*, Stream};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
+use ident::*;
 use std::vec::IntoIter;
+use ty_ident::*;
 use types::*;
 
 pub mod types;
 #[macro_use]
 pub mod macros;
-
-type TokenRecursive<'a, T> = Recursive<'a, Token, T, Simple<Token, Span>>;
-type ScopeRecursive<'a> = TokenRecursive<'a, Scope>;
-type ExprRecursive<'a> = TokenRecursive<'a, Expr>;
+mod ident;
+mod ty;
+mod ty_ident;
 
 macro_rules! func_attribs {
 	($($kw:ident => $prop:ident)*) => {
@@ -183,99 +184,6 @@ fn expr() -> impl TokenParser<Expr> {
 		};
 		choice((lambda(), pn_parser())).boxed()
 	})
-}
-
-/// Parses an ident token into Ident
-fn ident() -> impl TokenParser<Ident> {
-	filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
-		.map_with_span(|token, span| {
-			if token == keyword!(DontCare) {
-				Ident::Discarded(span)
-			} else {
-				force_token!(token => Identifier, span)
-			}
-		})
-}
-
-/// Parses a non-inferred ident token into Ident
-fn ident_nodiscard() -> impl TokenParser<Ident> {
-	filter(|token| matches!(token, Token::Identifier(_)))
-		.map_with_span(|token, span| force_token!(token => Identifier, span))
-}
-
-/// Parses an ident token into Type
-fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
-	enum PostfixOp {
-		Expr(Option<Expr>),
-		Operator(Operator),
-		Keyword(Keyword),
-	}
-	recursive(|ty| {
-		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
-			.then(angled!(ty,).or_not())
-			.map_with_span(|(ident, generics), span| {
-				if ident == keyword!(DontCare) {
-					Type::Inferred(span)
-				} else {
-					Type::BareType(
-						span.clone(),
-						BareType {
-							ident: force_token!(ident => Identifier, span), // TODO: incorrect span
-							generics: generics
-								.unwrap_or(vec![])
-								.iter()
-								.map(|x: &Type| Generic::Type(x.clone()))
-								.collect(),
-						},
-					)
-				}
-			})
-			.then(
-				choice((
-					bracketed!(er
-						.map(|x| x.boxed())
-						.unwrap_or_else(|| expr().boxed())
-						.or_not())
-					.map(PostfixOp::Expr),
-					jop!(Question).map(|x| PostfixOp::Operator(force_token!(x => Operator))),
-					jop!(Amp).map(|x| PostfixOp::Operator(force_token!(x => Operator))),
-					jop!(And).map(|x| PostfixOp::Operator(force_token!(x => Operator))),
-					jkeyword!(Mut).map(|x| PostfixOp::Keyword(force_token!(x => Keyword))),
-				))
-				.map_with_span(|x, s| (x, s))
-				.repeated(),
-			)
-			.foldl(|ty, (new_info, span)| match new_info {
-				PostfixOp::Expr(x) => Type::Array(span, Box::new(ty), x.map(Box::new)),
-				PostfixOp::Operator(x) => match x {
-					Operator::Question => Type::Optional(span, Box::new(ty)),
-					Operator::Amp => Type::Ref(span, Box::new(ty)),
-					Operator::And => {
-						Type::Ref(span.clone(), Box::new(Type::Ref(span, Box::new(ty))))
-					}
-					// TODO: merge span with ty.span, all of these spans are wrong LOL
-					_ => unreachable!(),
-				},
-				PostfixOp::Keyword(x) => match x {
-					Keyword::Mut => Type::Mut(span, Box::new(ty)),
-					_ => unreachable!(),
-				},
-			})
-	})
-}
-
-/// Parses `<ty> <ident>` into TypedIdent
-fn ty_ident(er: Option<ExprRecursive>) -> impl TokenParser<TypedIdent> + '_ {
-	ty(er)
-		.then(ident())
-		.map_with_span(|(ty, ident), span| TypedIdent { span, ty, ident })
-}
-
-/// Parses `<ty> <ident_nodiscard>` into TypedIdent
-fn ty_ident_nodiscard(er: Option<ExprRecursive>) -> impl TokenParser<TypedIdent> + '_ {
-	ty(er)
-		.then(ident_nodiscard())
-		.map_with_span(|(ty, ident), span| TypedIdent { span, ty, ident })
 }
 
 /// Parses `let <ident> = <expr>;` into Stmt::Let

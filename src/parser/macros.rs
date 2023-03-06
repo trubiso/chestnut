@@ -17,7 +17,7 @@ macro_rules! token_gen {
 		#[macro_export]
 		macro_rules! $name {
 			($var:ident) => {
-				Token::$ident($ident::$var)
+				$crate::lexer::Token::$ident($crate::lexer::$ident::$var)
 			};
 		}
 		#[macro_export]
@@ -70,7 +70,7 @@ macro_rules! builtin {
 macro_rules! force_token {
 	($value:expr => Identifier, $span:expr) => {
 		match $value {
-			Token::Identifier(x) => Ident::Named($span, x),
+			$crate::lexer::Token::Identifier(x) => $crate::parser::types::Ident::Named($span, x),
 			_ => unreachable!(),
 		}
 	};
@@ -88,10 +88,10 @@ macro_rules! force_token {
 #[macro_export]
 macro_rules! assg {
 	($ident:ident) => {
-		ident().then(jassg_op!($ident)).then(expr())
+		$crate::parser::ident::ident().then(jassg_op!($ident)).then(expr())
 	};
 	(ignore $ident:ident) => {
-		ident().then_ignore(jassg_op!($ident)).then(expr())
+		$crate::parser::ident::ident().then_ignore(jassg_op!($ident)).then(expr())
 	};
 	(noident $ident:ident) => {
 		jassg_op!($ident).then(expr())
