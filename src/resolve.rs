@@ -254,6 +254,11 @@ pub fn resolve(
 				resolved_scope.check_expr(expr.clone());
 				resolved_scope.add_var(ty_ident, Some(expr));
 			}
+			Stmt::Declare(_, privacy, ty_ident) => {
+				check_privacy(privacy, context.clone());
+				resolved_scope.check_type(ty_ident.ty.clone());
+				resolved_scope.add_var(ty_ident, None);
+			}
 			Stmt::Set(_, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
 				resolved_scope.check_expr(expr.clone());
@@ -304,7 +309,6 @@ pub fn resolve(
 			Stmt::BareExpr(_, expr) => {
 				resolved_scope.check_expr(expr);
 			}
-			_ => todo!(),
 		}
 	}
 	// TODO: idk how we should use this LOL this code is absolutely useless

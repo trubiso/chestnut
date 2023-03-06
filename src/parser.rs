@@ -288,7 +288,6 @@ fn create_stmt() -> impl TokenParser<Stmt> {
 fn declare_stmt() -> impl TokenParser<Stmt> {
 	privacy_attribs()
 		.then(ty_ident_nodiscard(None))
-		.then_ignore(jpunct!(Semicolon))
 		.map_with_span(|(privacy, ty_ident), span| Stmt::Declare(span, privacy, ty_ident))
 }
 

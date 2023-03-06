@@ -2,7 +2,7 @@ void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
 
 void print_grid(GridPiece&[3][4]?[] pieces) {}
 
-public bool do_thing(Array<~> arr) {
+export bool do_thing(Array<~> arr) {
 	
 }
 
@@ -18,13 +18,13 @@ void set_error_callback() {
 	
 }
 
-public void set_element() mut {
+export void set_element() mut {
 	
 }
 
 class Node {
-	Node& next = 3;
-	public i32 value = 4;
+	Node& next;
+	public i32 value;
 
 	public Node traverse() {
 		
