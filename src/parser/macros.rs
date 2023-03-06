@@ -76,7 +76,7 @@ macro_rules! force_token {
 	};
 	($value:expr => $kind:ident) => {
 		match $value {
-			Token::$kind(x) => x,
+			$crate::lexer::Token::$kind(x) => x,
 			_ => unreachable!(),
 		}
 	};
@@ -118,38 +118,6 @@ macro_rules! assg_stmt {
 					Box::new(rhs),
 				),
 			)
-		})
-	};
-}
-
-#[macro_export]
-macro_rules! binop_parser {
-	($($op:ident)* => $next:ident) => {
-		|| $next()
-			.then(
-				span!(choice(($(jop!($op),)*)))
-				.then($next()).repeated())
-				// FIXME: get the proper span of lhs + op + rhs
-			.foldl(|lhs, ((op, span), rhs)| Expr::BinaryOp(span, Box::new(lhs), force_token!(op => Operator), Box::new(rhs)))
-	};
-}
-
-#[macro_export]
-macro_rules! unop_parser {
-	($($op:ident)* => $next:ident) => {
-		|| span!(choice(($(jop!($op),)*))).repeated()
-			.then($next())
-			// NOTE: i don't know if this span is correct?
-			// TODO: perhaps get rhs span
-			.foldr(|(op, s), rhs| Expr::UnaryOp(s, force_token!(op => Operator), Box::new(rhs)))
-	};
-}
-
-#[macro_export]
-macro_rules! literal_parser {
-	($kind:ident) => {
-		filter(|x| matches!(x, Token::$kind(_))).map_with_span(|x, span: Span| {
-			Expr::$kind(span.clone(), force_token!(x => $kind, span))
 		})
 	};
 }

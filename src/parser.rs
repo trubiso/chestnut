@@ -4,7 +4,9 @@ use crate::{
 };
 use chumsky::{error::SimpleReason, prelude::*, Stream};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
+use expr::expr;
 use ident::*;
+use privacy::privacy_attribs;
 use std::vec::IntoIter;
 use ty_ident::*;
 use types::*;
@@ -12,7 +14,9 @@ use types::*;
 pub mod types;
 #[macro_use]
 pub mod macros;
+mod expr;
 mod ident;
+mod privacy;
 mod ty;
 mod ty_ident;
 
@@ -40,31 +44,6 @@ macro_rules! func_attribs {
 	};
 }
 
-macro_rules! privacy_qualifiers {
-	($($kw:ident)*) => {
-		choice(($(jkeyword!($kw),)*))
-		.repeated()
-		.validate(|attribs, span: Span, emit| {
-			if attribs.len() > 1 {
-				emit(chumsky::error::Simple::custom(span.clone(), "too many privacy qualifiers"));
-			}
-
-			if let Some(x) = attribs.get(0) {
-				match force_token!(x => Keyword) {
-					$(Keyword::$kw => Privacy::$kw(span),)*
-					_ => unreachable!()
-				}
-			} else {
-				Privacy::Default
-			}
-		})
-	};
-}
-
-fn privacy_attribs() -> impl TokenParser<Privacy> {
-	privacy_qualifiers!(Private Protected Public Export)
-}
-
 fn func_attribs() -> impl TokenParser<FuncAttribs> {
 	func_attribs!(
 		Pure => is_pure
@@ -81,7 +60,7 @@ fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
 fn generics_declare() -> impl TokenParser<Vec<Ident>> {
 	angled!(ident_nodiscard(),)
 		.or_not()
-		.map(|x| x.unwrap_or_else(Vec::new))
+		.map(|x| x.unwrap_or_default())
 }
 
 /// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
@@ -117,73 +96,6 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 				)
 			},
 		)
-}
-
-/// Parses an expression into Expr
-fn expr() -> impl TokenParser<Expr> {
-	// () then - then ! then == != <= >= < > then && then || then *÷ then +-
-	recursive(|e| {
-		let atom = || {
-			choice((
-				parened!(e.clone()),
-				literal_parser!(StringLiteral),
-				literal_parser!(NumberLiteral),
-				literal_parser!(CharLiteral),
-				literal_parser!(Identifier),
-			))
-		};
-		let fc_parser = || {
-			span!(atom())
-				.then(span!(parened!(e.clone(),)).repeated())
-				.foldl(|(lhs, ls), (args, rs)| {
-					let span: Span = ls + rs;
-					(Expr::Call(span.clone(), Box::new(lhs), args), span)
-				})
-				.map(|(x, _)| x)
-		};
-		let neg_parser = unop_parser!(Neg => fc_parser);
-		let not_parser = unop_parser!(Bang => neg_parser);
-		let eq_parser = binop_parser!(Eq Ne Lt Gt Le Ge => not_parser);
-		let and_parser = binop_parser!(And => eq_parser);
-		let or_parser = binop_parser!(Or => and_parser);
-		let sd_parser = binop_parser!(Star Div => or_parser);
-		let pn_parser = binop_parser!(Plus Neg => sd_parser);
-		let lambda = || {
-			parened!(choice((
-				ty_ident(Some(e.clone())),
-				ident().map(|x| x.infer_type())
-			)),)
-			.then(choice((
-				// bare_scope(),
-				jkeyword!(FatArrow)
-					.ignore_then(pn_parser())
-					.map_with_span(|expr, span| Scope {
-						span: span.clone(),
-						stmts: vec![Stmt::Return(span, expr)],
-					}),
-				jkeyword!(FatArrow)
-					.ignore_then(pn_parser())
-					.map_with_span(|expr, span| Scope {
-						span: span.clone(),
-						stmts: vec![Stmt::Return(span, expr)],
-					}),
-			)))
-			.map_with_span(|(args, body), span| {
-				Expr::Lambda(
-					span.clone(),
-					Func {
-						span: span.clone(),
-						return_ty: Type::Inferred(span), // NOTE: there's no span for this type
-						body,
-						generics: Vec::new(), // NOTE: should lambda generics?
-						args,
-						attribs: FuncAttribs::default(),
-					},
-				)
-			})
-		};
-		choice((lambda(), pn_parser())).boxed()
-	})
 }
 
 /// Parses `let <ident> = <expr>;` into Stmt::Let
