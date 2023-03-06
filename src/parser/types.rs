@@ -94,11 +94,17 @@ impl TypedIdent {
 	}
 }
 
+#[derive(Debug, Display, Clone)]
 pub enum Privacy {
+	#[display(fmt = "private ")]
 	Private,
+	#[display(fmt = "protected ")]
 	Protected,
+	#[display(fmt = "public ")]
 	Public,
+	#[display(fmt = "export ")]
 	Export,
+	#[display(fmt = "")]
 	Default,
 }
 
@@ -148,18 +154,18 @@ impl Expr {
 
 #[derive(Debug, Display, Clone)]
 pub enum Stmt {
-	#[display(fmt = "{_1} = {_2}")]
-	Create(Span, TypedIdent, Expr),
-	#[display(fmt = "declare {_1}")]
-	Declare(Span, TypedIdent),
+	#[display(fmt = "{_1}{_2} = {_3}")]
+	Create(Span, Privacy, TypedIdent, Expr),
+	#[display(fmt = "declare {_1}{_2}")]
+	Declare(Span, Privacy, TypedIdent),
 	#[display(fmt = "{_1} = {_2}")]
 	Set(Span, Ident, Expr),
-	#[display(fmt = "{_1} = {_2}")]
-	Func(Span, Ident, Func),
+	#[display(fmt = "{_1}{_2} = {_3}")]
+	Func(Span, Privacy, Ident, Func),
 	#[display(fmt = "return {_1}")]
 	Return(Span, Expr),
-	#[display(fmt = "class {_1} {_2}")]
-	Class(Span, Ident, Scope),
+	#[display(fmt = "class {_1}{_2} {{{_3}}}")]
+	Class(Span, Privacy, Ident, Scope),
 	#[display(fmt = "{_1}")]
 	BareExpr(Span, Expr),
 }

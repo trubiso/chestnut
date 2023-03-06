@@ -210,7 +210,7 @@ pub fn resolve(
 	let mut return_value = None;
 	for stmt in scope.stmts {
 		match stmt {
-			Stmt::Create(_, ty_ident, expr) => {
+			Stmt::Create(_, privacy, ty_ident, expr) => {
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.check_expr(expr.clone());
 				resolved_scope.add_var(ty_ident, Some(expr));
@@ -220,7 +220,7 @@ pub fn resolve(
 				resolved_scope.check_expr(expr.clone());
 				resolved_scope.set_var(ident, expr);
 			}
-			Stmt::Func(_, ident, func) => {
+			Stmt::Func(_, privacy, ident, func) => {
 				// TODO: generics
 				resolved_scope.check_type(func.return_ty.clone());
 				let mut frs = resolved_scope.clone();

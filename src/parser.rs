@@ -91,9 +91,10 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 				}),
 			braced!(scope),
 		)))
-		.map_with_span(|((((_privacy, ty_ident), args), attribs), body), span| {
+		.map_with_span(|((((privacy, ty_ident), args), attribs), body), span| {
 			Stmt::Func(
 				span.clone(),
+				privacy,
 				ty_ident.ident,
 				Func {
 					span,
@@ -267,23 +268,28 @@ fn ty_ident_nodiscard(er: Option<ExprRecursive>) -> impl TokenParser<TypedIdent>
 
 /// Parses `let <ident> = <expr>;` into Stmt::Let
 fn let_stmt() -> impl TokenParser<Stmt> {
-	jkeyword!(Let).ignore_then(assg!(ignore Set)).map_with_span(
-		|(lhs, value): (Ident, Expr), span| Stmt::Create(span, lhs.infer_type(), value),
-	)
+	privacy_attribs()
+		.then_ignore(jkeyword!(Let))
+		.then(assg!(ignore Set))
+		.map_with_span(|(privacy, (lhs, value)), span| {
+			Stmt::Create(span, privacy, lhs.infer_type(), value)
+		})
 }
 
 /// Parses `<ty ident> = <expr>;` into Stmt::Create
 fn create_stmt() -> impl TokenParser<Stmt> {
-	ty_ident(None)
+	privacy_attribs()
+		.then(ty_ident(None))
 		.then(assg!(noident ignore Set))
-		.map_with_span(|(lhs, value), span| Stmt::Create(span, lhs, value))
+		.map_with_span(|((privacy, lhs), value), span| Stmt::Create(span, privacy, lhs, value))
 }
 
 /// Parses `<ty ident>;` into Stmt::Declare
 fn declare_stmt() -> impl TokenParser<Stmt> {
-	ty_ident_nodiscard(None)
+	privacy_attribs()
+		.then(ty_ident_nodiscard(None))
 		.then_ignore(jpunct!(Semicolon))
-		.map_with_span(|ty_ident, span| Stmt::Declare(span, ty_ident))
+		.map_with_span(|(privacy, ty_ident), span| Stmt::Declare(span, privacy, ty_ident))
 }
 
 /// Parses `<expr>;` into Stmt::BareExpr
@@ -300,10 +306,11 @@ fn return_stmt() -> impl TokenParser<Stmt> {
 }
 
 fn class_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
-	jkeyword!(Class)
-		.ignore_then(ident_nodiscard())
+	privacy_attribs()
+		.then_ignore(jkeyword!(Class))
+		.then(ident_nodiscard())
 		.then(braced!(scope))
-		.map_with_span(|(ident, body), span| Stmt::Class(span, ident, body))
+		.map_with_span(|((privacy, ident), body), span| Stmt::Class(span, privacy, ident, body))
 }
 
 pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {

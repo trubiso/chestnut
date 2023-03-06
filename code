@@ -23,10 +23,10 @@ public void set_element() mut {
 }
 
 class Node {
-	Node& next;
-	pub i32 value;
+	Node& next = 3;
+	public i32 value = 4;
 
-	pub Node traverse() {
+	public Node traverse() {
 		
 	}
 }
