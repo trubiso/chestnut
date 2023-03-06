@@ -156,6 +156,8 @@ pub enum Stmt {
 	Func(Span, Ident, Func),
 	#[display(fmt = "return {_1}")]
 	Return(Span, Expr),
+	#[display(fmt = "class {_1} {_2}")]
+	Class(Span, Ident, Scope),
 	#[display(fmt = "{_1}")]
 	BareExpr(Span, Expr),
 }

@@ -248,6 +248,7 @@ pub fn resolve(
 			Stmt::BareExpr(_, expr) => {
 				resolved_scope.check_expr(expr);
 			}
+			_ => todo!()
 		}
 	}
 	// TODO: idk how we should use this LOL this code is absolutely useless

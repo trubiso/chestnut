@@ -292,6 +292,13 @@ fn return_stmt() -> impl TokenParser<Stmt> {
 		.map_with_span(|x, span| Stmt::Return(span, x))
 }
 
+fn class_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
+	jkeyword!(Class)
+		.ignore_then(ident_nodiscard())
+		.then(braced!(scope))
+		.map_with_span(|(ident, body), span| Stmt::Class(span, ident, body))
+}
+
 pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
 	let s = if semi { 1 } else { 0 };
 	macro_rules! semi {
@@ -305,7 +312,8 @@ pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
 	choice((
 		semi!(Y let_stmt()),
 		semi!(Y create_stmt()),
-		semi!(N func_stmt(scope)),
+		semi!(N func_stmt(scope.clone())),
+		semi!(N class_stmt(scope)),
 		semi!(Y return_stmt()),
 		semi!(Y assg_stmt!(Set)),
 		semi!(Y assg_stmt!(NegSet => Neg)),
