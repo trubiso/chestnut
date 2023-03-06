@@ -23,6 +23,7 @@ macro_rules! assg_stmt {
 	};
 }
 
+/// Parses `<ident> [-|*|+|/]= <expr>` into Stmt::Set
 pub fn assg() -> impl TokenParser<Stmt> {
 	choice((
 		assg_stmt!(Set),

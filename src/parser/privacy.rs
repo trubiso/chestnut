@@ -24,6 +24,7 @@ macro_rules! privacy_qualifiers {
 	};
 }
 
+/// Parses `<private|protected|public|export>` into Privacy
 pub fn privacy_attribs() -> impl TokenParser<Privacy> {
 	privacy_qualifiers!(Private Protected Public Export)
 }

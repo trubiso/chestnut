@@ -7,6 +7,7 @@ use chumsky::prelude::*;
 
 mod assg;
 
+/// Parses any statement, with or without a semicolon, into Stmt
 pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
 	let s = if semi { 1 } else { 0 };
 	macro_rules! semi {
