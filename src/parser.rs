@@ -76,10 +76,18 @@ fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
 	parened!(ty_ident(None),)
 }
 
+/// Parses `<<ident>, ...>` into Vec<Ident>
+fn generics_declare() -> impl TokenParser<Vec<Ident>> {
+	angled!(ident_nodiscard(),)
+		.or_not()
+		.map(|x| x.unwrap_or_else(Vec::new))
+}
+
 /// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
 fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 	privacy_attribs()
 		.then(ty_ident_nodiscard(None))
+		.then(generics_declare())
 		.then(func_args())
 		.then(func_attribs())
 		.then(choice((
@@ -91,20 +99,23 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 				}),
 			braced!(scope),
 		)))
-		.map_with_span(|((((privacy, ty_ident), args), attribs), body), span| {
-			Stmt::Func(
-				span.clone(),
-				privacy,
-				ty_ident.ident,
-				Func {
-					span,
-					return_ty: ty_ident.ty,
-					args,
-					body,
-					attribs,
-				},
-			)
-		})
+		.map_with_span(
+			|(((((privacy, ty_ident), generics), args), attribs), body), span| {
+				Stmt::Func(
+					span.clone(),
+					privacy,
+					ty_ident.ident,
+					Func {
+						span,
+						return_ty: ty_ident.ty,
+						args,
+						generics,
+						body,
+						attribs,
+					},
+				)
+			},
+		)
 }
 
 /// Parses an expression into Expr
@@ -163,6 +174,7 @@ fn expr() -> impl TokenParser<Expr> {
 						span: span.clone(),
 						return_ty: Type::Inferred(span), // NOTE: there's no span for this type
 						body,
+						generics: Vec::new(), // NOTE: should lambda generics?
 						args,
 						attribs: FuncAttribs::default(),
 					},
@@ -308,8 +320,11 @@ fn class_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 	privacy_attribs()
 		.then_ignore(jkeyword!(Class))
 		.then(ident_nodiscard())
+		.then(generics_declare())
 		.then(braced!(scope))
-		.map_with_span(|((privacy, ident), body), span| Stmt::Class(span, privacy, ident, body))
+		.map_with_span(|(((privacy, ident), generics), body), span| {
+			Stmt::Class(span, privacy, ident, generics, body)
+		})
 }
 
 pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {

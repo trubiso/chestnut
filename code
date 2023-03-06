@@ -1,6 +1,6 @@
-class Tuple {}
+class Tuple<A, B> {}
 class GridPiece {}
-class Array {}
+class Array<T> {}
 
 void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
 
@@ -26,11 +26,11 @@ export void set_element() mut {
 	
 }
 
-class Node {
-	Node& next;
-	public i32 value;
+class Node<T> {
+	Node<T>& next;
+	public T value;
 
-	public Node traverse() {
+	public Node<T> traverse() {
 		let x = 9;
 	}
 }

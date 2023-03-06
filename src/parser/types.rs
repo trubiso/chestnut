@@ -147,6 +147,7 @@ pub struct Func {
 	pub span: Span,
 	pub return_ty: Type,
 	pub args: Vec<TypedIdent>, // TODO: perhaps we might need to change this
+	pub generics: Vec<Ident>,  // TODO: same here
 	pub body: Scope,
 	pub attribs: FuncAttribs,
 }
@@ -187,7 +188,7 @@ pub enum Stmt {
 	Set(Span, Ident, Expr),
 	Func(Span, Privacy, Ident, Func),
 	Return(Span, Expr),
-	Class(Span, Privacy, Ident, Scope),
+	Class(Span, Privacy, Ident, Vec<Ident> /* generics */, Scope),
 	BareExpr(Span, Expr),
 }
 
@@ -205,8 +206,8 @@ impl fmt::Display for Stmt {
 				f.write_fmt(format_args!("{privacy}{ident}{func}"))
 			}
 			Stmt::Return(_span, expr) => f.write_fmt(format_args!("return {expr};")),
-			Stmt::Class(_span, privacy, ident, body) => {
-				f.write_fmt(format_args!("class {privacy}{ident} {}", body.braced()))
+			Stmt::Class(_span, privacy, ident, generics, body) => {
+				f.write_fmt(format_args!("class {privacy}{ident}{} {}", join_generics(generics), body.braced()))
 			}
 			Stmt::BareExpr(_span, expr) => f.write_fmt(format_args!("{expr};")),
 		}
@@ -287,7 +288,8 @@ impl fmt::Display for FuncAttribs {
 impl fmt::Display for Func {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.write_fmt(format_args!(
-			"({}) {}-> {} {}",
+			"{}({}) {}-> {} {}",
+			join_generics(&self.generics),
 			join_comma(&self.args).unwrap_or("".into()),
 			self.attribs,
 			self.return_ty,
@@ -328,4 +330,11 @@ fn join_comma<T: fmt::Display>(vec: &[T]) -> Option<String> {
 	vec.iter()
 		.map(|x| format!("{x}"))
 		.reduce(|acc, b| acc + ", " + &b)
+}
+
+fn join_generics(generics: &[Ident]) -> String {
+	match join_comma(generics) {
+		Some(x) => "<".to_string() + &x + ">",
+		None => "".into(),
+	}
 }

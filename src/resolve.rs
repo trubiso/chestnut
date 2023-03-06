@@ -290,17 +290,29 @@ pub fn resolve(
 				return_value = Some(expr);
 				break;
 			}
-			Stmt::Class(_, privacy, ident, body) => {
+			Stmt::Class(_, privacy, ident, generics, body) => {
 				check_privacy(privacy, context.clone());
 				let name = ident.to_string();
 				let mut crs = resolved_scope.clone();
 				let ty = ResolvedType {
 					name: name.clone(),
-					generic_count: 0,       // TODO
-					fields: HashMap::new(), // TODO
-					funcs: HashMap::new(),  // TODO
+					generic_count: generics.len(),
+					fields: HashMap::new(),        // TODO
+					funcs: HashMap::new(),         // TODO
 				};
 				crs.add_type(name.clone(), ty.clone());
+				for generic in generics {
+					let name = generic.to_string();
+					crs.add_type(
+						name.clone(),
+						ResolvedType {
+							name,
+							generic_count: 0,
+							fields: HashMap::new(), // NOTE: potentially in the future we will change this
+							funcs: HashMap::new(),
+						},
+					)
+				}
 				// TODO: use resolved scope
 				let _ = resolve(body.clone(), Context::Class, Some(crs));
 				resolved_scope.add_type(name, ty);
