@@ -279,6 +279,13 @@ fn create_stmt() -> impl TokenParser<Stmt> {
 		.map_with_span(|(lhs, value), span| Stmt::Create(span, lhs, value))
 }
 
+/// Parses `<ty ident>;` into Stmt::Declare
+fn declare_stmt() -> impl TokenParser<Stmt> {
+	ty_ident_nodiscard(None)
+		.then_ignore(jpunct!(Semicolon))
+		.map_with_span(|ty_ident, span| Stmt::Declare(span, ty_ident))
+}
+
 /// Parses `<expr>;` into Stmt::BareExpr
 ///
 /// Useful, for example, for function calls where the return value is discarded
@@ -312,6 +319,7 @@ pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
 	choice((
 		semi!(Y let_stmt()),
 		semi!(Y create_stmt()),
+		semi!(Y declare_stmt()),
 		semi!(N func_stmt(scope.clone())),
 		semi!(N class_stmt(scope)),
 		semi!(Y return_stmt()),

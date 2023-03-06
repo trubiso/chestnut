@@ -150,6 +150,8 @@ impl Expr {
 pub enum Stmt {
 	#[display(fmt = "{_1} = {_2}")]
 	Create(Span, TypedIdent, Expr),
+	#[display(fmt = "declare {_1}")]
+	Declare(Span, TypedIdent),
 	#[display(fmt = "{_1} = {_2}")]
 	Set(Span, Ident, Expr),
 	#[display(fmt = "{_1} = {_2}")]
