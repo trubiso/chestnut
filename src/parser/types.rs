@@ -94,7 +94,7 @@ impl TypedIdent {
 	}
 }
 
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum Privacy {
 	#[display(fmt = "private ")]
 	Private,

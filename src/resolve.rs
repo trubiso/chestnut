@@ -1,5 +1,6 @@
-use crate::parser::types::{Expr, Func, Generic, Ident, Scope, Stmt, Type, TypedIdent};
+use crate::parser::types::{Expr, Func, Generic, Ident, Privacy, Scope, Stmt, Type, TypedIdent};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
+use derive_more::Display;
 use lazy_static::lazy_static;
 use std::{cmp::Ordering, collections::HashMap, sync::Mutex};
 
@@ -197,11 +198,29 @@ pub struct ResolvedArg {
 	pub ty: Type, // TODO: ResolvedTy
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum Context {
+	#[display(fmt = "top level")]
 	TopLevel,
+	#[display(fmt = "class")]
 	Class,
-	Func
+	#[display(fmt = "func")]
+	Func,
+}
+
+fn check_privacy(privacy: Privacy, context: Context) {
+	let is_valid = privacy == Privacy::Default
+		|| match context {
+			Context::TopLevel => privacy == Privacy::Export,
+			Context::Class => privacy != Privacy::Export,
+			Context::Func => false,
+		};
+	if !is_valid {
+		add_diagnostic(Diagnostic::error().with_message(format!(
+			"invalid privacy qualifier {privacy}in {context} context"
+		))); // .with_labels(vec![Label::primary(file_id, range)]))
+		// TODO: range inside of Privacy::Public(x)
+	}
 }
 
 pub fn resolve(
@@ -218,6 +237,7 @@ pub fn resolve(
 	for stmt in scope.stmts {
 		match stmt {
 			Stmt::Create(_, privacy, ty_ident, expr) => {
+				check_privacy(privacy, context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.check_expr(expr.clone());
 				resolved_scope.add_var(ty_ident, Some(expr));
@@ -228,6 +248,7 @@ pub fn resolve(
 				resolved_scope.set_var(ident, expr);
 			}
 			Stmt::Func(_, privacy, ident, func) => {
+				check_privacy(privacy, context.clone());
 				// TODO: generics
 				resolved_scope.check_type(func.return_ty.clone());
 				let mut frs = resolved_scope.clone();
@@ -255,7 +276,7 @@ pub fn resolve(
 			Stmt::BareExpr(_, expr) => {
 				resolved_scope.check_expr(expr);
 			}
-			_ => todo!()
+			_ => todo!(),
 		}
 	}
 	// TODO: idk how we should use this LOL this code is absolutely useless
