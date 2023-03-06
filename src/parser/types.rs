@@ -97,15 +97,33 @@ impl TypedIdent {
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum Privacy {
 	#[display(fmt = "private ")]
-	Private,
+	Private(Span),
 	#[display(fmt = "protected ")]
-	Protected,
+	Protected(Span),
 	#[display(fmt = "public ")]
-	Public,
+	Public(Span),
 	#[display(fmt = "export ")]
-	Export,
+	Export(Span),
 	#[display(fmt = "")]
 	Default,
+}
+
+impl Privacy {
+	pub fn span(&self) -> Option<Span> {
+		match self {
+			Privacy::Private(x)
+			| Privacy::Protected(x)
+			| Privacy::Public(x)
+			| Privacy::Export(x) => Some(x.clone()),
+			Privacy::Default => None,
+		}
+	}
+
+	pub fn is_private(&self) -> bool { matches!(self, Privacy::Private(_)) }
+	pub fn is_protected(&self) -> bool { matches!(self, Privacy::Protected(_)) }
+	pub fn is_public(&self) -> bool { matches!(self, Privacy::Public(_)) }
+	pub fn is_export(&self) -> bool { matches!(self, Privacy::Export(_)) }
+	pub fn is_default(&self) -> bool { *self == Privacy::Default }
 }
 
 #[derive(Debug, Clone, Default)]

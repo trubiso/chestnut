@@ -50,7 +50,7 @@ macro_rules! privacy_qualifiers {
 
 			if let Some(x) = attribs.get(0) {
 				match force_token!(x => Keyword) {
-					$(Keyword::$kw => Privacy::$kw,)*
+					$(Keyword::$kw => Privacy::$kw(span),)*
 					_ => unreachable!()
 				}
 			} else {

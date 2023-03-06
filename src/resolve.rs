@@ -66,7 +66,9 @@ impl ResolvedScope {
 			}
 			Type::Ref(_, x) | Type::Mut(_, x) | Type::Optional(_, x) => self.check_type(*x),
 			Type::Array(_, x, size) => {
-				if let Some(x) = size { self.check_expr(*x) }
+				if let Some(x) = size {
+					self.check_expr(*x)
+				}
 				self.check_type(*x);
 			}
 			Type::Inferred(_) => {}
@@ -214,17 +216,21 @@ pub enum Context {
 }
 
 fn check_privacy(privacy: Privacy, context: Context) {
-	let is_valid = privacy == Privacy::Default
+	let is_valid = privacy.is_default()
 		|| match context {
-			Context::TopLevel => privacy == Privacy::Export,
-			Context::Class => privacy != Privacy::Export,
+			Context::TopLevel => privacy.is_export(),
+			Context::Class => !privacy.is_export(),
 			Context::Func => false,
 		};
 	if !is_valid {
-		add_diagnostic(Diagnostic::error().with_message(format!(
-			"invalid privacy qualifier {privacy}in {context} context"
-		))); // .with_labels(vec![Label::primary(file_id, range)]))
-		 // TODO: range inside of Privacy::Public(x)
+		let span = privacy.span().unwrap(); // never Default => never None
+		add_diagnostic(
+			Diagnostic::error()
+				.with_message(format!(
+					"invalid privacy qualifier {privacy}in {context} context"
+				))
+				.with_labels(vec![Label::primary(span.file_id, span.range())]),
+		);
 	}
 }
 
@@ -287,9 +293,9 @@ pub fn resolve(
 					name.clone(),
 					ResolvedType {
 						name,
-						generic_count: 0, // TODO
+						generic_count: 0,       // TODO
 						fields: HashMap::new(), // TODO
-						funcs: HashMap::new(), // TODO
+						funcs: HashMap::new(),  // TODO
 					},
 				);
 				// TODO: use resolved scope
