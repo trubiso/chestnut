@@ -294,17 +294,16 @@ pub fn resolve(
 				check_privacy(privacy, context.clone());
 				let name = ident.to_string();
 				let mut crs = resolved_scope.clone();
-				crs.add_type(
-					name.clone(),
-					ResolvedType {
-						name,
-						generic_count: 0,       // TODO
-						fields: HashMap::new(), // TODO
-						funcs: HashMap::new(),  // TODO
-					},
-				);
+				let ty = ResolvedType {
+					name: name.clone(),
+					generic_count: 0,       // TODO
+					fields: HashMap::new(), // TODO
+					funcs: HashMap::new(),  // TODO
+				};
+				crs.add_type(name.clone(), ty.clone());
 				// TODO: use resolved scope
 				let _ = resolve(body.clone(), Context::Class, Some(crs));
+				resolved_scope.add_type(name, ty);
 			}
 			Stmt::BareExpr(_, expr) => {
 				resolved_scope.check_expr(expr);

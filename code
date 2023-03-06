@@ -1,3 +1,7 @@
+class Tuple {}
+class GridPiece {}
+class Array {}
+
 void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
 
 void print_grid(GridPiece&[3][4]?[] pieces) {}
@@ -27,7 +31,7 @@ class Node {
 	public i32 value;
 
 	public Node traverse() {
-		
+		let x = 9;
 	}
 }
 
