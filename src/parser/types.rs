@@ -119,11 +119,21 @@ impl Privacy {
 		}
 	}
 
-	pub fn is_private(&self) -> bool { matches!(self, Privacy::Private(_)) }
-	pub fn is_protected(&self) -> bool { matches!(self, Privacy::Protected(_)) }
-	pub fn is_public(&self) -> bool { matches!(self, Privacy::Public(_)) }
-	pub fn is_export(&self) -> bool { matches!(self, Privacy::Export(_)) }
-	pub fn is_default(&self) -> bool { *self == Privacy::Default }
+	pub fn is_private(&self) -> bool {
+		matches!(self, Privacy::Private(_))
+	}
+	pub fn is_protected(&self) -> bool {
+		matches!(self, Privacy::Protected(_))
+	}
+	pub fn is_public(&self) -> bool {
+		matches!(self, Privacy::Public(_))
+	}
+	pub fn is_export(&self) -> bool {
+		matches!(self, Privacy::Export(_))
+	}
+	pub fn is_default(&self) -> bool {
+		*self == Privacy::Default
+	}
 }
 
 #[derive(Debug, Clone, Default)]
@@ -170,28 +180,64 @@ impl Expr {
 	}
 }
 
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
-	#[display(fmt = "{_1}{_2} = {_3}")]
 	Create(Span, Privacy, TypedIdent, Expr),
-	#[display(fmt = "declare {_1}{_2}")]
 	Declare(Span, Privacy, TypedIdent),
-	#[display(fmt = "{_1} = {_2}")]
 	Set(Span, Ident, Expr),
-	#[display(fmt = "{_1}{_2} = {_3}")]
 	Func(Span, Privacy, Ident, Func),
-	#[display(fmt = "return {_1}")]
 	Return(Span, Expr),
-	#[display(fmt = "class {_1}{_2} {{{_3}}}")]
 	Class(Span, Privacy, Ident, Scope),
-	#[display(fmt = "{_1}")]
 	BareExpr(Span, Expr),
+}
+
+impl fmt::Display for Stmt {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Stmt::Create(_span, privacy, ty_ident, expr) => {
+				f.write_fmt(format_args!("{privacy}{ty_ident} = {expr};"))
+			}
+			Stmt::Declare(_span, privacy, ty_ident) => {
+				f.write_fmt(format_args!("declare {privacy}{ty_ident};"))
+			}
+			Stmt::Set(_span, ident, expr) => f.write_fmt(format_args!("{ident} = {expr};")),
+			Stmt::Func(_span, privacy, ident, func) => {
+				f.write_fmt(format_args!("{privacy}{ident}{func}"))
+			}
+			Stmt::Return(_span, expr) => f.write_fmt(format_args!("return {expr};")),
+			Stmt::Class(_span, privacy, ident, body) => {
+				f.write_fmt(format_args!("class {privacy}{ident} {}", body.braced()))
+			}
+			Stmt::BareExpr(_span, expr) => f.write_fmt(format_args!("{expr};")),
+		}
+	}
 }
 
 #[derive(Debug, Clone)]
 pub struct Scope {
 	pub span: Span,
 	pub stmts: Vec<Stmt>,
+}
+
+impl Scope {
+	pub fn braced(&self) -> String {
+		let body = format!("{}", self);
+		format!(
+			"{{{}}}",
+			if self.stmts.is_empty() {
+				"".into()
+			} else {
+				format!("\n{}", {
+					let mut x: Vec<_> = body.split('\n').collect();
+					x.pop();
+					x.iter()
+						.map(|x| -> String { format!("\t{}\n", x) })
+						.reduce(|acc, b| acc + &b)
+						.unwrap()
+				})
+			},
+		)
+	}
 }
 
 impl fmt::Display for BareType {
@@ -241,22 +287,11 @@ impl fmt::Display for FuncAttribs {
 impl fmt::Display for Func {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.write_fmt(format_args!(
-			"func ({}) {}-> {}: {{{}}}",
+			"({}) {}-> {} {}",
 			join_comma(&self.args).unwrap_or("".into()),
 			self.attribs,
 			self.return_ty,
-			if self.body.stmts.is_empty() {
-				"".into()
-			} else {
-				format!(
-					"\n{}",
-					format!("{}", self.body)
-						.split('\n')
-						.map(|x: &str| -> String { format!("\t{}\n", x) })
-						.reduce(|acc, b| acc + &b)
-						.unwrap()
-				)
-			},
+			self.body.braced(),
 		))
 	}
 }
