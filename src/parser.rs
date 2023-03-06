@@ -79,7 +79,7 @@ fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
 /// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
 fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 	privacy_attribs()
-		.then(ty_ident(None))
+		.then(ty_ident_nodiscard(None))
 		.then(func_args())
 		.then(func_attribs())
 		.then(choice((
@@ -184,6 +184,12 @@ fn ident() -> impl TokenParser<Ident> {
 		})
 }
 
+/// Parses a non-inferred ident token into Ident
+fn ident_nodiscard() -> impl TokenParser<Ident> {
+	filter(|token| matches!(token, Token::Identifier(_)))
+		.map_with_span(|token, span| force_token!(token => Identifier, span))
+}
+
 /// Parses an ident token into Type
 fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
 	enum PostfixOp {
@@ -249,6 +255,13 @@ fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
 fn ty_ident(er: Option<ExprRecursive>) -> impl TokenParser<TypedIdent> + '_ {
 	ty(er)
 		.then(ident())
+		.map_with_span(|(ty, ident), span| TypedIdent { span, ty, ident })
+}
+
+/// Parses `<ty> <ident_nodiscard>` into TypedIdent
+fn ty_ident_nodiscard(er: Option<ExprRecursive>) -> impl TokenParser<TypedIdent> + '_ {
+	ty(er)
+		.then(ident_nodiscard())
 		.map_with_span(|(ty, ident), span| TypedIdent { span, ty, ident })
 }
 
