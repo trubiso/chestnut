@@ -18,9 +18,14 @@ pub mod span;
 fn emit_errors(files: &SimpleFiles<&str, &String>, diagnostics: Vec<Diagnostic<usize>>) {
 	let writer = StandardStream::stderr(ColorChoice::Always);
 	let config = term::Config::default();
+	let amount = diagnostics.len();
 	for diagnostic in diagnostics {
 		term::emit(&mut writer.lock(), &config, files, &diagnostic).unwrap();
 	}
+	println!(
+		"{amount} diagnostic{} total",
+		if amount > 1 { "s" } else { "" }
+	);
 }
 
 fn main() {
