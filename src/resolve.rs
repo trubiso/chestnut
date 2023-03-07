@@ -161,8 +161,11 @@ impl ResolvedScope {
 				self.check_ident_exists(ident);
 			}
 			Expr::BinaryOp(_, lhs, _op, rhs) => {
-				self.check_expr(*lhs);
-				self.check_expr(*rhs);
+				self.check_expr(*lhs.clone());
+				self.check_expr(*rhs.clone());
+				// this may seem useless but it checks for types in binary ops
+				self.get_expr_ty(*lhs);
+				self.get_expr_ty(*rhs);
 			}
 			Expr::UnaryOp(_, _op, val) => {
 				self.check_expr(*val);
@@ -266,12 +269,15 @@ impl ResolvedScope {
 				// TODO: resolve lambda
 				Type::Builtin(span, BuiltinType::Error)
 			}
-			Expr::Call(_span, ident, _args) => self
+			Expr::Call(span, ident, _args) => self
 				.funcs
 				.get(&ident.to_string())
-				.unwrap()
-				.return_ty
-				.clone(),
+				.map(|x| x.return_ty.clone())
+				.unwrap_or_else(|| {
+					// TODO: ???
+					let Expr::Lambda(_, func) = *ident else { return Type::Builtin(span, BuiltinType::Error); };
+					func.return_ty
+				}),
 			Expr::Error(_) => panic!("???"),
 		}
 	}
@@ -426,6 +432,7 @@ pub fn resolve(
 								.with_message("return statement in global scope")]),
 					);
 				}
+				// TODO: check that the return type matches the function type
 				resolved_scope.check_expr(expr.clone());
 				return_value = Some(expr);
 				break;
