@@ -10,6 +10,7 @@ use std::fs;
 use crate::parser::CodeStream;
 use crate::span::Span;
 
+pub mod codegen;
 pub mod lexer;
 pub mod parser;
 pub mod resolve;
@@ -49,10 +50,12 @@ fn main() {
 
 	println!("{parsed}");
 
-	let _resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None) {
+	let resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None) {
 		Ok(x) => x,
 		Err(x) => return emit_errors(&files, x),
 	};
 
-	// println!("{parsed}");
+	let code = codegen::codegen(resolved);
+
+	println!("{code}");
 }
