@@ -295,29 +295,31 @@ pub fn resolve(
 	let mut return_value = None;
 	for stmt in scope.stmts {
 		match stmt {
-			Stmt::Create(span, privacy, ty_ident, expr) => {
+			Stmt::Create(span, privacy, mut ty_ident, expr) => {
 				check_privacy(privacy, context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.check_expr(expr.clone());
 				let lhs = ty_ident.ty.clone();
-				if !lhs.is_inferred() {
-					let rhs = resolved_scope.get_expr_ty(expr.clone());
-					let lhs_span = ty_ident.ty.span();
-					let rhs_span = expr.span();
-					if lhs != rhs {
-						add_diagnostic(
-							Diagnostic::error()
-								.with_message("assignment between incompatible types")
-								.with_labels(vec![
-									Label::primary(span.file_id, span.range()),
-									Label::secondary(lhs_span.file_id, lhs_span.range())
-										.with_message(format!("type is {lhs}")),
-									Label::secondary(rhs_span.file_id, rhs_span.range())
-										.with_message(format!("type is {rhs}")),
-								]),
-						)
-					}
+				let rhs = resolved_scope.get_expr_ty(expr.clone());
+				let lhs_span = ty_ident.ty.span();
+				let rhs_span = expr.span();
+				if !lhs.is_inferred() && lhs != rhs {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("assignment between incompatible types")
+							.with_labels(vec![
+								Label::primary(span.file_id, span.range()),
+								Label::secondary(lhs_span.file_id, lhs_span.range())
+									.with_message(format!("type is {lhs}")),
+								Label::secondary(rhs_span.file_id, rhs_span.range())
+									.with_message(format!("type is {rhs}")),
+							]),
+					)
 				}
+				ty_ident.ty = match ty_ident.ty {
+					Type::Mut(_, _) => Type::Mut(lhs_span, Box::new(rhs)),
+					_ => rhs,
+				};
 				resolved_scope.add_var(ty_ident, Some(expr));
 			}
 			Stmt::Declare(_, privacy, ty_ident) => {
@@ -325,9 +327,27 @@ pub fn resolve(
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.add_var(ty_ident, None);
 			}
-			Stmt::Set(_, ident, expr) => {
+			Stmt::Set(span, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
 				resolved_scope.check_expr(expr.clone());
+				let lhs_span = ident.span();
+				let lhs =
+					resolved_scope.get_expr_ty(Expr::Identifier(lhs_span.clone(), ident.clone()));
+				let rhs = resolved_scope.get_expr_ty(expr.clone());
+				let rhs_span = expr.span();
+				if lhs != rhs {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("assignment between incompatible types")
+							.with_labels(vec![
+								Label::primary(span.file_id, span.range()),
+								Label::secondary(lhs_span.file_id, lhs_span.range())
+									.with_message(format!("type is {lhs}")),
+								Label::secondary(rhs_span.file_id, rhs_span.range())
+									.with_message(format!("type is {rhs}")),
+							]),
+					)
+				}
 				resolved_scope.set_var(ident, expr);
 			}
 			Stmt::Func(_, privacy, ident, func) => {
