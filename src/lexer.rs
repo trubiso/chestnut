@@ -148,6 +148,8 @@ macro_rules! def_token {
 		pub enum Token {
 			#[error]
 			#[regex(r"\s+", logos::skip)]
+			#[regex(r"//[^\n]*", logos::skip)]
+			#[regex(r"/\*(?:[^*]|\*[^/])*\*/", logos::skip)]
 			Error,
 			#[regex(r"(?:([0-9][0-9_]*|(?:[0-9][0-9_]*)?\.[0-9][0-9_]*|0b[01][01_]*|0o[0-7][0-7_]*)(i(?:z|8|16|32|64|128)|u(?:z|8|16|32|64|128)?|f(?:16|32|64|128)?)?|(0x[0-9a-fA-F][0-9a-fA-F_]*)(i(?:z|8|16|32|64|128)|u(?:z|8|16|32|64|128)?|p(?:16|32|64|128)?)?)", parse_number_literal)]
 			NumberLiteral(NumberLiteral),

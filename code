@@ -43,11 +43,11 @@ i32 main(string[4+4] args, i32[34] arg) {
 	a *= 9 + 10;
 	print("Hello World!", 9+3-4);
 	4+2+4;
-	.3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
+	// .3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
 
 	~mut r = 10;
 
-	void goofy_void() {
+	/* void goofy_void() {
 		print("hello from the goofy void");
 	}
 
@@ -60,7 +60,7 @@ i32 main(string[4+4] args, i32[34] arg) {
 
 	set_error_callback((err) => print(err));
 
-	return -a + 3;
+	return -a + 3; */
 }
 
 i32 divided_by_two(i32 x) => x / 2;
