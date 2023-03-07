@@ -192,9 +192,12 @@ impl ResolvedScope {
 				} else {
 					let span = func_expr.span();
 					let ty = self.get_expr_ty(*func_expr);
-					add_diagnostic(Diagnostic::error().with_message("tried to call non-function").with_labels(vec![
-						Label::primary(span.file_id, span.range()).with_message(format!("expected function, found {ty}"))
-					]));
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("tried to call non-function")
+							.with_labels(vec![Label::primary(span.file_id, span.range())
+								.with_message(format!("expected function, found {ty}"))]),
+					);
 					return;
 				};
 				if func.args.len() != args.len() {
@@ -208,10 +211,23 @@ impl ResolvedScope {
 							.with_labels(vec![Label::primary(span.file_id, span.range())]),
 						// TODO: add note at the original declaration
 					);
+					return;
 				}
-				for arg in args {
-					self.check_expr(arg);
-					// TODO: check arg types
+				for (i, arg) in args.iter().enumerate() {
+					self.check_expr(arg.clone());
+					let arg_ty = self.get_expr_ty(arg.clone());
+					let expected_ty = func.args[i].ty.clone();
+					if arg_ty != expected_ty {
+						add_diagnostic(
+							Diagnostic::error()
+								.with_message("incorrect argument type")
+								.with_labels(vec![Label::primary(
+									arg_ty.span().file_id,
+									arg_ty.span().range(),
+								)
+								.with_message(format!("found {arg_ty}, expected {expected_ty}"))]),
+						)
+					}
 				}
 			}
 			Expr::Error(_) => panic!("???"),
