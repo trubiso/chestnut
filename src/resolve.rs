@@ -170,8 +170,45 @@ impl ResolvedScope {
 			Expr::Lambda(_, _func) => {
 				// TODO: resolve lambda
 			}
-			Expr::Call(_, ident, args) => {
-				self.check_expr(*ident);
+			Expr::Call(span, func_expr, args) => {
+				self.check_expr(*func_expr.clone());
+				let func = if let Expr::Identifier(_, name) = *func_expr {
+					self.check_ident_exists(name.clone());
+					let Some(func) = self.funcs.get(&name.to_string()) else { return; };
+					func.clone()
+				} else if let Expr::Lambda(_, func) = *func_expr {
+					ResolvedFunc {
+						name: "~".into(),
+						args: func
+							.args
+							.iter()
+							.map(|x| ResolvedArg {
+								name: x.ident.to_string(),
+								ty: x.ty.clone(),
+							})
+							.collect(),
+						return_ty: func.return_ty,
+					}
+				} else {
+					let span = func_expr.span();
+					let ty = self.get_expr_ty(*func_expr);
+					add_diagnostic(Diagnostic::error().with_message("tried to call non-function").with_labels(vec![
+						Label::primary(span.file_id, span.range()).with_message(format!("expected function, found {ty}"))
+					]));
+					return;
+				};
+				if func.args.len() != args.len() {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message(match args.len().cmp(&func.args.len()) {
+								Ordering::Less => "not enough arguments in function call",
+								Ordering::Greater => "too many arguments in function call",
+								_ => unreachable!(),
+							})
+							.with_labels(vec![Label::primary(span.file_id, span.range())]),
+						// TODO: add note at the original declaration
+					);
+				}
 				for arg in args {
 					self.check_expr(arg);
 					// TODO: check arg types
