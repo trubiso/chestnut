@@ -75,7 +75,7 @@ impl ResolvedScope {
 			}
 			Type::Inferred(_) => {}
 			// we might have to remove inferred in some cases because type inference hehehe
-			x => todo!("{x}"),
+			Type::Builtin(_, _) => {}
 		}
 	}
 

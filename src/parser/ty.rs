@@ -1,4 +1,4 @@
-use super::types::{ExprRecursive, TokenParser, Type};
+use super::types::{BuiltinType, ExprRecursive, TokenParser, Type};
 use crate::lexer::{Keyword, Operator, Token};
 use crate::parser::expr;
 use crate::parser::types::{BareType, Expr, Generic};
@@ -19,17 +19,23 @@ pub fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
 				if ident == keyword!(DontCare) {
 					Type::Inferred(span)
 				} else {
-					Type::BareType(
-						span.clone(),
-						BareType {
-							ident: force_token!(ident => Identifier, span), // TODO: incorrect span
-							generics: generics
-								.unwrap_or(vec![])
-								.iter()
-								.map(|x: &Type| Generic::Type(x.clone()))
-								.collect(),
-						},
-					)
+					// TODO: incorrect span
+					let ident = force_token!(ident => Identifier, span.clone());
+					if let Some(x) = BuiltinType::from_str(&ident.to_string()) {
+						Type::Builtin(span, x)
+					} else {
+						Type::BareType(
+							span,
+							BareType {
+								ident,
+								generics: generics
+									.unwrap_or(vec![])
+									.iter()
+									.map(|x: &Type| Generic::Type(x.clone()))
+									.collect(),
+							},
+						)
+					}
 				}
 			})
 			.then(

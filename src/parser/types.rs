@@ -28,7 +28,13 @@ pub enum Ident {
 impl PartialEq for Ident {
 	fn eq(&self, other: &Self) -> bool {
 		match self {
-			Self::Named(_, x) => if let Self::Named(_, y) = other { x == y } else {false},
+			Self::Named(_, x) => {
+				if let Self::Named(_, y) = other {
+					x == y
+				} else {
+					false
+				}
+			}
 			Self::Discarded(_) => matches!(other, Self::Discarded(_)),
 		}
 	}
@@ -107,6 +113,34 @@ pub enum BuiltinType {
 	Char,
 	#[display(fmt = "error")]
 	Error,
+}
+
+impl BuiltinType {
+	pub fn from_str(name: &str) -> Option<Self> {
+		match name {
+			"i8" => Some(Self::I8),
+			"i16" => Some(Self::I16),
+			"i32" => Some(Self::I32),
+			"i64" => Some(Self::I64),
+			"i128" => Some(Self::I128),
+			"iz" => Some(Self::IZ),
+			"u8" => Some(Self::U8),
+			"u16" => Some(Self::U16),
+			"u32" => Some(Self::U32),
+			"u64" => Some(Self::U64),
+			"u128" => Some(Self::U128),
+			"uz" => Some(Self::UZ),
+			"f16" => Some(Self::F16),
+			"f32" => Some(Self::F32),
+			"f64" => Some(Self::F64),
+			"f128" => Some(Self::F128),
+			"void" => Some(Self::Void),
+			"bool" => Some(Self::Bool),
+			"string" => Some(Self::String),
+			"char" => Some(Self::Char),
+			_ => None,
+		}
+	}
 }
 
 impl NumberLiteral {
