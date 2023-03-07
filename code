@@ -37,7 +37,7 @@ class Node<T> {
 
 i32 main(string[4+4] args, i32[34] arg) {
 	let ~ = do_thing();
-	i32[5]& x = 2 + (3 - 4);
+	i32 x = 2 + (3 - 4);
 	~mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a *= 9 + 10;
 	print("Hello World!", 9+3-4);

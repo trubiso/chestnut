@@ -146,6 +146,16 @@ impl Type {
 			| Self::Inferred(x) => x.clone(),
 		}
 	}
+
+	pub fn is_inferred(&self) -> bool {
+		match self {
+			Self::Inferred(_) => true,
+			Self::BareType(_, _) | Self::Builtin(_, _) => false,
+			Self::Array(_, x, _) | Self::Ref(_, x) | Self::Optional(_, x) | Self::Mut(_, x) => {
+				x.is_inferred()
+			}
+		}
+	}
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]

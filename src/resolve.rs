@@ -189,7 +189,7 @@ impl ResolvedScope {
 			Expr::Identifier(_span, ident) => self.vars.get(&ident.to_string()).unwrap().ty.clone(),
 			Expr::BinaryOp(span, lhs, _op, rhs) => {
 				let lhs_span = lhs.span();
-				let rhs_span = lhs.span();
+				let rhs_span = rhs.span();
 				let lhs_ty = self.get_expr_ty(*lhs);
 				let rhs_ty = self.get_expr_ty(*rhs);
 				if lhs_ty != rhs_ty {
@@ -295,10 +295,29 @@ pub fn resolve(
 	let mut return_value = None;
 	for stmt in scope.stmts {
 		match stmt {
-			Stmt::Create(_, privacy, ty_ident, expr) => {
+			Stmt::Create(span, privacy, ty_ident, expr) => {
 				check_privacy(privacy, context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.check_expr(expr.clone());
+				let lhs = ty_ident.ty.clone();
+				if !lhs.is_inferred() {
+					let rhs = resolved_scope.get_expr_ty(expr.clone());
+					let lhs_span = ty_ident.ty.span();
+					let rhs_span = expr.span();
+					if lhs != rhs {
+						add_diagnostic(
+							Diagnostic::error()
+								.with_message("assignment between incompatible types")
+								.with_labels(vec![
+									Label::primary(span.file_id, span.range()),
+									Label::secondary(lhs_span.file_id, lhs_span.range())
+										.with_message(format!("type is {lhs}")),
+									Label::secondary(rhs_span.file_id, rhs_span.range())
+										.with_message(format!("type is {rhs}")),
+								]),
+						)
+					}
+				}
 				resolved_scope.add_var(ty_ident, Some(expr));
 			}
 			Stmt::Declare(_, privacy, ty_ident) => {
