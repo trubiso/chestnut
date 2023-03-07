@@ -1,4 +1,4 @@
-use crate::lexer::{NumberLiteral, Operator, Token};
+use crate::lexer::{NumberLiteral, NumberLiteralKind, Operator, Token};
 use crate::span::Span;
 use chumsky::prelude::*;
 use derive_more::Display;
@@ -9,7 +9,7 @@ pub type TokenRecursive<'a, T> = Recursive<'a, Token, T, Simple<Token, Span>>;
 pub type ScopeRecursive<'a> = TokenRecursive<'a, Scope>;
 pub type ExprRecursive<'a> = TokenRecursive<'a, Expr>;
 
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum Generic {
 	Type(Type),
 	Expr(Expr), // TODO: remove the additional junk caused by this mistake of an enum
@@ -44,21 +44,86 @@ impl Ident {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BareType {
 	pub ident: Ident,           // typename
 	pub generics: Vec<Generic>, // generics
 }
 
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum BuiltinType {
+	#[display(fmt = "i8")]
+	I8,
+	#[display(fmt = "i16")]
+	I16,
+	#[display(fmt = "i32")]
+	I32,
+	#[display(fmt = "i64")]
+	I64,
+	#[display(fmt = "i128")]
+	I128,
+	#[display(fmt = "iz")]
+	IZ,
+	#[display(fmt = "u8")]
+	U8,
+	#[display(fmt = "u16")]
+	U16,
+	#[display(fmt = "u32")]
+	U32,
+	#[display(fmt = "u64")]
+	U64,
+	#[display(fmt = "u128")]
+	U128,
+	#[display(fmt = "uz")]
+	UZ,
+	#[display(fmt = "f16")]
+	F16,
+	#[display(fmt = "f32")]
+	F32,
+	#[display(fmt = "f64")]
+	F64,
+	#[display(fmt = "f128")]
+	F128,
 	#[display(fmt = "void")]
 	Void,
+	#[display(fmt = "bool")]
+	Bool,
+	#[display(fmt = "string")]
+	String,
+	#[display(fmt = "char")]
+	Char,
 	#[display(fmt = "error")]
 	Error,
 }
 
-#[derive(Debug, Clone)]
+impl NumberLiteral {
+	pub fn as_ty(&self) -> BuiltinType {
+		match self.kind {
+			NumberLiteralKind::I8 => BuiltinType::I8,
+			NumberLiteralKind::I16 => BuiltinType::I16,
+			NumberLiteralKind::I32 => BuiltinType::I32,
+			NumberLiteralKind::I64 => BuiltinType::I64,
+			NumberLiteralKind::I128 => BuiltinType::I128,
+			NumberLiteralKind::IZ => BuiltinType::IZ,
+			NumberLiteralKind::U8 => BuiltinType::U8,
+			NumberLiteralKind::U16 => BuiltinType::U16,
+			NumberLiteralKind::U32 => BuiltinType::U32,
+			NumberLiteralKind::U64 => BuiltinType::U64,
+			NumberLiteralKind::U128 => BuiltinType::U128,
+			NumberLiteralKind::UZ => BuiltinType::UZ,
+			NumberLiteralKind::F16 => BuiltinType::F16,
+			NumberLiteralKind::F32 => BuiltinType::F32,
+			NumberLiteralKind::F64 => BuiltinType::F64,
+			NumberLiteralKind::F128 => BuiltinType::F128,
+
+			NumberLiteralKind::U => BuiltinType::U32,
+			NumberLiteralKind::F => BuiltinType::F32,
+			NumberLiteralKind::None => BuiltinType::I32,
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
 	BareType(Span, BareType),
 	Builtin(Span, BuiltinType),
@@ -83,7 +148,7 @@ impl Type {
 	}
 }
 
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
 #[display(fmt = "{ty} {ident}")]
 pub struct TypedIdent {
 	pub span: Span,
@@ -139,13 +204,13 @@ impl Privacy {
 	}
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FuncAttribs {
 	pub is_pure: bool,
 	pub is_mut: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Func {
 	pub span: Span,
 	pub return_ty: Type,
@@ -155,7 +220,7 @@ pub struct Func {
 	pub attribs: FuncAttribs,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
 	CharLiteral(Span, String),
 	StringLiteral(Span, String),
@@ -184,7 +249,7 @@ impl Expr {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
 	Create(Span, Privacy, TypedIdent, Expr),
 	Declare(Span, Privacy, TypedIdent),
@@ -209,15 +274,17 @@ impl fmt::Display for Stmt {
 				f.write_fmt(format_args!("{privacy}{ident}{func}"))
 			}
 			Stmt::Return(_span, expr) => f.write_fmt(format_args!("return {expr};")),
-			Stmt::Class(_span, privacy, ident, generics, body) => {
-				f.write_fmt(format_args!("class {privacy}{ident}{} {}", join_generics(generics), body.braced()))
-			}
+			Stmt::Class(_span, privacy, ident, generics, body) => f.write_fmt(format_args!(
+				"class {privacy}{ident}{} {}",
+				join_generics(generics),
+				body.braced()
+			)),
 			Stmt::BareExpr(_span, expr) => f.write_fmt(format_args!("{expr};")),
 		}
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scope {
 	pub span: Span,
 	pub stmts: Vec<Stmt>,

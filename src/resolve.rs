@@ -1,4 +1,6 @@
-use crate::parser::types::{Expr, Func, Generic, Ident, Privacy, Scope, Stmt, Type, TypedIdent};
+use crate::parser::types::{
+	BuiltinType, Expr, Func, Generic, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
+};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
@@ -27,8 +29,8 @@ impl ResolvedScope {
 		match ty {
 			Type::BareType(span, x) => {
 				if [
-					"i8", "i16", "i32", "i64", "i128", "iz", "u", "u8", "u16", "u32", "u64",
-					"u128", "uz", "f", "f16", "f32", "f64", "f128", "void", "bool", "string",
+					"i8", "i16", "i32", "i64", "i128", "iz", "u8", "u16", "u32", "u64", "u128",
+					"uz", "f16", "f32", "f64", "f128", "void", "bool", "string", "char",
 				]
 				.contains(&x.ident.to_string().as_str())
 				{
@@ -117,7 +119,7 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn set_func(&mut self, ident: Ident, func: Func) {
+	pub fn set_func(&mut self, ident: Ident, func: Func, return_ty: Type) {
 		let mut args = vec![];
 		for arg in func.args {
 			args.push(ResolvedArg {
@@ -131,6 +133,7 @@ impl ResolvedScope {
 			ResolvedFunc {
 				name: ident.to_string(),
 				args,
+				return_ty,
 			},
 		);
 	}
@@ -171,8 +174,51 @@ impl ResolvedScope {
 				self.check_expr(*ident);
 				for arg in args {
 					self.check_expr(arg);
+					// TODO: check arg types
 				}
 			}
+			Expr::Error(_) => panic!("???"),
+		}
+	}
+
+	pub fn get_expr_ty(&self, expr: Expr) -> Type {
+		match expr {
+			Expr::CharLiteral(span, _) => Type::Builtin(span, BuiltinType::Char),
+			Expr::StringLiteral(span, _) => Type::Builtin(span, BuiltinType::String),
+			Expr::NumberLiteral(span, literal) => Type::Builtin(span, literal.as_ty()),
+			Expr::Identifier(_span, ident) => self.vars.get(&ident.to_string()).unwrap().ty.clone(),
+			Expr::BinaryOp(span, lhs, _op, rhs) => {
+				let lhs_span = lhs.span();
+				let rhs_span = lhs.span();
+				let lhs_ty = self.get_expr_ty(*lhs);
+				let rhs_ty = self.get_expr_ty(*rhs);
+				if lhs_ty != rhs_ty {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("operating with incompatible types")
+							.with_labels(vec![
+								Label::primary(span.file_id, span.range()),
+								Label::secondary(lhs_span.file_id, lhs_span.range())
+									.with_message(format!("type is {lhs_ty}")),
+								Label::secondary(rhs_span.file_id, rhs_span.range())
+									.with_message(format!("type is {rhs_ty}")),
+							]),
+					);
+				}
+				lhs_ty // TODO: support returning different type from operator (?)
+			}
+			// TODO: do something with operator
+			Expr::UnaryOp(_span, _op, val) => self.get_expr_ty(*val),
+			Expr::Lambda(span, _func) => {
+				// TODO: resolve lambda
+				Type::Builtin(span, BuiltinType::Error)
+			}
+			Expr::Call(_span, ident, _args) => self
+				.funcs
+				.get(&ident.to_string())
+				.unwrap()
+				.return_ty
+				.clone(),
 			Expr::Error(_) => panic!("???"),
 		}
 	}
@@ -197,6 +243,7 @@ pub struct ResolvedType {
 pub struct ResolvedFunc {
 	pub name: String,
 	pub args: Vec<ResolvedArg>,
+	pub return_ty: Type,
 }
 
 #[derive(Debug, Clone)]
@@ -275,7 +322,8 @@ pub fn resolve(
 				}
 				// TODO: use resolved scope
 				let _ = resolve(func.body.clone(), Context::Func, Some(frs));
-				resolved_scope.set_func(ident, func);
+				let return_ty = func.return_ty.clone();
+				resolved_scope.set_func(ident, func, return_ty);
 			}
 			Stmt::Return(span, expr) => {
 				if context != Context::Func {
@@ -297,8 +345,8 @@ pub fn resolve(
 				let ty = ResolvedType {
 					name: name.clone(),
 					generic_count: generics.len(),
-					fields: HashMap::new(),        // TODO
-					funcs: HashMap::new(),         // TODO
+					fields: HashMap::new(), // TODO
+					funcs: HashMap::new(),  // TODO
 				};
 				crs.add_type(name.clone(), ty.clone());
 				for generic in generics {
@@ -308,7 +356,8 @@ pub fn resolve(
 						ResolvedType {
 							name,
 							generic_count: 0,
-							fields: HashMap::new(), // NOTE: potentially in the future we will change this
+							fields: HashMap::new(), /* NOTE: potentially in the future we will
+							                         * change this */
 							funcs: HashMap::new(),
 						},
 					)
