@@ -411,12 +411,24 @@ pub fn resolve(
 			}
 			Stmt::Func(_, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
-				// TODO: generics
-				resolved_scope.check_type(func.return_ty.clone());
 				let mut frs = resolved_scope.clone();
-				for arg in func.args.clone() {
-					resolved_scope.check_type(arg.ty.clone());
-					frs.add_var(arg, None);
+				for generic in &func.generics {
+					let name = generic.to_string();
+					frs.add_type(
+						name.clone(),
+						ResolvedType {
+							name,
+							generic_count: 0,
+							fields: HashMap::new(), /* NOTE: potentially in the future we will
+							                         * change this */
+							funcs: HashMap::new(),
+						},
+					);
+				}
+				frs.check_type(func.return_ty.clone());
+				for arg in &func.args {
+					frs.check_type(arg.ty.clone());
+					frs.add_var(arg.clone(), None);
 				}
 				// TODO: use resolved scope
 				let _ = resolve(func.body.clone(), Context::Func, Some(frs));
