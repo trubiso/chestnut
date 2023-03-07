@@ -223,7 +223,7 @@ impl PartialEq for Type {
 				if let Self::Mut(_, y) = other {
 					*x == *y
 				} else {
-					false
+					**x == *other
 				}
 			}
 			Self::Inferred(_) => matches!(other, Self::Inferred(_)),
