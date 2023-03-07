@@ -33,19 +33,33 @@ class Node<T> {
 	public Node<T> traverse() {
 		let x = 9;
 	}
+
+	public T mut& set() mut {
+
+	}
+}
+
+T add<T>(T a, T b) pure {
+	return a + b;
 }
 
 i32 main(string[4+4] args, i32[34] arg) {
-	print_position(3);
-	let ~ = do_thing();
+	// print_position(3);
+	// let ~ = do_thing();
 	i32 x = 2 + (3 - 4);
 	~mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
+	a += 10;
 	a *= 9 + 10;
-	print("Hello World!", 9+3-4);
+	// print("Hello World!", 9+3-4);
 	4+2+4;
 	// .3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
 
 	~mut r = 10;
+
+	/***/
+
+	let a = 'a';
+	3 + a();
 
 	/* void goofy_void() {
 		print("hello from the goofy void");
