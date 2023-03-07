@@ -15,13 +15,26 @@ pub enum Generic {
 	Expr(Expr), // TODO: remove the additional junk caused by this mistake of an enum
 }
 
-#[derive(Debug, Display, Clone, PartialEq, Eq)]
+// TODO: go on each PartialEq with spans and re-implement it manually
+
+#[derive(Debug, Display, Clone)]
 pub enum Ident {
 	#[display(fmt = "{_1}")]
 	Named(Span, String),
 	#[display(fmt = "~")]
 	Discarded(Span),
 }
+
+impl PartialEq for Ident {
+	fn eq(&self, other: &Self) -> bool {
+		match self {
+			Self::Named(_, x) => if let Self::Named(_, y) = other { x == y } else {false},
+			Self::Discarded(_) => matches!(other, Self::Discarded(_)),
+		}
+	}
+}
+
+impl Eq for Ident {}
 
 impl Ident {
 	pub fn span(&self) -> Span {
@@ -123,7 +136,7 @@ impl NumberLiteral {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Type {
 	BareType(Span, BareType),
 	Builtin(Span, BuiltinType),
@@ -133,6 +146,58 @@ pub enum Type {
 	Mut(Span, Box<Type>),
 	Inferred(Span),
 }
+
+impl PartialEq for Type {
+	fn eq(&self, other: &Self) -> bool {
+		match self {
+			Self::BareType(_, x) => {
+				if let Self::BareType(_, y) = other {
+					x == y
+				} else {
+					false
+				}
+			}
+			Self::Builtin(_, x) => {
+				if let Self::Builtin(_, y) = other {
+					x == y
+				} else {
+					false
+				}
+			}
+			Self::Array(_, a, b) => {
+				if let Self::Array(_, c, d) = other {
+					a == c && b == d
+				} else {
+					false
+				}
+			}
+			Self::Ref(_, x) => {
+				if let Self::Ref(_, y) = other {
+					*x == *y
+				} else {
+					false
+				}
+			}
+			Self::Optional(_, x) => {
+				if let Self::Optional(_, y) = other {
+					*x == *y
+				} else {
+					false
+				}
+			}
+			Self::Mut(_, x) => {
+				if let Self::Mut(_, y) = other {
+					*x == *y
+				} else {
+					false
+				}
+			}
+			Self::Inferred(_) => matches!(other, Self::Inferred(_)),
+		}
+	}
+}
+
+impl Eq for Type {}
 
 impl Type {
 	pub fn span(&self) -> Span {
