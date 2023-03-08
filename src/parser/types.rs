@@ -116,7 +116,7 @@ pub enum BuiltinType {
 }
 
 impl BuiltinType {
-	pub fn from_str(name: &str) -> Option<Self> {
+	pub fn from_name(name: &str) -> Option<Self> {
 		match name {
 			"i8" => Some(Self::I8),
 			"i16" => Some(Self::I16),

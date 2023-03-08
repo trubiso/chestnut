@@ -21,7 +21,7 @@ pub fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
 				} else {
 					// TODO: incorrect span
 					let ident = force_token!(ident => Identifier, span.clone());
-					if let Some(x) = BuiltinType::from_str(&ident.to_string()) {
+					if let Some(x) = BuiltinType::from_name(&ident.to_string()) {
 						Type::Builtin(span, x)
 					} else {
 						Type::BareType(

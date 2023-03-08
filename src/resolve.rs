@@ -207,7 +207,7 @@ impl ResolvedScope {
 						func.clone(),
 						self.func_spans
 							.get(&name.to_string())
-							.map(|x| x.clone())
+							.cloned()
 							.unwrap_or(func_expr_span),
 					)
 				} else if let Expr::Lambda(_, func) = *func_expr {
