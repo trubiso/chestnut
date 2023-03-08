@@ -1,10 +1,33 @@
 use crate::{
 	parser::types::{Expr, Privacy, Type, TypedIdent},
-	resolve::{ResolvedScope, ResolvedStmt},
+	resolve::{ResolvedScope, ResolvedStmt}, lexer::{NumberLiteralRepr, NumberLiteralKind},
 };
 
 pub fn codegen_expr(expr: Expr) -> String {
-	"".into()
+	match expr {
+		Expr::CharLiteral(_, value) => value,
+		Expr::StringLiteral(_, value) => value,
+		Expr::NumberLiteral(_, number_literal) => {
+			let prefix = match number_literal.repr {
+				NumberLiteralRepr::Binary => "0b",
+				NumberLiteralRepr::Octal => "0o",
+				NumberLiteralRepr::Hex => "0x",
+				NumberLiteralRepr::Decimal => ""
+			};
+			let value = number_literal.value;
+			match number_literal.kind {
+			NumberLiteralKind::IZ => format!("((iz){prefix}{value})"),
+			NumberLiteralKind::UZ => format!("((uz){prefix}{value}u)"),
+			x => format!("{prefix}{value}{x}"),
+			}
+		},
+		Expr::Identifier(_, ident) => ident.to_string(),
+		Expr::BinaryOp(_, lhs, op, rhs) => format!("({}{op}{})", codegen_expr(*lhs), codegen_expr(*rhs)),
+		Expr::UnaryOp(_, op, val) => format!("({op}{})", codegen_expr(*val)),
+		Expr::Lambda(_, func) => todo!(),
+		Expr::Call(_, callee, args) => todo!(),
+		Expr::Error(_) => panic!(),
+	}
 }
 
 pub fn codegen_ty(ty: Type) -> String {
@@ -48,13 +71,13 @@ pub fn codegen_privacy(privacy: Privacy) -> String {
 pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 	match stmt {
 		ResolvedStmt::Create(_, privacy, ty_ident, expr) => {
-			format!("{}{};", codegen_privacy(privacy), codegen_ty_ident(ty_ident))
+			format!("{}{} = {};", codegen_privacy(privacy), codegen_ty_ident(ty_ident), codegen_expr(expr))
 		}
 		ResolvedStmt::Declare(_, privacy, ty_ident) => {
 			format!("{}{};", codegen_privacy(privacy), codegen_ty_ident(ty_ident))
 		}
 		ResolvedStmt::Set(_, ident, expr) => {
-			format!("{} = /* TODO: exprs */;", ident.to_string())
+			format!("{} = {};", ident.to_string(), codegen_expr(expr))
 		}
 		_ => "".into()
 	}
