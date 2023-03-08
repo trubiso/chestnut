@@ -255,6 +255,11 @@ impl Type {
 			}
 		}
 	}
+
+	pub fn is_void(&self) -> bool {
+		let Self::Builtin(_, x) = self else { return false; };
+		*x == BuiltinType::Void
+	}
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
@@ -367,6 +372,20 @@ pub enum Stmt {
 	Return(Span, Expr),
 	Class(Span, Privacy, Ident, Vec<Ident> /* generics */, Scope),
 	BareExpr(Span, Expr),
+}
+
+impl Stmt {
+	pub fn span(&self) -> Span {
+		match self {
+			Self::Create(x, _, _, _)
+			| Self::Declare(x, _, _)
+			| Self::Set(x, _, _)
+			| Self::Func(x, _, _, _)
+			| Self::Return(x, _)
+			| Self::Class(x, _, _, _, _)
+			| Self::BareExpr(x, _) => x.clone(),
+		}
+	}
 }
 
 impl fmt::Display for Stmt {

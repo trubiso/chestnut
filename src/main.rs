@@ -50,8 +50,8 @@ fn main() {
 
 	println!("{parsed}");
 
-	let resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None) {
-		Ok(x) => x,
+	let resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None, None) {
+		Ok((x, _)) => x,
 		Err(x) => return emit_errors(&files, x),
 	};
 

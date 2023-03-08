@@ -279,6 +279,7 @@ impl ResolvedScope {
 		}
 	}
 
+	// TODO: be lazier with int literals and automatically cast them in Stmt::Create
 	pub fn get_expr_ty(&self, expr: Expr) -> Type {
 		match expr {
 			Expr::CharLiteral(span, _) => Type::Builtin(span, BuiltinType::Char),
@@ -386,12 +387,14 @@ pub fn resolve(
 	scope: Scope,
 	context: Context,
 	inherit_scope: Option<ResolvedScope>,
-) -> Result<ResolvedScope, Vec<Diagnostic<usize>>> {
+	expected_func_ty: Option<(Span, Type)>,
+) -> Result<(ResolvedScope, Type), Vec<Diagnostic<usize>>> {
 	let mut resolved_scope = ResolvedScope::default();
 	if let Some(scope) = inherit_scope {
 		resolved_scope = scope;
 	}
-	let mut return_value = None;
+	let mut return_ty = Type::Builtin(scope.span, BuiltinType::Void);
+	let mut return_span = None;
 	for stmt in scope.stmts {
 		match stmt {
 			Stmt::Create(span, privacy, mut ty_ident, expr) => {
@@ -472,8 +475,18 @@ pub fn resolve(
 					frs.add_var(arg.span.clone(), arg.clone(), None);
 				}
 				// TODO: use resolved scope
-				let _ = resolve(func.body.clone(), Context::Func, Some(frs));
-				let return_ty = func.return_ty.clone();
+				let mut return_ty = func.return_ty.clone();
+				if return_ty.is_inferred() {
+					let (_, ty) = resolve(func.body.clone(), Context::Func, Some(frs), None)?;
+					return_ty = ty;
+				} else {
+					let _ = resolve(
+						func.body.clone(),
+						Context::Func,
+						Some(frs),
+						Some((span.clone(), return_ty.clone())),
+					);
+				}
 				resolved_scope.add_func(span, ident, func, return_ty);
 			}
 			Stmt::Return(span, expr) => {
@@ -485,9 +498,9 @@ pub fn resolve(
 								.with_message("return statement in global scope")]),
 					);
 				}
-				// TODO: check that the return type matches the function type
 				resolved_scope.check_expr(expr.clone());
-				return_value = Some(expr);
+				return_ty = resolved_scope.get_expr_ty(expr.clone());
+				return_span = Some(span);
 				break;
 			}
 			Stmt::Class(span, privacy, ident, generics, body) => {
@@ -516,7 +529,7 @@ pub fn resolve(
 					)
 				}
 				// TODO: use resolved scope
-				let _ = resolve(body.clone(), Context::Class, Some(crs));
+				let _ = resolve(body.clone(), Context::Class, Some(crs), None);
 				resolved_scope.add_type(span, name, ty);
 			}
 			Stmt::BareExpr(_, expr) => {
@@ -524,12 +537,29 @@ pub fn resolve(
 			}
 		}
 	}
-	// TODO: idk how we should use this LOL this code is absolutely useless
-	if return_value.is_some() {}
+	if let Some((func_span, expected_ty)) = expected_func_ty {
+		if return_ty != expected_ty {
+			let span = return_span.unwrap_or(func_span);
+			if return_ty.is_void() {
+				add_diagnostic(
+					Diagnostic::error()
+						.with_message("no return in non-void function")
+						.with_labels(vec![Label::primary(span.file_id, span.range())]),
+				)
+			} else {
+				add_diagnostic(
+					Diagnostic::error()
+						.with_message("incorrect return type")
+						.with_labels(vec![Label::primary(span.file_id, span.range())])
+						.with_notes(vec![format!("expected {expected_ty}, got {return_ty}")]),
+				)
+			}
+		}
+	}
 	if !DIAGNOSTICS.lock().unwrap().is_empty() {
 		let diagnostics = DIAGNOSTICS.lock().unwrap();
 		Err(diagnostics.clone())
 	} else {
-		Ok(resolved_scope)
+		Ok((resolved_scope, return_ty))
 	}
 }
