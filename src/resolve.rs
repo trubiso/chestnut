@@ -1,6 +1,6 @@
 use crate::{
 	parser::types::{
-		BuiltinType, Expr, Func, Generic, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
+		BuiltinType, Expr, Func, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
 	},
 	span::Span,
 };
@@ -75,8 +75,7 @@ impl ResolvedScope {
 					);
 				}
 				for generic in x.generics {
-					let Generic::Type(ty) = generic else { panic!("haha you fell into the trap enum") };
-					self.check_type(ty);
+					self.check_type(generic);
 				}
 			}
 			Type::Ref(_, x) | Type::Mut(_, x) | Type::Optional(_, x) => self.check_type(*x),
@@ -117,7 +116,7 @@ impl ResolvedScope {
 	pub fn set_var(&mut self, ident: Ident, expr: Expr) {
 		if ident.is_discarded() {
 			return;
-		} // TODO: ?
+		}
 		if let Some(x) = self.vars.get_mut(&ident.to_string()) {
 			if !matches!(&x.ty, Type::Mut(_, _)) {
 				let span = ident.span() + expr.span();
@@ -304,9 +303,9 @@ impl ResolvedScope {
 							]),
 					);
 				}
-				lhs_ty // TODO: support returning different type from operator (?)
+				lhs_ty
 			}
-			// TODO: do something with operator
+			// TODO: &x, *x => ref + deref. these would return non-reffed or reffed tys.
 			Expr::UnaryOp(_span, _op, val) => self.get_expr_ty(*val),
 			Expr::Lambda(span, _func) => {
 				// TODO: resolve lambda

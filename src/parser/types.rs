@@ -9,12 +9,6 @@ pub type TokenRecursive<'a, T> = Recursive<'a, Token, T, Simple<Token, Span>>;
 pub type ScopeRecursive<'a> = TokenRecursive<'a, Scope>;
 pub type ExprRecursive<'a> = TokenRecursive<'a, Expr>;
 
-#[derive(Debug, Display, Clone, PartialEq, Eq)]
-pub enum Generic {
-	Type(Type),
-	Expr(Expr), // TODO: remove the additional junk caused by this mistake of an enum
-}
-
 // TODO: go on each PartialEq with spans and re-implement it manually
 
 #[derive(Debug, Display, Clone)]
@@ -65,8 +59,8 @@ impl Ident {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BareType {
-	pub ident: Ident,           // typename
-	pub generics: Vec<Generic>, // generics
+	pub ident: Ident,        // typename
+	pub generics: Vec<Type>, // generics
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]

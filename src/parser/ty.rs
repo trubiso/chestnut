@@ -1,7 +1,7 @@
 use super::types::{BuiltinType, ExprRecursive, TokenParser, Type};
 use crate::lexer::{Keyword, Operator, Token};
 use crate::parser::expr;
-use crate::parser::types::{BareType, Expr, Generic};
+use crate::parser::types::{BareType, Expr};
 use chumsky::prelude::*;
 
 enum PostfixOp {
@@ -31,7 +31,7 @@ pub fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
 								generics: generics
 									.unwrap_or(vec![])
 									.iter()
-									.map(|x: &Type| Generic::Type(x.clone()))
+									.cloned()
 									.collect(),
 							},
 						)
