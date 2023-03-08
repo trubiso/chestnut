@@ -1,5 +1,8 @@
-use crate::parser::types::{
-	BuiltinType, Expr, Func, Generic, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
+use crate::{
+	parser::types::{
+		BuiltinType, Expr, Func, Generic, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
+	},
+	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
@@ -10,10 +13,15 @@ use std::{cmp::Ordering, collections::HashMap, sync::Mutex};
 pub struct ResolvedScope {
 	// TODO: assign each var a usize to know declaration order.
 	// funcs don't need order, they can be arbitrarily defined.
+	// TODO on the TODO: rather simply put stmts because stmts need an order, not
+	// only vars
 	pub vars: HashMap<String, ResolvedVar>,
+	pub var_spans: HashMap<String, Span>,
 	// TODO: top level analyzer
 	pub funcs: HashMap<String, ResolvedFunc>,
+	pub func_spans: HashMap<String, Span>,
 	pub types: HashMap<String, ResolvedType>,
+	pub type_spans: HashMap<String, Span>,
 }
 
 lazy_static! {
@@ -79,14 +87,21 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn add_var(&mut self, ty_ident: TypedIdent, value: Option<Expr>) {
+	pub fn add_var(&mut self, span: Span, ty_ident: TypedIdent, value: Option<Expr>) {
 		if ty_ident.ident.is_discarded() {
 			return;
 		}
 		let name = ty_ident.ident_str();
 		let ty = ty_ident.ty;
-		self.vars
-			.insert(name.clone(), ResolvedVar { name, ty, value });
+		self.vars.insert(
+			name.clone(),
+			ResolvedVar {
+				name: name.clone(),
+				ty,
+				value,
+			},
+		);
+		self.var_spans.insert(name, span);
 	}
 
 	pub fn add_type(&mut self, name: String, ty: ResolvedType) {
@@ -99,12 +114,16 @@ impl ResolvedScope {
 		} // TODO: ?
 		if let Some(x) = self.vars.get_mut(&ident.to_string()) {
 			if !matches!(&x.ty, Type::Mut(_, _)) {
-				let span = x.ty.span();
+				let span = ident.span() + expr.span();
+				let var_span = self.var_spans.get(&ident.to_string()).unwrap();
 				add_diagnostic(
 					Diagnostic::error()
 						.with_message("tried to set non-mut symbol")
-						.with_labels(vec![Label::primary(span.file_id, span.range())]),
-					// TODO: add note at the original variable declaration
+						.with_labels(vec![
+							Label::primary(span.file_id, span.range()),
+							Label::secondary(var_span.file_id, var_span.range())
+								.with_message("original declaration here"),
+						]),
 				);
 				return;
 			}
@@ -347,9 +366,7 @@ pub fn resolve(
 ) -> Result<ResolvedScope, Vec<Diagnostic<usize>>> {
 	let mut resolved_scope = ResolvedScope::default();
 	if let Some(scope) = inherit_scope {
-		resolved_scope.funcs = scope.funcs;
-		resolved_scope.vars = scope.vars;
-		resolved_scope.types = scope.types;
+		resolved_scope = scope;
 	}
 	let mut return_value = None;
 	for stmt in scope.stmts {
@@ -379,12 +396,12 @@ pub fn resolve(
 					Type::Mut(_, _) => Type::Mut(lhs_span, Box::new(rhs)),
 					_ => rhs,
 				};
-				resolved_scope.add_var(ty_ident, Some(expr));
+				resolved_scope.add_var(span, ty_ident, Some(expr));
 			}
-			Stmt::Declare(_, privacy, ty_ident) => {
+			Stmt::Declare(span, privacy, ty_ident) => {
 				check_privacy(privacy, context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
-				resolved_scope.add_var(ty_ident, None);
+				resolved_scope.add_var(span, ty_ident, None);
 			}
 			Stmt::Set(span, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
@@ -428,7 +445,7 @@ pub fn resolve(
 				frs.check_type(func.return_ty.clone());
 				for arg in &func.args {
 					frs.check_type(arg.ty.clone());
-					frs.add_var(arg.clone(), None);
+					frs.add_var(arg.span.clone(), arg.clone(), None);
 				}
 				// TODO: use resolved scope
 				let _ = resolve(func.body.clone(), Context::Func, Some(frs));

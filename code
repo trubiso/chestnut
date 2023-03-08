@@ -47,7 +47,7 @@ i32 main(string[4+4] args, i32[34] arg) {
 	// print_position(3);
 	// let ~ = do_thing();
 	i32 x = 2 + (3 - 4);
-	~mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
+	let a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a += 10;
 	a *= 9 + 10;
 	// print("Hello World!", 9+3-4);
