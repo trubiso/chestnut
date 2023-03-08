@@ -7,6 +7,37 @@ use derive_more::Display;
 use lazy_static::lazy_static;
 use std::{cmp::Ordering, collections::HashMap, sync::Mutex};
 
+#[derive(Debug, Clone)]
+pub enum ResolvedStmt {
+	Create(Span, Privacy, TypedIdent, Expr),
+	Declare(Span, Privacy, TypedIdent),
+	Set(Span, Ident, Expr),
+	Func(Span, Privacy, Ident, ResolvedFunc),
+	Return(Span, Expr),
+	Class(
+		Span,
+		Privacy,
+		Ident,
+		Vec<Ident>, /* generics */
+		ResolvedScope,
+	),
+	BareExpr(Span, Expr),
+}
+
+impl ResolvedStmt {
+	pub fn span(&self) -> Span {
+		match self {
+			Self::Create(x, _, _, _)
+			| Self::Declare(x, _, _)
+			| Self::Set(x, _, _)
+			| Self::Func(x, _, _, _)
+			| Self::Return(x, _)
+			| Self::Class(x, _, _, _, _)
+			| Self::BareExpr(x, _) => x.clone(),
+		}
+	}
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ResolvedScope {
 	// TODO: assign each var a usize to know declaration order.
@@ -16,12 +47,13 @@ pub struct ResolvedScope {
 	pub vars: HashMap<String, ResolvedVar>,
 	pub var_spans: HashMap<String, Span>,
 	// TODO: top level analyzer
+	// TODO: function overloads
 	pub funcs: HashMap<String, ResolvedFunc>,
 	pub func_spans: HashMap<String, Span>,
 	pub types: HashMap<String, ResolvedType>,
 	pub type_spans: HashMap<String, Span>,
 	// TODO: remove scopes from type & func spans
-	pub stmts: Vec<Stmt>,
+	pub stmts: Vec<ResolvedStmt>,
 }
 
 lazy_static! {
@@ -142,7 +174,14 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn add_func(&mut self, span: Span, ident: Ident, func: Func, return_ty: Type) {
+	pub fn add_func(
+		&mut self,
+		span: Span,
+		ident: Ident,
+		func: Func,
+		return_ty: Type,
+		body: ResolvedScope,
+	) {
 		let mut args = vec![];
 		for arg in func.args {
 			args.push(ResolvedArg {
@@ -157,6 +196,7 @@ impl ResolvedScope {
 				name: ident.to_string(),
 				args,
 				return_ty,
+				body,
 			},
 		);
 		self.func_spans.insert(ident.to_string(), span);
@@ -212,6 +252,8 @@ impl ResolvedScope {
 							.unwrap_or(func_expr_span),
 					)
 				} else if let Expr::Lambda(_, func) = *func_expr {
+					// TODO: add args to inherit scope
+					let (scope, ty) = resolve(func.body, Context::Func, None, None).unwrap();
 					(
 						ResolvedFunc {
 							name: "~".into(),
@@ -223,7 +265,8 @@ impl ResolvedScope {
 									ty: x.ty.clone(),
 								})
 								.collect(),
-							return_ty: func.return_ty,
+							return_ty: ty,
+							body: scope,
 						},
 						func.span,
 					)
@@ -345,6 +388,7 @@ pub struct ResolvedFunc {
 	pub name: String,
 	pub args: Vec<ResolvedArg>,
 	pub return_ty: Type,
+	pub body: ResolvedScope,
 }
 
 #[derive(Debug, Clone)]
@@ -425,10 +469,12 @@ pub fn resolve(
 				if !lhs.is_inferred() {
 					resolved_scope
 						.stmts
-						.push(Stmt::Create(span, privacy, ty_ident, expr));
+						.push(ResolvedStmt::Create(span, privacy, ty_ident, expr));
 				} else {
 					// TODO: might throw some c++ warnings
-					resolved_scope.stmts.push(Stmt::BareExpr(span, expr));
+					resolved_scope
+						.stmts
+						.push(ResolvedStmt::BareExpr(span, expr));
 				}
 			}
 			Stmt::Declare(span, privacy, ty_ident) => {
@@ -438,7 +484,7 @@ pub fn resolve(
 				resolved_scope.add_var(span.clone(), ty_ident.clone(), None);
 				resolved_scope
 					.stmts
-					.push(Stmt::Declare(span, privacy, ty_ident));
+					.push(ResolvedStmt::Declare(span, privacy, ty_ident));
 			}
 			Stmt::Set(span, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
@@ -462,7 +508,9 @@ pub fn resolve(
 					)
 				}
 				resolved_scope.set_var(ident.clone(), expr.clone());
-				resolved_scope.stmts.push(Stmt::Set(span, ident, expr));
+				resolved_scope
+					.stmts
+					.push(ResolvedStmt::Set(span, ident, expr));
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
@@ -488,18 +536,26 @@ pub fn resolve(
 				}
 				// TODO: use resolved scope
 				let mut return_ty = func.return_ty.clone();
-				if return_ty.is_inferred() {
-					let (_, ty) = resolve(func.body.clone(), Context::Func, Some(frs), None)?;
-					return_ty = ty;
+				let body = if return_ty.is_inferred() {
+					match resolve(func.body.clone(), Context::Func, Some(frs), None) {
+						Ok((scope, ty)) => {
+							return_ty = ty;
+							scope
+						}
+						Err(_) => ResolvedScope::default(),
+					}
 				} else {
-					let _ = resolve(
+					match resolve(
 						func.body.clone(),
 						Context::Func,
 						Some(frs),
 						Some((ident.span(), return_ty.span(), return_ty.clone())),
-					);
-				}
-				resolved_scope.add_func(span, ident, func, return_ty);
+					) {
+						Ok((scope, _)) => scope,
+						Err(_) => ResolvedScope::default(),
+					}
+				};
+				resolved_scope.add_func(span, ident, func, return_ty, body);
 			}
 			Stmt::Return(span, expr) => {
 				if context != Context::Func {
@@ -513,7 +569,7 @@ pub fn resolve(
 				resolved_scope.check_expr(expr.clone());
 				return_ty = resolved_scope.get_expr_ty(expr.clone());
 				return_span = Some(span.clone());
-				resolved_scope.stmts.push(Stmt::Return(span, expr));
+				resolved_scope.stmts.push(ResolvedStmt::Return(span, expr));
 			}
 			Stmt::Class(span, privacy, ident, generics, body) => {
 				check_privacy(privacy, context.clone());
@@ -546,7 +602,9 @@ pub fn resolve(
 			}
 			Stmt::BareExpr(span, expr) => {
 				resolved_scope.check_expr(expr.clone());
-				resolved_scope.stmts.push(Stmt::BareExpr(span, expr));
+				resolved_scope
+					.stmts
+					.push(ResolvedStmt::BareExpr(span, expr));
 			}
 		}
 	}
