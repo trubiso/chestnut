@@ -138,7 +138,7 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn set_func(&mut self, ident: Ident, func: Func, return_ty: Type) {
+	pub fn add_func(&mut self, span: Span, ident: Ident, func: Func, return_ty: Type) {
 		let mut args = vec![];
 		for arg in func.args {
 			args.push(ResolvedArg {
@@ -155,6 +155,7 @@ impl ResolvedScope {
 				return_ty,
 			},
 		);
+		self.func_spans.insert(ident.to_string(), span);
 	}
 
 	pub fn check_ident_exists(&self, ident: Ident) {
@@ -194,23 +195,33 @@ impl ResolvedScope {
 			}
 			Expr::Call(span, func_expr, args) => {
 				self.check_expr(*func_expr.clone());
-				let func = if let Expr::Identifier(_, name) = *func_expr {
+				let func_expr_span = func_expr.span();
+				let (func, decl_span) = if let Expr::Identifier(_, name) = *func_expr {
 					self.check_ident_exists(name.clone());
 					let Some(func) = self.funcs.get(&name.to_string()) else { return; };
-					func.clone()
+					(
+						func.clone(),
+						self.func_spans
+							.get(&name.to_string())
+							.map(|x| x.clone())
+							.unwrap_or(func_expr_span),
+					)
 				} else if let Expr::Lambda(_, func) = *func_expr {
-					ResolvedFunc {
-						name: "~".into(),
-						args: func
-							.args
-							.iter()
-							.map(|x| ResolvedArg {
-								name: x.ident.to_string(),
-								ty: x.ty.clone(),
-							})
-							.collect(),
-						return_ty: func.return_ty,
-					}
+					(
+						ResolvedFunc {
+							name: "~".into(),
+							args: func
+								.args
+								.iter()
+								.map(|x| ResolvedArg {
+									name: x.ident.to_string(),
+									ty: x.ty.clone(),
+								})
+								.collect(),
+							return_ty: func.return_ty,
+						},
+						func.span,
+					)
 				} else {
 					let span = func_expr.span();
 					let ty = self.get_expr_ty(*func_expr);
@@ -230,8 +241,11 @@ impl ResolvedScope {
 								Ordering::Greater => "too many arguments in function call",
 								_ => unreachable!(),
 							})
-							.with_labels(vec![Label::primary(span.file_id, span.range())]),
-						// TODO: add note at the original declaration
+							.with_labels(vec![
+								Label::primary(span.file_id, span.range()),
+								Label::secondary(decl_span.file_id, decl_span.range())
+									.with_message("original declaration here"),
+							]),
 					);
 					return;
 				}
@@ -243,11 +257,14 @@ impl ResolvedScope {
 						add_diagnostic(
 							Diagnostic::error()
 								.with_message("incorrect argument type")
-								.with_labels(vec![Label::primary(
-									arg_ty.span().file_id,
-									arg_ty.span().range(),
-								)
-								.with_message(format!("found {arg_ty}, expected {expected_ty}"))]),
+								.with_labels(vec![
+									Label::primary(arg_ty.span().file_id, arg_ty.span().range())
+										.with_message(format!(
+											"found {arg_ty}, expected {expected_ty}"
+										)),
+									Label::secondary(decl_span.file_id, decl_span.range())
+										.with_message("original declaration here"),
+								]),
 						)
 					}
 				}
@@ -426,7 +443,7 @@ pub fn resolve(
 				}
 				resolved_scope.set_var(ident, expr);
 			}
-			Stmt::Func(_, privacy, ident, func) => {
+			Stmt::Func(span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
 				let mut frs = resolved_scope.clone();
 				for generic in &func.generics {
@@ -450,7 +467,7 @@ pub fn resolve(
 				// TODO: use resolved scope
 				let _ = resolve(func.body.clone(), Context::Func, Some(frs));
 				let return_ty = func.return_ty.clone();
-				resolved_scope.set_func(ident, func, return_ty);
+				resolved_scope.add_func(span, ident, func, return_ty);
 			}
 			Stmt::Return(span, expr) => {
 				if context != Context::Func {
