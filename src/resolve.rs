@@ -386,7 +386,7 @@ pub fn resolve(
 	scope: Scope,
 	context: Context,
 	inherit_scope: Option<ResolvedScope>,
-	expected_func_ty: Option<(Span, Type)>,
+	expected_func_ty: Option<(Span, Span, Type)>,
 ) -> Result<(ResolvedScope, Type), Vec<Diagnostic<usize>>> {
 	let mut resolved_scope = ResolvedScope::default();
 	if let Some(scope) = inherit_scope {
@@ -483,7 +483,7 @@ pub fn resolve(
 						func.body.clone(),
 						Context::Func,
 						Some(frs),
-						Some((span.clone(), return_ty.clone())),
+						Some((ident.span(), return_ty.span(), return_ty.clone())),
 					);
 				}
 				resolved_scope.add_func(span, ident, func, return_ty);
@@ -536,14 +536,15 @@ pub fn resolve(
 			}
 		}
 	}
-	if let Some((func_span, expected_ty)) = expected_func_ty {
+	if let Some((func_span, return_ty_span, expected_ty)) = expected_func_ty {
 		if return_ty != expected_ty {
 			let span = return_span.unwrap_or(func_span);
 			if return_ty.is_void() {
 				add_diagnostic(
 					Diagnostic::error()
 						.with_message("no return in non-void function")
-						.with_labels(vec![Label::primary(span.file_id, span.range())]),
+						.with_labels(vec![Label::primary(span.file_id, span.range()),
+						Label::secondary(return_ty_span.file_id, return_ty_span.range()).with_message("return type declared here")]),
 				)
 			} else {
 				add_diagnostic(
