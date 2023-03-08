@@ -327,7 +327,11 @@ impl ResolvedScope {
 			Expr::CharLiteral(span, _) => Type::Builtin(span, BuiltinType::Char),
 			Expr::StringLiteral(span, _) => Type::Builtin(span, BuiltinType::String),
 			Expr::NumberLiteral(span, literal) => Type::Builtin(span, literal.as_ty()),
-			Expr::Identifier(_span, ident) => self.vars.get(&ident.to_string()).unwrap().ty.clone(),
+			Expr::Identifier(span, ident) => self
+				.vars
+				.get(&ident.to_string())
+				.map(|x| x.ty.clone())
+				.unwrap_or_else(|| Type::Builtin(span, BuiltinType::Error)),
 			Expr::BinaryOp(span, lhs, _op, rhs) => {
 				let lhs_span = lhs.span();
 				let rhs_span = rhs.span();

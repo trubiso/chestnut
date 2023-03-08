@@ -6,8 +6,8 @@ void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
 
 void print_grid(GridPiece&[3][4]?[] pieces) {}
 
-export bool do_thing(Array<~> arr) {
-	
+export i32 do_thing(Array<~> arr) {
+	return 0;
 }
 
 void print() {
@@ -30,11 +30,11 @@ class Node<T> {
 	Node<T>& next;
 	public T value;
 
-	public Node traverse() {
+	public void traverse() {
 		let x = 9;
 	}
 
-	public T mut& set() mut {
+	public void set() mut {
 
 	}
 }
@@ -43,8 +43,8 @@ T add<T>(T a, T b) pure {
 	return a + b;
 }
 
-void do_thing(i32 only_arg) {
-	let a = 9;
+i32 do_thing(i32 only_arg) {
+	let a = only_arg;
 	let b = 10;
 	let c = a + b;
 	let d = a * c;
@@ -56,7 +56,7 @@ i32 main(string[4+4] args, i32[34] arg) {
 	// print_position(3);
 	// let ~ = do_thing();
 	i32 x = 2 + (3 - 4);
-	let a = 3 + 5 + (2 - 3) * -9 + 4/2;
+	~mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a += 10;
 	a *= 9 + 10;
 	// print("Hello World!", 9+3-4);
@@ -65,10 +65,7 @@ i32 main(string[4+4] args, i32[34] arg) {
 
 	~mut r = 10;
 
-	do_thing();
-	do_thing(3);
-	do_thing("hi");
-	do_thing(2, 4);
+	let c = do_thing(3);
 
 	/***/
 
@@ -89,6 +86,8 @@ i32 main(string[4+4] args, i32[34] arg) {
 	set_error_callback((err) => print(err));
 
 	return -a + 3; */
+
+	return 0;
 }
 
 i32 divided_by_two(i32 x) => x / 2;
