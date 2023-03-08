@@ -1,7 +1,5 @@
 use crate::{
-	parser::types::{
-		BuiltinType, Expr, Func, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
-	},
+	parser::types::{BuiltinType, Expr, Func, Ident, Privacy, Scope, Stmt, Type, TypedIdent},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -23,6 +21,7 @@ pub struct ResolvedScope {
 	pub types: HashMap<String, ResolvedType>,
 	pub type_spans: HashMap<String, Span>,
 	// TODO: remove scopes from type & func spans
+	pub stmts: Vec<Stmt>,
 }
 
 lazy_static! {
@@ -183,6 +182,7 @@ impl ResolvedScope {
 			Expr::StringLiteral(_, _) => {}
 			Expr::NumberLiteral(_, _) => {}
 			Expr::Identifier(_, ident) => {
+				// TODO: add error if it's not initialized
 				self.check_ident_exists(ident);
 			}
 			Expr::BinaryOp(_, lhs, _op, rhs) => {
@@ -397,7 +397,7 @@ pub fn resolve(
 	for stmt in scope.stmts {
 		match stmt {
 			Stmt::Create(span, privacy, mut ty_ident, expr) => {
-				check_privacy(privacy, context.clone());
+				check_privacy(privacy.clone(), context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.check_expr(expr.clone());
 				let lhs = ty_ident.ty.clone();
@@ -421,12 +421,24 @@ pub fn resolve(
 					Type::Mut(_, _) => Type::Mut(lhs_span, Box::new(rhs)),
 					_ => rhs,
 				};
-				resolved_scope.add_var(span, ty_ident, Some(expr));
+				resolved_scope.add_var(span.clone(), ty_ident.clone(), Some(expr.clone()));
+				if !lhs.is_inferred() {
+					resolved_scope
+						.stmts
+						.push(Stmt::Create(span, privacy, ty_ident, expr));
+				} else {
+					// TODO: might throw some c++ warnings
+					resolved_scope.stmts.push(Stmt::BareExpr(span, expr));
+				}
 			}
 			Stmt::Declare(span, privacy, ty_ident) => {
-				check_privacy(privacy, context.clone());
+				// TODO: add error if the type is ~
+				check_privacy(privacy.clone(), context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
-				resolved_scope.add_var(span, ty_ident, None);
+				resolved_scope.add_var(span.clone(), ty_ident.clone(), None);
+				resolved_scope
+					.stmts
+					.push(Stmt::Declare(span, privacy, ty_ident));
 			}
 			Stmt::Set(span, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
@@ -449,7 +461,8 @@ pub fn resolve(
 							]),
 					)
 				}
-				resolved_scope.set_var(ident, expr);
+				resolved_scope.set_var(ident.clone(), expr.clone());
+				resolved_scope.stmts.push(Stmt::Set(span, ident, expr));
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
@@ -499,8 +512,8 @@ pub fn resolve(
 				}
 				resolved_scope.check_expr(expr.clone());
 				return_ty = resolved_scope.get_expr_ty(expr.clone());
-				return_span = Some(span);
-				break;
+				return_span = Some(span.clone());
+				resolved_scope.stmts.push(Stmt::Return(span, expr));
 			}
 			Stmt::Class(span, privacy, ident, generics, body) => {
 				check_privacy(privacy, context.clone());
@@ -531,8 +544,9 @@ pub fn resolve(
 				let _ = resolve(body.clone(), Context::Class, Some(crs), None);
 				resolved_scope.add_type(span, name, ty);
 			}
-			Stmt::BareExpr(_, expr) => {
-				resolved_scope.check_expr(expr);
+			Stmt::BareExpr(span, expr) => {
+				resolved_scope.check_expr(expr.clone());
+				resolved_scope.stmts.push(Stmt::BareExpr(span, expr));
 			}
 		}
 	}
@@ -543,8 +557,11 @@ pub fn resolve(
 				add_diagnostic(
 					Diagnostic::error()
 						.with_message("no return in non-void function")
-						.with_labels(vec![Label::primary(span.file_id, span.range()),
-						Label::secondary(return_ty_span.file_id, return_ty_span.range()).with_message("return type declared here")]),
+						.with_labels(vec![
+							Label::primary(span.file_id, span.range()),
+							Label::secondary(return_ty_span.file_id, return_ty_span.range())
+								.with_message("return type declared here"),
+						]),
 				)
 			} else {
 				add_diagnostic(

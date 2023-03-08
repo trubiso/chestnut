@@ -43,7 +43,14 @@ T add<T>(T a, T b) pure {
 	return a + b;
 }
 
-void do_thing(i32 only_arg) {}
+void do_thing(i32 only_arg) {
+	let a = 9;
+	let b = 10;
+	let c = a + b;
+	let d = a * c;
+	let e = a + b + c + d;
+	return e;
+}
 
 i32 main(string[4+4] args, i32[34] arg) {
 	// print_position(3);
