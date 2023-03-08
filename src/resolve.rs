@@ -381,6 +381,7 @@ pub struct ResolvedType {
 	pub generic_count: usize, // TODO: ResolvedGeneric
 	pub fields: HashMap<String, ResolvedType>,
 	pub funcs: HashMap<String, ResolvedFunc>,
+	pub body: Option<ResolvedScope>, // if it's a generic no body defines it
 }
 
 #[derive(Debug, Clone)]
@@ -526,6 +527,7 @@ pub fn resolve(
 							fields: HashMap::new(), /* NOTE: potentially in the future we will
 							                         * change this */
 							funcs: HashMap::new(),
+							body: None,
 						},
 					);
 				}
@@ -575,11 +577,12 @@ pub fn resolve(
 				check_privacy(privacy, context.clone());
 				let name = ident.to_string();
 				let mut crs = resolved_scope.clone();
-				let ty = ResolvedType {
+				let mut ty = ResolvedType {
 					name: name.clone(),
 					generic_count: generics.len(),
 					fields: HashMap::new(), // TODO
 					funcs: HashMap::new(),  // TODO
+					body: None,
 				};
 				crs.add_type(span.clone(), name.clone(), ty.clone());
 				for generic in generics {
@@ -593,11 +596,15 @@ pub fn resolve(
 							fields: HashMap::new(), /* NOTE: potentially in the future we will
 							                         * change this */
 							funcs: HashMap::new(),
+							body: None,
 						},
 					)
 				}
-				// TODO: use resolved scope
-				let _ = resolve(body.clone(), Context::Class, Some(crs), None);
+				let scope = match resolve(body.clone(), Context::Class, Some(crs), None) {
+					Ok((scope, _)) => scope,
+					Err(_) => ResolvedScope::default(),
+				};
+				ty.body = Some(scope);
 				resolved_scope.add_type(span, name, ty);
 			}
 			Stmt::BareExpr(span, expr) => {
