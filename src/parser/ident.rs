@@ -1,5 +1,5 @@
 use super::types::{Ident, TokenParser};
-use crate::lexer::{Token};
+use crate::lexer::Token;
 use chumsky::prelude::*;
 
 /// Parses an ident token into Ident

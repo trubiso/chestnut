@@ -60,9 +60,11 @@ impl ResolvedScope {
 									Ordering::Greater => "too many generics in type",
 									_ => unreachable!(),
 								})
-								.with_labels(vec![Label::primary(span.file_id, span.range()),
-								Label::secondary(decl_span.file_id, decl_span.range())
-									.with_message("original declaration here"),]),
+								.with_labels(vec![
+									Label::primary(span.file_id, span.range()),
+									Label::secondary(decl_span.file_id, decl_span.range())
+										.with_message("original declaration here"),
+								]),
 						);
 					}
 				} else {
