@@ -471,7 +471,7 @@ pub fn resolve(
 					_ => rhs,
 				};
 				resolved_scope.add_var(span.clone(), ty_ident.clone(), Some(expr.clone()));
-				if !lhs.is_inferred() {
+				if !ty_ident.ident.is_discarded() {
 					resolved_scope
 						.stmts
 						.push(ResolvedStmt::Create(span, privacy, ty_ident, expr));

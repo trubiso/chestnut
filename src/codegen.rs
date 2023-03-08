@@ -25,7 +25,7 @@ pub fn codegen_expr(expr: Expr) -> String {
 		Expr::BinaryOp(_, lhs, op, rhs) => format!("({}{op}{})", codegen_expr(*lhs), codegen_expr(*rhs)),
 		Expr::UnaryOp(_, op, val) => format!("({op}{})", codegen_expr(*val)),
 		Expr::Lambda(_, func) => todo!(),
-		Expr::Call(_, callee, args) => todo!(),
+		Expr::Call(_, callee, args) => "[CALL]".into(), // TODO
 		Expr::Error(_) => panic!(),
 	}
 }
