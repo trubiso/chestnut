@@ -22,6 +22,7 @@ pub struct ResolvedScope {
 	pub func_spans: HashMap<String, Span>,
 	pub types: HashMap<String, ResolvedType>,
 	pub type_spans: HashMap<String, Span>,
+	// TODO: remove scopes from type & func spans
 }
 
 lazy_static! {
@@ -51,6 +52,7 @@ impl ResolvedScope {
 					}
 				} else if let Some(ty) = self.types.get(&x.ident.to_string()) {
 					if ty.generic_count != x.generics.len() {
+						let decl_span = self.type_spans.get(&x.ident.to_string()).unwrap();
 						add_diagnostic(
 							Diagnostic::error()
 								.with_message(match x.generics.len().cmp(&ty.generic_count) {
@@ -58,8 +60,9 @@ impl ResolvedScope {
 									Ordering::Greater => "too many generics in type",
 									_ => unreachable!(),
 								})
-								.with_labels(vec![Label::primary(span.file_id, span.range())]),
-							// TODO: add note at the original declaration
+								.with_labels(vec![Label::primary(span.file_id, span.range()),
+								Label::secondary(decl_span.file_id, decl_span.range())
+									.with_message("original declaration here"),]),
 						);
 					}
 				} else {
@@ -104,8 +107,9 @@ impl ResolvedScope {
 		self.var_spans.insert(name, span);
 	}
 
-	pub fn add_type(&mut self, name: String, ty: ResolvedType) {
-		self.types.insert(name, ty);
+	pub fn add_type(&mut self, span: Span, name: String, ty: ResolvedType) {
+		self.types.insert(name.clone(), ty);
+		self.type_spans.insert(name, span);
 	}
 
 	pub fn set_var(&mut self, ident: Ident, expr: Expr) {
@@ -449,6 +453,7 @@ pub fn resolve(
 				for generic in &func.generics {
 					let name = generic.to_string();
 					frs.add_type(
+						generic.span(),
 						name.clone(),
 						ResolvedType {
 							name,
@@ -483,7 +488,7 @@ pub fn resolve(
 				return_value = Some(expr);
 				break;
 			}
-			Stmt::Class(_, privacy, ident, generics, body) => {
+			Stmt::Class(span, privacy, ident, generics, body) => {
 				check_privacy(privacy, context.clone());
 				let name = ident.to_string();
 				let mut crs = resolved_scope.clone();
@@ -493,10 +498,11 @@ pub fn resolve(
 					fields: HashMap::new(), // TODO
 					funcs: HashMap::new(),  // TODO
 				};
-				crs.add_type(name.clone(), ty.clone());
+				crs.add_type(span.clone(), name.clone(), ty.clone());
 				for generic in generics {
 					let name = generic.to_string();
 					crs.add_type(
+						generic.span(),
 						name.clone(),
 						ResolvedType {
 							name,
@@ -509,7 +515,7 @@ pub fn resolve(
 				}
 				// TODO: use resolved scope
 				let _ = resolve(body.clone(), Context::Class, Some(crs));
-				resolved_scope.add_type(name, ty);
+				resolved_scope.add_type(span, name, ty);
 			}
 			Stmt::BareExpr(_, expr) => {
 				resolved_scope.check_expr(expr);
