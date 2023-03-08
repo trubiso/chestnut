@@ -34,10 +34,17 @@ fn main() {
 	let code = fs::read_to_string("code").unwrap();
 	let file_id = files.add("code", &code);
 
+	let now = std::time::Instant::now();
+	eprint!("Lexing...");
+
 	let lexed = match lexer::lex(&code, file_id) {
 		Ok(x) => x,
 		Err(x) => return emit_errors(&files, x),
 	};
+
+	eprintln!("\rLexed in {}ms", now.elapsed().as_millis());
+	let now = std::time::Instant::now();
+	eprint!("Parsing...");
 
 	let lexed_iter: CodeStream = Stream::from_iter(
 		Span::new(file_id, code.len()..code.len()),
@@ -48,14 +55,22 @@ fn main() {
 		Err(x) => return emit_errors(&files, x),
 	};
 
-	println!("{parsed}");
+	eprintln!("\rParsed in {}ms", now.elapsed().as_millis());
+	let now = std::time::Instant::now();
+	eprint!("Resolving...");
 
 	let resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None, None) {
 		Ok((x, _)) => x,
 		Err(x) => return emit_errors(&files, x),
 	};
 
+	eprintln!("\rResolved in {}ms", now.elapsed().as_millis());
+	let now = std::time::Instant::now();
+	eprint!("Codegenning...");
+
 	let code = codegen::codegen(resolved);
+
+	eprintln!("\rCodegenned in {}ms", now.elapsed().as_millis());
 
 	println!("{code}");
 }
