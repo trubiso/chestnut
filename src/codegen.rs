@@ -125,6 +125,10 @@ pub fn codegen_func(func: ResolvedFunc) -> String {
 		}
 	}
 	code += ")";
+	if func.attribs.is_pure {
+		code += " CHESTNUT_PURE ";
+	}
+	// TODO: func.attribs.is_mut
 	code += "{";
 	code += &codegen_scope(func.body);
 	code += "}";
