@@ -65,12 +65,12 @@ i32 main(string[4+4] args, i32[34] arg) {
 
 	~mut r = 10;
 
-	let c = do_thing(3);
-
-	/***/
+	let c = do_thing(3); // TODO: lex /***/ properly
 
 	let a = 'a';
 	3 + a();
+
+	(err) => print(err);
 
 	/* void goofy_void() {
 		print("hello from the goofy void");

@@ -4,6 +4,13 @@ use crate::{
 	resolve::{ResolvedScope, ResolvedStmt},
 };
 
+pub fn comma<T>(args: Vec<T>, closure: fn(&T) -> String) -> String {
+	args.iter()
+		.map(closure)
+		.reduce(|acc, b| acc + "," + &b)
+		.unwrap_or_else(String::new)
+}
+
 pub fn codegen_expr(expr: Expr) -> String {
 	match expr {
 		Expr::CharLiteral(_, value) => value,
@@ -27,14 +34,17 @@ pub fn codegen_expr(expr: Expr) -> String {
 			format!("({}{op}{})", codegen_expr(*lhs), codegen_expr(*rhs))
 		}
 		Expr::UnaryOp(_, op, val) => format!("({op}{})", codegen_expr(*val)),
-		Expr::Lambda(_, func) => todo!(),
+		// TODO: we can't do this yet as this carries a Func and therefore a regular Scope
+		Expr::Lambda(_, func) => {
+			format!(
+				"([&]({}){{}})",
+				comma(func.args, |x| codegen_ty_ident(x.clone()))
+			)
+		}
 		Expr::Call(_, callee, args) => format!(
 			"{}({})",
 			codegen_expr(*callee),
-			args.iter()
-				.map(|x| codegen_expr(x.clone()))
-				.reduce(|acc, b| acc + "," + &b)
-				.unwrap_or_else(String::new)
+			comma(args, |x| codegen_expr(x.clone()))
 		),
 		Expr::Error(_) => panic!(),
 	}
