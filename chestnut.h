@@ -19,4 +19,10 @@ namespace Chestnut {
 	typedef long double f128;
 	// TODO: string
 	// TODO: char
+
+	void const main();
+}
+
+int main() {
+	Chestnut::main();
 }
