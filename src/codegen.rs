@@ -115,12 +115,12 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 	}
 }
 
-pub fn codegen_func(func: ResolvedFunc) -> String {
+pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	let mut code = "".to_string();
 	if func.attribs.is_pure {
 		code += "constexpr ";
 	}
-	code += &format!("{} {}(", codegen_ty(func.return_ty), func.name);
+	code += &format!("{} {}(", codegen_ty(func.return_ty.clone()), func.name);
 	for (i, arg) in func.args.iter().enumerate() {
 		code += &format!("{} {}", codegen_ty(arg.ty.clone()), arg.name);
 		if i < func.args.len() - 1 {
@@ -129,17 +129,33 @@ pub fn codegen_func(func: ResolvedFunc) -> String {
 	}
 	code += ")";
 	// TODO: func.attribs.is_mut
+	if semi { code += ";"; }
+	code
+}
+
+pub fn codegen_func_predecl(func: &ResolvedFunc) -> String {
+	codegen_func_noscope(func, true)
+}
+
+pub fn codegen_func(func: &ResolvedFunc) -> String {
+	let body = func.body.clone();
+	let mut code = codegen_func_noscope(func, false);
 	code += "{";
-	code += &codegen_scope(func.body);
+	code += &codegen_scope(body);
 	code += "}";
 	code
 }
 
 pub fn codegen_scope(scope: ResolvedScope) -> String {
 	let mut code = "".to_string();
+	let mut predecls = "".to_string();
+	let mut funcs = "".to_string();
 	for (_, func) in scope.data.funcs {
-		code += &codegen_func(func);
+		predecls += &codegen_func_predecl(&func);
+		funcs += &codegen_func(&func);
 	}
+	code += &predecls;
+	code += &funcs;
 	for stmt in scope.stmts {
 		code += &codegen_stmt(stmt);
 	}
