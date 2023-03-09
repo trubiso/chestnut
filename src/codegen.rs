@@ -117,14 +117,15 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 
 pub fn codegen_func(func: ResolvedFunc) -> String {
 	let mut code = "".to_string();
-	code += &format!("[[nodiscard]] {} {}(", func.return_ty, func.name);
+	code += &format!("{} {}(", func.return_ty, func.name);
 	for (i, arg) in func.args.iter().enumerate() {
 		code += &format!("{} {}", codegen_ty(arg.ty.clone()), arg.name);
 		if i < func.args.len() - 1 {
 			code += ", ";
 		}
 	}
-	code += ") {";
+	code += ")";
+	code += "{";
 	code += &codegen_scope(func.body);
 	code += "}";
 	code

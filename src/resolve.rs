@@ -1,5 +1,5 @@
 use crate::{
-	parser::types::{BuiltinType, Expr, Func, Ident, Privacy, Scope, Stmt, Type, TypedIdent},
+	parser::types::{BuiltinType, Expr, Func, Ident, Privacy, Scope, Stmt, Type, TypedIdent, FuncAttribs},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -217,6 +217,7 @@ impl ResolvedScope {
 		func: Func,
 		return_ty: Type,
 		body: ResolvedScope,
+		attribs: FuncAttribs,
 	) {
 		let mut args = vec![];
 		for arg in func.args {
@@ -233,6 +234,7 @@ impl ResolvedScope {
 				args,
 				return_ty,
 				body,
+				attribs,
 			},
 		);
 		self.data.func_spans.insert(ident.to_string(), span);
@@ -302,6 +304,7 @@ impl ResolvedScope {
 								.collect(),
 							return_ty: ty,
 							body: scope,
+							attribs: FuncAttribs::default(),
 						},
 						func.span,
 					)
@@ -427,6 +430,7 @@ pub struct ResolvedFunc {
 	pub args: Vec<ResolvedArg>,
 	pub return_ty: Type,
 	pub body: ResolvedScope,
+	pub attribs: FuncAttribs,
 }
 
 #[derive(Debug, Clone)]
@@ -594,7 +598,8 @@ pub fn resolve(
 						Err(_) => ResolvedScope::default(),
 					}
 				};
-				resolved_scope.add_func(span, ident, func, return_ty, body);
+				let attribs = func.attribs.clone();
+				resolved_scope.add_func(span, ident, func, return_ty, body, attribs);
 			}
 			Stmt::Return(span, expr) => {
 				if context != Context::Func {
