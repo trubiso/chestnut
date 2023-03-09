@@ -12,15 +12,7 @@ pub enum ResolvedStmt {
 	Create(Span, Privacy, TypedIdent, Expr),
 	Declare(Span, Privacy, TypedIdent),
 	Set(Span, Ident, Expr),
-	Func(Span, Privacy, Ident, ResolvedFunc),
 	Return(Span, Expr),
-	Class(
-		Span,
-		Privacy,
-		Ident,
-		Vec<Ident>, /* generics */
-		ResolvedScope,
-	),
 	BareExpr(Span, Expr),
 }
 
@@ -30,9 +22,7 @@ impl ResolvedStmt {
 			Self::Create(x, _, _, _)
 			| Self::Declare(x, _, _)
 			| Self::Set(x, _, _)
-			| Self::Func(x, _, _, _)
 			| Self::Return(x, _)
-			| Self::Class(x, _, _, _, _)
 			| Self::BareExpr(x, _) => x.clone(),
 		}
 	}

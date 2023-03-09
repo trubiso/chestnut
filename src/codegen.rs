@@ -79,6 +79,9 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 		ResolvedStmt::Set(_, ident, expr) => {
 			format!("{} = {};", ident.to_string(), codegen_expr(expr))
 		}
+		ResolvedStmt::Return(_, expr) => {
+			format!("return {};", codegen_expr(expr))
+		}
 		_ => "".into()
 	}
 }
