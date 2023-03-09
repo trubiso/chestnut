@@ -41,6 +41,21 @@ pub struct InheritableData {
 	// TODO: remove scopes from type & func spans
 }
 
+impl std::ops::Add for InheritableData {
+	type Output = InheritableData;
+
+	fn add(self, mut rhs: Self) -> Self::Output {
+		Self {
+			vars: rhs.vars.into_iter().chain(self.vars).collect(),
+			var_spans: rhs.var_spans.into_iter().chain(self.var_spans).collect(),
+			funcs: rhs.funcs.into_iter().chain(self.funcs).collect(),
+			func_spans: rhs.func_spans.into_iter().chain(self.func_spans).collect(),
+			types: rhs.types.into_iter().chain(self.types).collect(),
+			type_spans: rhs.type_spans.into_iter().chain(self.type_spans).collect(),
+		}
+	}
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ResolvedScope {
 	pub data: InheritableData,
@@ -61,14 +76,14 @@ macro_rules! get_datum {
 		fn $name(&self, name: &str) -> Option<&$ty> {
 			match self.data.$ident.get(name) {
 				Some(x) => Some(x),
-				None => self.inherit.$ident.get(name)
+				None => self.inherit.$ident.get(name),
 			}
 		}
 
 		fn $nmut(&mut self, name: &str) -> Option<&mut $ty> {
 			match self.data.$ident.get_mut(name) {
 				Some(x) => Some(x),
-				None => self.inherit.$ident.get_mut(name)
+				None => self.inherit.$ident.get_mut(name),
 			}
 		}
 
@@ -457,7 +472,7 @@ pub fn resolve(
 ) -> Result<(ResolvedScope, Type), Vec<Diagnostic<usize>>> {
 	let mut resolved_scope = ResolvedScope::default();
 	if let Some(scope) = inherit_scope {
-		resolved_scope = scope;
+		resolved_scope.inherit = scope.data + scope.inherit;
 	}
 	let mut return_ty = Type::Builtin(scope.span, BuiltinType::Void);
 	let mut return_span = None;
