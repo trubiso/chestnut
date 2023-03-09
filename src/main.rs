@@ -59,7 +59,7 @@ fn main() {
 
 		let code = codegen::codegen(resolved);
 
-		std::fs::write(format!("{arg}.cpp"), code);
+		std::fs::write(format!("{arg}.cpp"), code).unwrap();
 		cpp_sources.push(format!("{arg}.cpp"));
 	}
 

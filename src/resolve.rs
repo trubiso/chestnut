@@ -73,6 +73,7 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 
 macro_rules! get_datum {
 	($name:ident $nmut:ident $nhas:ident => $ident:ident ($ty:ty)) => {
+		#[allow(unused)]
 		fn $name(&self, name: &str) -> Option<&$ty> {
 			match self.data.$ident.get(name) {
 				Some(x) => Some(x),
@@ -80,6 +81,7 @@ macro_rules! get_datum {
 			}
 		}
 
+		#[allow(unused)]
 		fn $nmut(&mut self, name: &str) -> Option<&mut $ty> {
 			match self.data.$ident.get_mut(name) {
 				Some(x) => Some(x),
@@ -87,6 +89,7 @@ macro_rules! get_datum {
 			}
 		}
 
+		#[allow(unused)]
 		fn $nhas(&self, name: &str) -> bool {
 			self.data.$ident.contains_key(name) || self.inherit.$ident.contains_key(name)
 		}
