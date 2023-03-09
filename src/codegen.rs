@@ -1,6 +1,7 @@
 use crate::{
+	lexer::{NumberLiteralKind, NumberLiteralRepr},
 	parser::types::{Expr, Privacy, Type, TypedIdent},
-	resolve::{ResolvedScope, ResolvedStmt}, lexer::{NumberLiteralRepr, NumberLiteralKind},
+	resolve::{ResolvedScope, ResolvedStmt},
 };
 
 pub fn codegen_expr(expr: Expr) -> String {
@@ -12,20 +13,29 @@ pub fn codegen_expr(expr: Expr) -> String {
 				NumberLiteralRepr::Binary => "0b",
 				NumberLiteralRepr::Octal => "0o",
 				NumberLiteralRepr::Hex => "0x",
-				NumberLiteralRepr::Decimal => ""
+				NumberLiteralRepr::Decimal => "",
 			};
 			let value = number_literal.value;
 			match number_literal.kind {
-			NumberLiteralKind::IZ => format!("((iz){prefix}{value})"),
-			NumberLiteralKind::UZ => format!("((uz){prefix}{value}u)"),
-			x => format!("{prefix}{value}{x}"),
+				NumberLiteralKind::IZ => format!("((iz){prefix}{value})"),
+				NumberLiteralKind::UZ => format!("((uz){prefix}{value}u)"),
+				x => format!("{prefix}{value}{x}"),
 			}
-		},
+		}
 		Expr::Identifier(_, ident) => ident.to_string(),
-		Expr::BinaryOp(_, lhs, op, rhs) => format!("({}{op}{})", codegen_expr(*lhs), codegen_expr(*rhs)),
+		Expr::BinaryOp(_, lhs, op, rhs) => {
+			format!("({}{op}{})", codegen_expr(*lhs), codegen_expr(*rhs))
+		}
 		Expr::UnaryOp(_, op, val) => format!("({op}{})", codegen_expr(*val)),
 		Expr::Lambda(_, func) => todo!(),
-		Expr::Call(_, callee, args) => "[CALL]".into(), // TODO
+		Expr::Call(_, callee, args) => format!(
+			"{}({})",
+			codegen_expr(*callee),
+			args.iter()
+				.map(|x| codegen_expr(x.clone()))
+				.reduce(|acc, b| acc + "," + &b)
+				.unwrap_or_else(String::new)
+		),
 		Expr::Error(_) => panic!(),
 	}
 }
@@ -71,10 +81,19 @@ pub fn codegen_privacy(privacy: Privacy) -> String {
 pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 	match stmt {
 		ResolvedStmt::Create(_, privacy, ty_ident, expr) => {
-			format!("{}{} = {};", codegen_privacy(privacy), codegen_ty_ident(ty_ident), codegen_expr(expr))
+			format!(
+				"{}{} = {};",
+				codegen_privacy(privacy),
+				codegen_ty_ident(ty_ident),
+				codegen_expr(expr)
+			)
 		}
 		ResolvedStmt::Declare(_, privacy, ty_ident) => {
-			format!("{}{};", codegen_privacy(privacy), codegen_ty_ident(ty_ident))
+			format!(
+				"{}{};",
+				codegen_privacy(privacy),
+				codegen_ty_ident(ty_ident)
+			)
 		}
 		ResolvedStmt::Set(_, ident, expr) => {
 			format!("{} = {};", ident.to_string(), codegen_expr(expr))
@@ -82,7 +101,7 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 		ResolvedStmt::Return(_, expr) => {
 			format!("return {};", codegen_expr(expr))
 		}
-		_ => "".into()
+		_ => "".into(),
 	}
 }
 
