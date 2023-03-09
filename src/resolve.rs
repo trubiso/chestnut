@@ -29,11 +29,7 @@ impl ResolvedStmt {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct ResolvedScope {
-	// TODO: assign each var a usize to know declaration order.
-	// funcs don't need order, they can be arbitrarily defined.
-	// TODO on the TODO: rather simply put stmts because stmts need an order, not
-	// only vars
+pub struct InheritableData {
 	pub vars: HashMap<String, ResolvedVar>,
 	pub var_spans: HashMap<String, Span>,
 	// TODO: top level analyzer
@@ -43,6 +39,12 @@ pub struct ResolvedScope {
 	pub types: HashMap<String, ResolvedType>,
 	pub type_spans: HashMap<String, Span>,
 	// TODO: remove scopes from type & func spans
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ResolvedScope {
+	pub data: InheritableData,
+	pub inherit: InheritableData,
 	pub stmts: Vec<ResolvedStmt>,
 }
 
@@ -54,7 +56,36 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
+macro_rules! get_datum {
+	($name:ident $nmut:ident $nhas:ident => $ident:ident ($ty:ty)) => {
+		fn $name(&self, name: &str) -> Option<&$ty> {
+			match self.data.$ident.get(name) {
+				Some(x) => Some(x),
+				None => self.inherit.$ident.get(name)
+			}
+		}
+
+		fn $nmut(&mut self, name: &str) -> Option<&mut $ty> {
+			match self.data.$ident.get_mut(name) {
+				Some(x) => Some(x),
+				None => self.inherit.$ident.get_mut(name)
+			}
+		}
+
+		fn $nhas(&self, name: &str) -> bool {
+			self.data.$ident.contains_key(name) || self.inherit.$ident.contains_key(name)
+		}
+	};
+}
+
 impl ResolvedScope {
+	get_datum!(get_type get_type_mut has_type => types (ResolvedType));
+	get_datum!(get_type_span get_type_span_mut has_type_span => type_spans (Span));
+	get_datum!(get_var get_var_mut has_var => vars (ResolvedVar));
+	get_datum!(get_var_span get_var_span_mut has_var_span => var_spans (Span));
+	get_datum!(get_func get_func_mut has_func => funcs (ResolvedFunc));
+	get_datum!(get_func_span get_func_span_mut has_func_span => func_spans (Span));
+
 	pub fn check_type(&self, ty: Type) {
 		match ty {
 			Type::BareType(span, x) => {
@@ -71,9 +102,9 @@ impl ResolvedScope {
 								.with_labels(vec![Label::primary(span.file_id, span.range())]),
 						)
 					}
-				} else if let Some(ty) = self.types.get(&x.ident.to_string()) {
+				} else if let Some(ty) = self.get_type(&x.ident.to_string()) {
 					if ty.generic_count != x.generics.len() {
-						let decl_span = self.type_spans.get(&x.ident.to_string()).unwrap();
+						let decl_span = self.get_type_span(&x.ident.to_string()).unwrap();
 						add_diagnostic(
 							Diagnostic::error()
 								.with_message(match x.generics.len().cmp(&ty.generic_count) {
@@ -118,7 +149,7 @@ impl ResolvedScope {
 		}
 		let name = ty_ident.ident_str();
 		let ty = ty_ident.ty;
-		self.vars.insert(
+		self.data.vars.insert(
 			name.clone(),
 			ResolvedVar {
 				name: name.clone(),
@@ -126,22 +157,22 @@ impl ResolvedScope {
 				value,
 			},
 		);
-		self.var_spans.insert(name, span);
+		self.data.var_spans.insert(name, span);
 	}
 
 	pub fn add_type(&mut self, span: Span, name: String, ty: ResolvedType) {
-		self.types.insert(name.clone(), ty);
-		self.type_spans.insert(name, span);
+		self.data.types.insert(name.clone(), ty);
+		self.data.type_spans.insert(name, span);
 	}
 
 	pub fn set_var(&mut self, ident: Ident, expr: Expr) {
 		if ident.is_discarded() {
 			return;
 		}
-		if let Some(x) = self.vars.get_mut(&ident.to_string()) {
+		if let Some(x) = self.get_var_mut(&ident.to_string()) {
 			if !matches!(&x.ty, Type::Mut(_, _)) {
 				let span = ident.span() + expr.span();
-				let var_span = self.var_spans.get(&ident.to_string()).unwrap();
+				let var_span = self.get_var_span(&ident.to_string()).unwrap();
 				add_diagnostic(
 					Diagnostic::error()
 						.with_message("tried to set non-mut symbol")
@@ -180,7 +211,7 @@ impl ResolvedScope {
 			});
 		}
 
-		self.funcs.insert(
+		self.data.funcs.insert(
 			ident.to_string(),
 			ResolvedFunc {
 				name: ident.to_string(),
@@ -189,12 +220,12 @@ impl ResolvedScope {
 				body,
 			},
 		);
-		self.func_spans.insert(ident.to_string(), span);
+		self.data.func_spans.insert(ident.to_string(), span);
 	}
 
 	pub fn check_ident_exists(&self, ident: Ident) {
-		let vars_has = self.vars.contains_key(&ident.to_string());
-		let funcs_has = self.funcs.contains_key(&ident.to_string());
+		let vars_has = self.has_var(&ident.to_string());
+		let funcs_has = self.has_func(&ident.to_string());
 		if !vars_has && !funcs_has {
 			let span = ident.span();
 			add_diagnostic(
@@ -233,11 +264,10 @@ impl ResolvedScope {
 				let func_expr_span = func_expr.span();
 				let (func, decl_span) = if let Expr::Identifier(_, name) = *func_expr {
 					self.check_ident_exists(name.clone());
-					let Some(func) = self.funcs.get(&name.to_string()) else { return; };
+					let Some(func) = self.get_func(&name.to_string()) else { return; };
 					(
 						func.clone(),
-						self.func_spans
-							.get(&name.to_string())
+						self.get_func_span(&name.to_string())
 							.cloned()
 							.unwrap_or(func_expr_span),
 					)
@@ -318,8 +348,7 @@ impl ResolvedScope {
 			Expr::StringLiteral(span, _) => Type::Builtin(span, BuiltinType::String),
 			Expr::NumberLiteral(span, literal) => Type::Builtin(span, literal.as_ty()),
 			Expr::Identifier(span, ident) => self
-				.vars
-				.get(&ident.to_string())
+				.get_var(&ident.to_string())
 				.map(|x| x.ty.clone())
 				.unwrap_or_else(|| Type::Builtin(span, BuiltinType::Error)),
 			Expr::BinaryOp(span, lhs, _op, rhs) => {
@@ -349,8 +378,7 @@ impl ResolvedScope {
 				Type::Builtin(span, BuiltinType::Error)
 			}
 			Expr::Call(span, ident, _args) => self
-				.funcs
-				.get(&ident.to_string())
+				.get_func(&ident.to_string())
 				.map(|x| x.return_ty.clone())
 				.unwrap_or_else(|| {
 					// TODO: ???

@@ -117,7 +117,7 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 
 pub fn codegen(scope: ResolvedScope) -> String {
 	let mut code = "".to_string();
-	for (_, mut func) in scope.funcs {
+	for (_, mut func) in scope.data.funcs {
 		code += &format!("[[nodiscard]] {} {}(", func.return_ty, func.name);
 		for (i, arg) in func.args.iter().enumerate() {
 			code += &format!("{} {}", arg.ty, arg.name);
@@ -128,7 +128,6 @@ pub fn codegen(scope: ResolvedScope) -> String {
 		code += ") {";
 		// FIXME: separate inherited and non-inherited funcs & classes, otherwise
 		// our output becomes gigantic. this is just a workaround
-		func.body.funcs.clear();
 		code += &codegen(func.body);
 		code += "}";
 	}
