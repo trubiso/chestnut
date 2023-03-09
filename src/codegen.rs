@@ -66,13 +66,13 @@ pub fn codegen_ty(ty: Type) -> String {
 			),
 			Type::Builtin(_, x) => format!("{x}{m}"),
 			Type::Array(_, lhs, rhs) => format!(
-				"Chestnut::Array<{}{}>{m}",
-				*lhs,
+				"Array<{}{}>{m}",
+				inner(*lhs, false),
 				rhs.map(|x| ",".to_string() + &codegen_expr(*x))
 					.unwrap_or_else(String::new)
 			),
-			Type::Ref(_, x) => format!("Chestnut::Ref<{}>{m}", inner(*x, false)),
-			Type::Optional(_, x) => format!("Chestnut::Optional<{}>{m}", inner(*x, false)),
+			Type::Ref(_, x) => format!("Ref<{}>{m}", inner(*x, false)),
+			Type::Optional(_, x) => format!("Optional<{}>{m}", inner(*x, false)),
 			Type::Mut(_, x) => inner(*x, true),
 			Type::Inferred(_) => panic!("unsupported Inferred type in codegen!"),
 		}
@@ -120,7 +120,7 @@ pub fn codegen(scope: ResolvedScope) -> String {
 	for (_, mut func) in scope.data.funcs {
 		code += &format!("[[nodiscard]] {} {}(", func.return_ty, func.name);
 		for (i, arg) in func.args.iter().enumerate() {
-			code += &format!("{} {}", arg.ty, arg.name);
+			code += &format!("{} {}", codegen_ty(arg.ty.clone()), arg.name);
 			if i < func.args.len() - 1 {
 				code += ", ";
 			}
