@@ -117,7 +117,10 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 
 pub fn codegen_func(func: ResolvedFunc) -> String {
 	let mut code = "".to_string();
-	code += &format!("{} {}(", func.return_ty, func.name);
+	if func.attribs.is_pure {
+		code += "constexpr ";
+	}
+	code += &format!("{} {}(", codegen_ty(func.return_ty), func.name);
 	for (i, arg) in func.args.iter().enumerate() {
 		code += &format!("{} {}", codegen_ty(arg.ty.clone()), arg.name);
 		if i < func.args.len() - 1 {
@@ -125,9 +128,6 @@ pub fn codegen_func(func: ResolvedFunc) -> String {
 		}
 	}
 	code += ")";
-	if func.attribs.is_pure {
-		code += " CHESTNUT_PURE ";
-	}
 	// TODO: func.attribs.is_mut
 	code += "{";
 	code += &codegen_scope(func.body);
