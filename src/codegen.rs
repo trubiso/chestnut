@@ -147,7 +147,8 @@ pub fn codegen_scope(scope: ResolvedScope) -> String {
 }
 
 pub fn codegen(scope: ResolvedScope) -> String {
-	let mut code = "#include \"chestnut.h\"\n".to_string();
+	let mut code = "#include \"chestnut.h\"\nnamespace Chestnut {".to_string();
 	code += &codegen_scope(scope);
+	code += "}";
 	code
 }
