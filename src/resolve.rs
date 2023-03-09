@@ -44,7 +44,7 @@ pub struct InheritableData {
 impl std::ops::Add for InheritableData {
 	type Output = InheritableData;
 
-	fn add(self, mut rhs: Self) -> Self::Output {
+	fn add(self, rhs: Self) -> Self::Output {
 		Self {
 			vars: rhs.vars.into_iter().chain(self.vars).collect(),
 			var_spans: rhs.var_spans.into_iter().chain(self.var_spans).collect(),

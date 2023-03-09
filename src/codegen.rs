@@ -1,7 +1,7 @@
 use crate::{
 	lexer::{NumberLiteralKind, NumberLiteralRepr},
 	parser::types::{Expr, Privacy, Type, TypedIdent},
-	resolve::{ResolvedScope, ResolvedStmt},
+	resolve::{ResolvedFunc, ResolvedScope, ResolvedStmt},
 };
 
 pub fn comma<T>(args: Vec<T>, closure: fn(&T) -> String) -> String {
@@ -115,24 +115,34 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 	}
 }
 
-pub fn codegen(scope: ResolvedScope) -> String {
+pub fn codegen_func(func: ResolvedFunc) -> String {
 	let mut code = "".to_string();
-	for (_, mut func) in scope.data.funcs {
-		code += &format!("[[nodiscard]] {} {}(", func.return_ty, func.name);
-		for (i, arg) in func.args.iter().enumerate() {
-			code += &format!("{} {}", codegen_ty(arg.ty.clone()), arg.name);
-			if i < func.args.len() - 1 {
-				code += ", ";
-			}
+	code += &format!("[[nodiscard]] {} {}(", func.return_ty, func.name);
+	for (i, arg) in func.args.iter().enumerate() {
+		code += &format!("{} {}", codegen_ty(arg.ty.clone()), arg.name);
+		if i < func.args.len() - 1 {
+			code += ", ";
 		}
-		code += ") {";
-		// FIXME: separate inherited and non-inherited funcs & classes, otherwise
-		// our output becomes gigantic. this is just a workaround
-		code += &codegen(func.body);
-		code += "}";
+	}
+	code += ") {";
+	code += &codegen_scope(func.body);
+	code += "}";
+	code
+}
+
+pub fn codegen_scope(scope: ResolvedScope) -> String {
+	let mut code = "".to_string();
+	for (_, func) in scope.data.funcs {
+		code += &codegen_func(func);
 	}
 	for stmt in scope.stmts {
 		code += &codegen_stmt(stmt);
 	}
+	code
+}
+
+pub fn codegen(scope: ResolvedScope) -> String {
+	let mut code = "#include \"chestnut.h\"\n".to_string();
+	code += &codegen_scope(scope);
 	code
 }
