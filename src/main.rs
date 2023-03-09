@@ -33,50 +33,46 @@ fn main() {
 	let mut files = SimpleFiles::new();
 	let mut args = std::env::args();
 	args.next();
+	let mut cpp_sources = Vec::new();
 	while let Some(arg) = args.next() {
 		let code = fs::read_to_string(arg.clone()).unwrap();
 		let file_id = files.add(arg.clone(), code);
-
-		let now = std::time::Instant::now();
-		eprint!("Lexing...");
 
 		let lexed = match lexer::lex(files.get(file_id).unwrap().source(), file_id) {
 			Ok(x) => x,
 			Err(x) => return emit_errors(&files, x),
 		};
 
-		eprintln!("\rLexed in {}ms", now.elapsed().as_millis());
-		let now = std::time::Instant::now();
-		eprint!("Parsing...");
-
 		let code_len = files.get(file_id).unwrap().source().len();
 
-		let lexed_iter: CodeStream = Stream::from_iter(
-			Span::new(file_id, code_len..code_len),
-			lexed.into_iter(),
-		);
+		let lexed_iter: CodeStream =
+			Stream::from_iter(Span::new(file_id, code_len..code_len), lexed.into_iter());
 		let parsed = match parser::parse(lexed_iter) {
 			Ok(x) => x,
 			Err(x) => return emit_errors(&files, x),
 		};
-
-		eprintln!("\rParsed in {}ms", now.elapsed().as_millis());
-		let now = std::time::Instant::now();
-		eprint!("Resolving...");
 
 		let resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None, None) {
 			Ok((x, _)) => x,
 			Err(x) => return emit_errors(&files, x),
 		};
 
-		eprintln!("\rResolved in {}ms", now.elapsed().as_millis());
-		let now = std::time::Instant::now();
-		eprint!("Codegenning...");
-
 		let code = codegen::codegen(resolved);
 
-		eprintln!("\rCodegenned in {}ms", now.elapsed().as_millis());
-
 		std::fs::write(format!("{arg}.cpp"), code);
+		cpp_sources.push(format!("{arg}.cpp"));
 	}
+
+	let mut clang_format = std::process::Command::new("clang-format");
+	clang_format.arg("-i");
+	for file in &cpp_sources {
+		clang_format.arg(file);
+	}
+	clang_format.output().expect("failed to clang-format");
+
+	let mut gcc = std::process::Command::new("g++");
+	for file in &cpp_sources {
+		gcc.arg(file);
+	}
+	gcc.output().expect("failed to g++");
 }
