@@ -226,6 +226,7 @@ def_token!(
 		"}" => RBrace,
 		"," => Comma,
 		":" => Colon,
+		"::" => ColonColon,
 		";" => Semicolon,
 	}
 );

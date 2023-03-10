@@ -1,5 +1,3 @@
-#![feature(trait_alias)]
-
 use chumsky::Stream;
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::files::SimpleFiles;

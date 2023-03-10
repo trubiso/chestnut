@@ -46,7 +46,7 @@ macro_rules! func_attribs {
 	};
 }
 
-fn func_attribs() -> impl TokenParser<FuncAttribs> {
+fn func_attribs() -> token_parser!(FuncAttribs) {
 	func_attribs!(
 		Pure => is_pure
 		Mut => is_mut
@@ -54,19 +54,19 @@ fn func_attribs() -> impl TokenParser<FuncAttribs> {
 }
 
 /// Parses `<ty ident>, ...` into Vec<TypedIdent>
-fn func_args() -> impl TokenParser<Vec<TypedIdent>> {
+fn func_args() -> token_parser!(Vec<TypedIdent>) {
 	parened!(ty_ident(None),)
 }
 
 /// Parses `<<ident>, ...>` into Vec<Ident>
-fn generics_declare() -> impl TokenParser<Vec<Ident>> {
+fn generics_declare() -> token_parser!(Vec<Ident>) {
 	angled!(ident_nodiscard(),)
 		.or_not()
 		.map(|x| x.unwrap_or_default())
 }
 
 /// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
-fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
+fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 	privacy_attribs()
 		.then(ty_ident_nodiscard(None))
 		.then(generics_declare())
@@ -101,7 +101,7 @@ fn func_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 }
 
 /// Parses `let <ident> = <expr>;` into Stmt::Let
-fn let_stmt() -> impl TokenParser<Stmt> {
+fn let_stmt() -> token_parser!(Stmt) {
 	privacy_attribs()
 		.then_ignore(jkeyword!(Let))
 		.then(assg!(ignore Set))
@@ -111,7 +111,7 @@ fn let_stmt() -> impl TokenParser<Stmt> {
 }
 
 /// Parses `<ty ident> = <expr>;` into Stmt::Create
-fn create_stmt() -> impl TokenParser<Stmt> {
+fn create_stmt() -> token_parser!(Stmt) {
 	privacy_attribs()
 		.then(ty_ident(None))
 		.then(assg!(noident ignore Set))
@@ -119,7 +119,7 @@ fn create_stmt() -> impl TokenParser<Stmt> {
 }
 
 /// Parses `<ty ident>;` into Stmt::Declare
-fn declare_stmt() -> impl TokenParser<Stmt> {
+fn declare_stmt() -> token_parser!(Stmt) {
 	privacy_attribs()
 		.then(ty_ident_nodiscard(None))
 		.map_with_span(|(privacy, ty_ident), span| Stmt::Declare(span, privacy, ty_ident))
@@ -128,17 +128,17 @@ fn declare_stmt() -> impl TokenParser<Stmt> {
 /// Parses `<expr>;` into Stmt::BareExpr
 ///
 /// Useful, for example, for function calls where the return value is discarded
-fn bare_expr_stmt() -> impl TokenParser<Stmt> {
+fn bare_expr_stmt() -> token_parser!(Stmt) {
 	expr().map_with_span(|x, span| Stmt::BareExpr(span, x))
 }
 
-fn return_stmt() -> impl TokenParser<Stmt> {
+fn return_stmt() -> token_parser!(Stmt) {
 	jkeyword!(Return)
 		.ignore_then(expr())
 		.map_with_span(|x, span| Stmt::Return(span, x))
 }
 
-fn class_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
+fn class_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 	privacy_attribs()
 		.then_ignore(jkeyword!(Class))
 		.then(ident_nodiscard())
@@ -150,7 +150,7 @@ fn class_stmt(scope: ScopeRecursive) -> impl TokenParser<Stmt> + '_ {
 }
 
 /// Parses a bare scope (not wrapped in curly braces) into Scope
-pub fn bare_scope() -> impl TokenParser<Scope> {
+pub fn bare_scope() -> token_parser!(Scope) {
 	recursive(|scope| {
 		stmt(scope, true)
 			.repeated()
@@ -158,7 +158,7 @@ pub fn bare_scope() -> impl TokenParser<Scope> {
 	})
 }
 
-pub fn parser() -> impl TokenParser<Scope> {
+pub fn parser() -> token_parser!(Scope) {
 	bare_scope().then_ignore(end())
 }
 

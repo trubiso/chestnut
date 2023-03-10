@@ -1,4 +1,4 @@
-use super::types::{ScopeRecursive, Stmt, TokenParser};
+use super::types::{ScopeRecursive, Stmt};
 use crate::parser::{
 	bare_expr_stmt, class_stmt, create_stmt, declare_stmt, func_stmt, let_stmt, return_stmt,
 	stmt::assg::assg,
@@ -8,7 +8,7 @@ use chumsky::prelude::*;
 mod assg;
 
 /// Parses any statement, with or without a semicolon, into Stmt
-pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
+pub fn stmt(scope: ScopeRecursive, semi: bool) -> token_parser!(Stmt : '_) {
 	let s = if semi { 1 } else { 0 };
 	macro_rules! semi {
 		(Y $thing:expr) => {

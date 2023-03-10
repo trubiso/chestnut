@@ -1,6 +1,6 @@
 use crate::lexer::Operator;
 use crate::parser::expr::expr;
-use crate::parser::types::{Expr, Stmt, TokenParser};
+use crate::parser::types::{Expr, Stmt};
 use chumsky::prelude::*;
 
 macro_rules! assg_stmt {
@@ -24,7 +24,7 @@ macro_rules! assg_stmt {
 }
 
 /// Parses `<ident> [-|*|+|/]= <expr>` into Stmt::Set
-pub fn assg() -> impl TokenParser<Stmt> {
+pub fn assg() -> token_parser!(Stmt) {
 	choice((
 		assg_stmt!(Set),
 		assg_stmt!(NegSet => Neg),

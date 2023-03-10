@@ -1,4 +1,4 @@
-use super::types::{BuiltinType, ExprRecursive, TokenParser, Type};
+use super::types::{BuiltinType, ExprRecursive, Type};
 use crate::lexer::{Keyword, Operator, Token};
 use crate::parser::expr;
 use crate::parser::types::{BareType, Expr};
@@ -11,7 +11,7 @@ enum PostfixOp {
 }
 
 /// Parses `<ident>[array][optional][ref][mut]` into Type
-pub fn ty(er: Option<ExprRecursive>) -> impl TokenParser<Type> + '_ {
+pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
 			.then(angled!(ty,).or_not())

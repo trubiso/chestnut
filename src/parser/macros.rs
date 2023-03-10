@@ -1,4 +1,15 @@
 #[macro_export]
+macro_rules! token_parser {
+	($ty:ty) => {
+		impl chumsky::Parser<$crate::lexer::Token, $ty, Error = chumsky::error::Simple<$crate::lexer::Token, $crate::span::Span>>
+	};
+
+	($ty:ty : '_) => {
+		impl chumsky::Parser<$crate::lexer::Token, $ty, Error = chumsky::error::Simple<$crate::lexer::Token, $crate::span::Span>> + '_
+	};
+}
+
+#[macro_export]
 macro_rules! ident {
 	($str:expr) => {
 		Ident::Named($str.to_string())

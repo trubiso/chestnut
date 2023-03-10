@@ -1,9 +1,9 @@
-use super::types::{Ident, TokenParser};
+use super::types::{Ident};
 use crate::lexer::Token;
 use chumsky::prelude::*;
 
 /// Parses an ident token into Ident
-pub fn ident() -> impl TokenParser<Ident> {
+pub fn ident() -> token_parser!(Ident) {
 	filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
 		.map_with_span(|token, span| {
 			if token == keyword!(DontCare) {
@@ -15,7 +15,7 @@ pub fn ident() -> impl TokenParser<Ident> {
 }
 
 /// Parses a non-inferred ident token into Ident
-pub fn ident_nodiscard() -> impl TokenParser<Ident> {
+pub fn ident_nodiscard() -> token_parser!(Ident) {
 	filter(|token| matches!(token, Token::Identifier(_)))
 		.map_with_span(|token, span| force_token!(token => Identifier, span))
 }

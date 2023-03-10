@@ -4,7 +4,6 @@ use chumsky::prelude::*;
 use derive_more::Display;
 use std::fmt;
 
-pub trait TokenParser<T> = Parser<Token, T, Error = Simple<Token, Span>>;
 pub type TokenRecursive<'a, T> = Recursive<'a, Token, T, Simple<Token, Span>>;
 pub type ScopeRecursive<'a> = TokenRecursive<'a, Scope>;
 pub type ExprRecursive<'a> = TokenRecursive<'a, Expr>;

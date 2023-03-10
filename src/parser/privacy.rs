@@ -1,4 +1,4 @@
-use super::types::{Privacy, TokenParser};
+use super::types::{Privacy};
 use crate::lexer::Keyword;
 use crate::span::Span;
 use chumsky::prelude::*;
@@ -25,6 +25,6 @@ macro_rules! privacy_qualifiers {
 }
 
 /// Parses `<private|protected|public|export>` into Privacy
-pub fn privacy_attribs() -> impl TokenParser<Privacy> {
+pub fn privacy_attribs() -> token_parser!(Privacy) {
 	privacy_qualifiers!(Private Protected Public Export)
 }

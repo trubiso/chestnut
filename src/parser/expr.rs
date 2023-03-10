@@ -2,7 +2,7 @@ use crate::span::Span;
 
 use super::ident::ident;
 use super::ty_ident::ty_ident;
-use super::types::{Expr, Func, FuncAttribs, Scope, Stmt, TokenParser, Type};
+use super::types::{Expr, Func, FuncAttribs, Scope, Stmt, Type};
 use chumsky::prelude::*;
 
 macro_rules! binop_parser {
@@ -35,7 +35,7 @@ macro_rules! literal_parser {
 }
 
 /// Parses an expression into Expr
-pub fn expr() -> impl TokenParser<Expr> {
+pub fn expr() -> token_parser!(Expr) {
 	// () then - then ! then == != <= >= < > then && then || then *÷ then +-
 	recursive(|e| {
 		let atom = || {
