@@ -258,6 +258,7 @@ impl ResolvedScope {
 	}
 
 	pub fn check_expr(&self, expr: Expr) {
+		// TODO: ResolvedExpr (could probably carry type as well :D)
 		match expr {
 			Expr::CharLiteral(_, _) => {}
 			Expr::StringLiteral(_, _) => {}

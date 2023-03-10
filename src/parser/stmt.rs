@@ -20,6 +20,7 @@ pub fn stmt(scope: ScopeRecursive, semi: bool) -> impl TokenParser<Stmt> + '_ {
 	}
 	choice((
 		semi!(Y let_stmt()),
+		// TODO: mut_stmt (`mut <ident> = <expr>`)
 		semi!(Y create_stmt()),
 		semi!(Y declare_stmt()),
 		semi!(N func_stmt(scope.clone())),
