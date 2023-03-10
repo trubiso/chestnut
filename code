@@ -5,4 +5,5 @@ void main() {
 	let x = 10;
 	let y = 20;
 	let z = quarter(double_value(x) + y + x);
+	std::do();
 }

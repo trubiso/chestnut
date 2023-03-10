@@ -22,7 +22,12 @@ pub fn ident_nodiscard() -> token_parser!(Ident) {
 
 /// Parses `<ident_nodiscard>::...` into Ident::Qualified
 pub fn qualified_ident() -> token_parser!(Ident) {
+	// TODO: maybe have a corresponding Vec<Span>
 	ident_nodiscard()
 		.separated_by(jpunct!(ColonColon))
 		.map_with_span(|names, span| Ident::Qualified(span, names))
+}
+
+pub fn potentially_qualified_ident() -> token_parser!(Ident) {
+	qualified_ident().or(ident_nodiscard())
 }

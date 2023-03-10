@@ -1,8 +1,7 @@
-use crate::span::Span;
-
-use super::ident::ident;
+use super::ident::{ident, potentially_qualified_ident};
 use super::ty_ident::ty_ident;
 use super::types::{Expr, Func, FuncAttribs, Scope, Stmt, Type};
+use crate::span::Span;
 use chumsky::prelude::*;
 
 macro_rules! binop_parser {
@@ -44,7 +43,7 @@ pub fn expr() -> token_parser!(Expr) {
 				literal_parser!(StringLiteral),
 				literal_parser!(NumberLiteral),
 				literal_parser!(CharLiteral),
-				literal_parser!(Identifier),
+				potentially_qualified_ident().map(|x| Expr::Identifier(x.span(), x)),
 			))
 		};
 		// TODO: dot access parser
@@ -58,7 +57,7 @@ pub fn expr() -> token_parser!(Expr) {
 				.map(|(x, _)| x)
 		};
 		// TODO: qbparser (?!)
-		// TODO: ref_parser (&*) 
+		// TODO: ref_parser (&*)
 		let neg_parser = unop_parser!(Neg => fc_parser);
 		let not_parser = unop_parser!(Bang => neg_parser);
 		let eq_parser = binop_parser!(Eq Ne Lt Gt Le Ge => not_parser);
