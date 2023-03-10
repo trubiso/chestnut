@@ -100,7 +100,7 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 		)
 }
 
-/// Parses `let <ident> = <expr>;` into Stmt::Let
+/// Parses `let <ident> = <expr>;` into Stmt::Create
 fn let_stmt() -> token_parser!(Stmt) {
 	privacy_attribs()
 		.then_ignore(jkeyword!(Let))
@@ -146,6 +146,16 @@ fn class_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 		.then(braced!(scope))
 		.map_with_span(|(((privacy, ident), generics), body), span| {
 			Stmt::Class(span, privacy, ident, generics, body)
+		})
+}
+
+/// Parses `mut <ident> = <expr>;` into Stmt::Create
+fn mut_stmt() -> token_parser!(Stmt) {
+	privacy_attribs()
+		.then_ignore(jkeyword!(Mut))
+		.then(assg!(ignore Set))
+		.map_with_span(|(privacy, (lhs, value)), span| {
+			Stmt::Create(span, privacy, lhs.infer_type().make_mut(), value)
 		})
 }
 

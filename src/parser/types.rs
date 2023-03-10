@@ -271,6 +271,15 @@ impl Type {
 		}
 	}
 
+	pub fn is_mut(&self) -> bool {
+		matches!(self, Type::Mut(_, _))
+	}
+
+	pub fn is_mut_inferred(&self) -> bool {
+		let Type::Mut(_, inner) = self else { return false; };
+		inner.is_inferred()
+	}
+
 	pub fn is_void(&self) -> bool {
 		let Self::Builtin(_, x) = self else { return false; };
 		*x == BuiltinType::Void
@@ -288,6 +297,14 @@ pub struct TypedIdent {
 impl TypedIdent {
 	pub fn ident_str(&self) -> String {
 		self.ident.to_string()
+	}
+
+	pub fn make_mut(self) -> Self {
+		Self {
+			span: self.span.clone(),
+			ty: Type::Mut(self.span, Box::new(self.ty)),
+			ident: self.ident,
+		}
 	}
 }
 
