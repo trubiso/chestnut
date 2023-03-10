@@ -25,6 +25,7 @@ pub fn qualified_ident() -> token_parser!(Ident) {
 	// TODO: maybe have a corresponding Vec<Span>
 	ident_nodiscard()
 		.separated_by(jpunct!(ColonColon))
+		.at_least(2)
 		.map_with_span(|names, span| Ident::Qualified(span, names))
 }
 
