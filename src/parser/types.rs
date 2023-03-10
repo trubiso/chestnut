@@ -238,7 +238,7 @@ impl PartialEq for Type {
 				if let Self::Mut(_, y) = other {
 					*x == *y
 				} else {
-					**x == *other
+					false
 				}
 			}
 			Self::Inferred(_) => matches!(other, Self::Inferred(_)),
@@ -283,6 +283,13 @@ impl Type {
 	pub fn is_void(&self) -> bool {
 		let Self::Builtin(_, x) = self else { return false; };
 		*x == BuiltinType::Void
+	}
+
+	pub fn ignore_mut(&self) -> &Self {
+		match self {
+			Type::Mut(_, inner) => &**inner,
+			_ => self,
+		}
 	}
 }
 

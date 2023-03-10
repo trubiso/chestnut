@@ -193,7 +193,7 @@ impl ResolvedScope {
 			return;
 		}
 		if let Some(x) = self.get_var_mut(&ident.to_string()) {
-			if !matches!(&x.ty, Type::Mut(_, _)) {
+			if !x.ty.is_mut() {
 				let span = ident.span() + expr.span();
 				let var_span = self.get_var_span(&ident.to_string()).unwrap();
 				add_diagnostic(
@@ -383,7 +383,7 @@ impl ResolvedScope {
 				let rhs_span = rhs.span();
 				let lhs_ty = self.get_expr_ty(*lhs);
 				let rhs_ty = self.get_expr_ty(*rhs);
-				if lhs_ty != rhs_ty {
+				if lhs_ty.ignore_mut() != rhs_ty.ignore_mut() {
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("operating with incompatible types")
@@ -532,7 +532,7 @@ pub fn resolve(
 				check_privacy(privacy.clone(), context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.check_expr(expr.clone());
-				let lhs = ty_ident.ty.clone();
+				let lhs = ty_ident.ty.ignore_mut().clone();
 				let rhs = resolved_scope.get_expr_ty(expr.clone());
 				let lhs_span = ty_ident.ty.span();
 				let rhs_span = expr.span();
@@ -559,7 +559,6 @@ pub fn resolve(
 						.stmts
 						.push(ResolvedStmt::Create(span, privacy, ty_ident, expr));
 				} else {
-					// TODO: might throw some c++ warnings
 					resolved_scope
 						.stmts
 						.push(ResolvedStmt::BareExpr(span, expr));
