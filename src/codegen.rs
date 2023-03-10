@@ -129,7 +129,9 @@ pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	}
 	code += ")";
 	// TODO: func.attribs.is_mut
-	if semi { code += ";"; }
+	if semi {
+		code += ";";
+	}
 	code
 }
 
@@ -168,3 +170,7 @@ pub fn codegen(scope: ResolvedScope) -> String {
 	code += "}";
 	code
 }
+
+// TODO: codegen_all_predecls. this would codegen all desired signatures of a
+// file or all of them if specified. this would allow for importing, as the
+// underlying definitions would be linked together by the compiler itself.

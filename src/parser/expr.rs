@@ -47,6 +47,7 @@ pub fn expr() -> impl TokenParser<Expr> {
 				literal_parser!(Identifier),
 			))
 		};
+		// TODO: dot access parser
 		let fc_parser = || {
 			span!(atom())
 				.then(span!(parened!(e.clone(),)).repeated())
@@ -56,6 +57,8 @@ pub fn expr() -> impl TokenParser<Expr> {
 				})
 				.map(|(x, _)| x)
 		};
+		// TODO: qbparser (?!)
+		// TODO: ref_parser (&*) 
 		let neg_parser = unop_parser!(Neg => fc_parser);
 		let not_parser = unop_parser!(Bang => neg_parser);
 		let eq_parser = binop_parser!(Eq Ne Lt Gt Le Ge => not_parser);

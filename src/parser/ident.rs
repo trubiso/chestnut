@@ -19,3 +19,5 @@ pub fn ident_nodiscard() -> impl TokenParser<Ident> {
 	filter(|token| matches!(token, Token::Identifier(_)))
 		.map_with_span(|token, span| force_token!(token => Identifier, span))
 }
+
+// TODO: qualified ident (`ident_nodiscard::...`). foldl the ::s into Vec<String>

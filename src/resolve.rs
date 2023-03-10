@@ -166,6 +166,7 @@ impl ResolvedScope {
 	}
 
 	pub fn add_var(&mut self, span: Span, ty_ident: TypedIdent, value: Option<Expr>) {
+		// TODO: do something with duplicate idents. perhaps mangle them in codegen
 		if ty_ident.ident.is_discarded() {
 			return;
 		}
@@ -395,6 +396,7 @@ impl ResolvedScope {
 							]),
 					);
 				}
+				// TODO: overload with defined operator in case of operator existing
 				// TODO: check if operator is defined
 				match op {
 					Operator::Question | Operator::Bang | Operator::Amp => {
@@ -411,6 +413,7 @@ impl ResolvedScope {
 					Operator::Neg | Operator::Star | Operator::Plus | Operator::Div => lhs_ty,
 				}
 			}
+			// TODO: overload with defined operator in case of operator existing
 			// TODO: &x, *x => ref + deref. these would return non-reffed or reffed tys.
 			Expr::UnaryOp(_span, op, val) => {
 				let ty = self.get_expr_ty(*val);
@@ -479,7 +482,7 @@ pub struct ResolvedFunc {
 #[derive(Debug, Clone)]
 pub struct ResolvedArg {
 	pub name: String,
-	pub ty: Type, // TODO: ResolvedTy
+	pub ty: Type,
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
@@ -601,6 +604,7 @@ pub fn resolve(
 				check_privacy(privacy, context.clone());
 				let mut frs = resolved_scope.clone();
 				for generic in &func.generics {
+					// TODO: deal with discarded generics
 					let name = generic.to_string();
 					frs.add_type(
 						generic.span(),
@@ -617,6 +621,7 @@ pub fn resolve(
 				}
 				frs.check_type(func.return_ty.clone());
 				for arg in &func.args {
+					// TODO: deal with discarded args
 					frs.check_type(arg.ty.clone());
 					frs.add_var(arg.span.clone(), arg.clone(), None);
 				}
