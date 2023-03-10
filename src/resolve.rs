@@ -1,5 +1,9 @@
 use crate::{
-	parser::types::{BuiltinType, Expr, Func, Ident, Privacy, Scope, Stmt, Type, TypedIdent, FuncAttribs},
+	builtin,
+	lexer::Operator,
+	parser::types::{
+		BuiltinType, Expr, Func, FuncAttribs, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
+	},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -373,7 +377,7 @@ impl ResolvedScope {
 				.get_var(&ident.to_string())
 				.map(|x| x.ty.clone())
 				.unwrap_or_else(|| Type::Builtin(span, BuiltinType::Error)),
-			Expr::BinaryOp(span, lhs, _op, rhs) => {
+			Expr::BinaryOp(span, lhs, op, rhs) => {
 				let lhs_span = lhs.span();
 				let rhs_span = rhs.span();
 				let lhs_ty = self.get_expr_ty(*lhs);
@@ -391,10 +395,45 @@ impl ResolvedScope {
 							]),
 					);
 				}
-				lhs_ty
+				// TODO: check if operator is defined
+				match op {
+					Operator::Question | Operator::Bang | Operator::Amp => {
+						panic!("invalid bin op in resolve")
+					}
+					Operator::And
+					| Operator::Or
+					| Operator::Eq
+					| Operator::Ne
+					| Operator::Lt
+					| Operator::Gt
+					| Operator::Le
+					| Operator::Ge => builtin!(span, Bool),
+					Operator::Neg | Operator::Star | Operator::Plus | Operator::Div => lhs_ty,
+				}
 			}
 			// TODO: &x, *x => ref + deref. these would return non-reffed or reffed tys.
-			Expr::UnaryOp(_span, _op, val) => self.get_expr_ty(*val),
+			Expr::UnaryOp(_span, op, val) => {
+				let ty = self.get_expr_ty(*val);
+				match op {
+					Operator::Question => todo!(), // optional chaining or try, idk
+					Operator::Bang => todo!(),     // maybe could be unwrap
+					Operator::Star => todo!(),     // dereference
+					Operator::Amp => todo!(),      // reference
+					Operator::Neg => ty,           // negation
+					Operator::And
+					| Operator::Or
+					| Operator::Eq
+					| Operator::Ne
+					| Operator::Lt
+					| Operator::Gt
+					| Operator::Le
+					| Operator::Ge
+					| Operator::Plus
+					| Operator::Div => {
+						panic!("invalid unary operator in resolution (parser should've caught it)")
+					}
+				}
+			}
 			Expr::Lambda(span, _func) => {
 				// TODO: resolve lambda
 				Type::Builtin(span, BuiltinType::Error)

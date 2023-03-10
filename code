@@ -4,5 +4,5 @@ i32 quarter(i32 x) pure => x / 4;
 void main() {
 	let x = 10;
 	let y = 20;
-	let z = quarter(double_value(x) + y);
+	let z = quarter(double_value(x) + y == x);
 }

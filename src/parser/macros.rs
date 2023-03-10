@@ -61,8 +61,8 @@ delim_gen!(angled => (op, jop) + Lt, Gt);
 
 #[macro_export]
 macro_rules! builtin {
-	($var:ident) => {
-		Type::Builtin(BuiltinType::$var)
+	($span:expr, $var:ident) => {
+		Type::Builtin($span, BuiltinType::$var)
 	};
 }
 
