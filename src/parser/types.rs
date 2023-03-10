@@ -10,12 +10,26 @@ pub type ExprRecursive<'a> = TokenRecursive<'a, Expr>;
 
 // TODO: go on each PartialEq with spans and re-implement it manually
 
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Clone)]
 pub enum Ident {
-	#[display(fmt = "{_1}")]
 	Named(Span, String),
-	#[display(fmt = "~")]
+	Qualified(Span, Vec<Ident>),
 	Discarded(Span),
+}
+
+impl fmt::Display for Ident {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Named(_, x) => f.write_str(x),
+			Self::Qualified(_, x) => f.write_str(
+				&x.iter()
+					.map(|x| format!("{x}"))
+					.reduce(|acc, b| acc + "::" + &b)
+					.unwrap(),
+			),
+			Self::Discarded(_) => f.write_str("~"),
+		}
+	}
 }
 
 impl PartialEq for Ident {
@@ -23,6 +37,13 @@ impl PartialEq for Ident {
 		match self {
 			Self::Named(_, x) => {
 				if let Self::Named(_, y) = other {
+					x == y
+				} else {
+					false
+				}
+			}
+			Self::Qualified(_, x) => {
+				if let Self::Qualified(_, y) = other {
 					x == y
 				} else {
 					false
@@ -39,6 +60,7 @@ impl Ident {
 	pub fn span(&self) -> Span {
 		match self.clone() {
 			Self::Named(x, _) => x,
+			Self::Qualified(x, _) => x,
 			Self::Discarded(x) => x,
 		}
 	}
