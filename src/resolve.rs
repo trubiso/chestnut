@@ -16,11 +16,11 @@ use std::{cmp::Ordering, collections::HashMap, sync::Mutex};
 
 #[derive(Debug, Clone)]
 pub enum ResolvedStmt {
-	Create(Span, Privacy, TypedIdent, Expr),
+	Create(Span, Privacy, TypedIdent, ResolvedExpr),
 	Declare(Span, Privacy, TypedIdent),
-	Set(Span, Ident, Expr),
-	Return(Span, Expr),
-	BareExpr(Span, Expr),
+	Set(Span, Ident, ResolvedExpr),
+	Return(Span, ResolvedExpr),
+	BareExpr(Span, ResolvedExpr),
 }
 
 impl ResolvedStmt {
@@ -356,7 +356,7 @@ impl ResolvedScope {
 	}
 
 	// TODO: be lazier with int literals and automatically cast them in Stmt::Create
-	pub fn get_expr_ty(&self, expr: Expr) -> Type {
+	pub fn get_expr_ty(&self, expr: ResolvedExpr) -> Type {
 		match expr {
 			ResolvedExpr::CharLiteral(span, _) => Type::Builtin(span, BuiltinType::Char),
 			ResolvedExpr::StringLiteral(span, _) => Type::Builtin(span, BuiltinType::String),
@@ -697,10 +697,11 @@ pub fn resolve(
 								.with_message("return statement in global scope")]),
 					);
 				}
-				resolved_scope.check_expr(expr.clone());
-				return_ty = resolved_scope.get_expr_ty(expr.clone());
+				let resolved_expr = resolve_expr(&resolved_scope, expr);
+				resolved_scope.check_expr(resolved_expr.clone());
+				return_ty = resolved_scope.get_expr_ty(resolved_expr.clone());
 				return_span = Some(span.clone());
-				resolved_scope.stmts.push(ResolvedStmt::Return(span, expr));
+				resolved_scope.stmts.push(ResolvedStmt::Return(span, resolved_expr));
 			}
 			Stmt::Class(span, privacy, ident, generics, body) => {
 				check_privacy(privacy, context.clone());
@@ -737,10 +738,11 @@ pub fn resolve(
 				resolved_scope.add_type(span, name, ty);
 			}
 			Stmt::BareExpr(span, expr) => {
-				resolved_scope.check_expr(expr.clone());
+				let resolved_expr = resolve_expr(&resolved_scope, expr);
+				resolved_scope.check_expr(resolved_expr.clone());
 				resolved_scope
 					.stmts
-					.push(ResolvedStmt::BareExpr(span, expr));
+					.push(ResolvedStmt::BareExpr(span, resolved_expr));
 			}
 		}
 	}
