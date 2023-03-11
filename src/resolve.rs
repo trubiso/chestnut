@@ -393,9 +393,22 @@ impl ResolvedScope {
 			ResolvedExpr::CharLiteral(_, _) => {}
 			ResolvedExpr::StringLiteral(_, _) => {}
 			ResolvedExpr::NumberLiteral(_, _) => {}
-			ResolvedExpr::Identifier(_, ident) => {
-				// TODO: add error if it's not initialized
-				self.check_ident_exists(ident);
+			ResolvedExpr::Identifier(span, ident) => {
+				self.check_ident_exists(ident.clone());
+				if let Some(var) = self.get_var(&ident.to_string()) {
+					if var.value.is_none() {
+						let mut diagnostic = Diagnostic::error()
+							.with_message("accessed variable's value before giving it one")
+							.with_labels(vec![Label::primary(span.file_id, span.range())]);
+						if let Some(declspan) = self.get_var_span(&ident.to_string()) {
+							diagnostic.labels.push(
+								Label::secondary(declspan.file_id, declspan.range())
+									.with_message("original declaration here"),
+							)
+						}
+						add_diagnostic(diagnostic);
+					}
+				}
 			}
 			ResolvedExpr::BinaryOp(_, lhs, _op, rhs) => {
 				self.check_expr(*lhs.clone());
@@ -1088,9 +1101,7 @@ pub fn resolve(
 				ty.body = Some(scope);
 				resolved_scope.add_type(span, name, ty);
 			}
-			Stmt::Import(_span, _glob, _imported) => {
-
-			}
+			Stmt::Import(_span, _glob, _imported) => {}
 			Stmt::BareExpr(span, expr) => {
 				let resolved_expr = resolved_scope.resolve_and_check_expr(expr);
 				resolved_scope
