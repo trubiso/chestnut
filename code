@@ -14,13 +14,14 @@ void print<T>(T thing) unsafe {
 	}
 }
 
-void doo<T>() {
-
+T doo<T>(T x) {
+	return x + x;
 }
 
 void main() {
-	i32 mut r;
-	doo<i32>();
+	i32 mut r = 10;
+	i64 y = 20i64;
+	r = doo<i64>(y);
 	unsafe {
 		hold_knife();
 		r = get_a_number();

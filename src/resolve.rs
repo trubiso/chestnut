@@ -537,15 +537,10 @@ impl ResolvedScope {
 				}
 				let mut arg_types = Vec::new();
 				for arg in func.args {
-					let mut ty = arg.ty;
-					if !func.generics.is_empty() {
-						for (i, generic) in func.generics.iter().enumerate() {
-							let Some(generics) = generics.clone() else { return; };
-							let Some(curr_generic) = generics.get(i) else { return; };
-							ty = ty.replace_generic(generic.clone(), curr_generic.clone());
-						}
-					}
-					arg_types.push(ty);
+					arg_types.push(
+						arg.ty
+							.replace_generics(func.generics.clone(), generics.clone()),
+					);
 				}
 				for (i, arg) in args.iter().enumerate() {
 					self.check_expr(arg.clone(), context.clone());
@@ -645,15 +640,18 @@ impl ResolvedScope {
 				// TODO: resolve lambda
 				builtin!(span, Error)
 			}
-			ResolvedExpr::Call(span, callee, _generics, _args) => {
+			ResolvedExpr::Call(span, callee, generics, _args) => {
 				match *callee {
-					ResolvedExpr::Identifier(_, i) => {
-						match self.get_func(&i.to_string()).map(|x| x.return_ty.clone()) {
-							Some(x) => x,
-							None => builtin!(span, Error),
-						}
+					ResolvedExpr::Identifier(_, i) => match self.get_func(&i.to_string()) {
+						Some(x) => x
+							.return_ty
+							.clone()
+							.replace_generics(x.generics.clone(), generics),
+						None => builtin!(span, Error),
+					},
+					ResolvedExpr::Lambda(_, f) => {
+						f.return_ty.replace_generics(f.generics, generics)
 					}
-					ResolvedExpr::Lambda(_, f) => f.return_ty,
 					// TODO: func signature builtin type. so we'd do self.get_expr_ty(expr) then
 					// simply force it to be a func and get its return ty
 					ResolvedExpr::Call(_, _, _, _) => todo!(),
@@ -969,6 +967,21 @@ impl ResolvedType {
 			Self::Mut(span, x) => Self::Mut(span, Box::new(x.replace_generic(name, ty))),
 			Self::Inferred(_) => self,
 		}
+	}
+
+	pub fn replace_generics(mut self, names: Vec<String>, tys: Option<Vec<ResolvedType>>) -> Self {
+		if let Some(tys) = tys {
+			if names.len() != tys.len() {
+				return self;
+			}
+			if !names.is_empty() {
+				for (i, generic) in names.iter().enumerate() {
+					let Some(curr_generic) = tys.get(i) else { return self; };
+					self = self.replace_generic(generic.clone(), curr_generic.clone());
+				}
+			}
+		}
+		self
 	}
 }
 
