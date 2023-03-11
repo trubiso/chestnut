@@ -248,34 +248,9 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn add_func(
-		&mut self,
-		span: Span,
-		ident: Ident,
-		func: Func,
-		return_ty: Type,
-		body: ResolvedScope,
-		attribs: FuncAttribs,
-	) {
-		let mut args = vec![];
-		for arg in func.args {
-			args.push(ResolvedArg {
-				name: arg.ident_str(),
-				ty: arg.ty,
-			});
-		}
-
-		self.data.funcs.insert(
-			ident.to_string(),
-			ResolvedFunc {
-				name: ident.to_string(),
-				args,
-				return_ty,
-				body,
-				attribs,
-			},
-		);
-		self.data.func_spans.insert(ident.to_string(), span);
+	pub fn add_func(&mut self, name: String, span: Span, func: ResolvedFunc) {
+		self.data.funcs.insert(name.clone(), func);
+		self.data.func_spans.insert(name, span);
 	}
 
 	pub fn check_ident_exists(&self, ident: Ident) {
@@ -543,7 +518,12 @@ fn check_privacy(privacy: Privacy, context: Context) {
 	}
 }
 
-fn resolve_func(resolved_scope: &ResolvedScope, name: String, func_span: Span, func: Func) -> ResolvedFunc {
+fn resolve_func(
+	resolved_scope: &ResolvedScope,
+	name: String,
+	func_span: Span,
+	func: Func,
+) -> ResolvedFunc {
 	let mut frs = resolved_scope.clone();
 	for generic in &func.generics {
 		// TODO: deal with discarded generics
@@ -610,11 +590,26 @@ fn resolve_expr(resolved_scope: &ResolvedScope, expr: Expr) -> ResolvedExpr {
 		Expr::StringLiteral(s, v) => ResolvedExpr::StringLiteral(s, v),
 		Expr::NumberLiteral(s, v) => ResolvedExpr::NumberLiteral(s, v),
 		Expr::Identifier(s, v) => ResolvedExpr::Identifier(s, v),
-		Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(s, Box::new(resolve_expr(resolved_scope, *l)), o, Box::new(resolve_expr(resolved_scope, *r))),
-		Expr::UnaryOp(s, o, v) => ResolvedExpr::UnaryOp(s, o, Box::new(resolve_expr(resolved_scope, *v))),
+		Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(
+			s,
+			Box::new(resolve_expr(resolved_scope, *l)),
+			o,
+			Box::new(resolve_expr(resolved_scope, *r)),
+		),
+		Expr::UnaryOp(s, o, v) => {
+			ResolvedExpr::UnaryOp(s, o, Box::new(resolve_expr(resolved_scope, *v)))
+		}
 		// TODO: better lambda span
-		Expr::Lambda(s, f) => ResolvedExpr::Lambda(s.clone(), resolve_func(resolved_scope, "~".into(), s, f)),
-		Expr::Call(s, c, a) => ResolvedExpr::Call(s, Box::new(resolve_expr(resolved_scope, *c)), a.iter().map(|x| resolve_expr(resolved_scope, x.clone())).collect()),
+		Expr::Lambda(s, f) => {
+			ResolvedExpr::Lambda(s.clone(), resolve_func(resolved_scope, "~".into(), s, f))
+		}
+		Expr::Call(s, c, a) => ResolvedExpr::Call(
+			s,
+			Box::new(resolve_expr(resolved_scope, *c)),
+			a.iter()
+				.map(|x| resolve_expr(resolved_scope, x.clone()))
+				.collect(),
+		),
 		Expr::Error(_) => panic!(),
 	}
 }
@@ -706,52 +701,10 @@ pub fn resolve(
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
-				let mut frs = resolved_scope.clone();
-				for generic in &func.generics {
-					// TODO: deal with discarded generics
-					let name = generic.to_string();
-					frs.add_type(
-						generic.span(),
-						name.clone(),
-						ResolvedType {
-							name,
-							generic_count: 0,
-							fields: HashMap::new(), /* NOTE: potentially in the future we will
-							                         * change this */
-							funcs: HashMap::new(),
-							body: None,
-						},
-					);
-				}
-				frs.check_type(func.return_ty.clone());
-				for arg in &func.args {
-					// TODO: deal with discarded args
-					frs.check_type(arg.ty.clone());
-					frs.add_var(arg.span.clone(), arg.clone(), None);
-				}
-				// TODO: use resolved scope
-				let mut return_ty = func.return_ty.clone();
-				let body = if return_ty.is_inferred() {
-					match resolve(func.body.clone(), Context::Func, Some(frs), None) {
-						Ok((scope, ty)) => {
-							return_ty = ty;
-							scope
-						}
-						Err(_) => ResolvedScope::default(),
-					}
-				} else {
-					match resolve(
-						func.body.clone(),
-						Context::Func,
-						Some(frs),
-						Some((ident.span(), return_ty.span(), return_ty.clone())),
-					) {
-						Ok((scope, _)) => scope,
-						Err(_) => ResolvedScope::default(),
-					}
-				};
-				let attribs = func.attribs.clone();
-				resolved_scope.add_func(span, ident, func, return_ty, body, attribs);
+				let resolved =
+					resolve_func(&resolved_scope, ident.to_string(), ident.span(), func);
+				// TODO: use another, better span
+				resolved_scope.add_func(ident.to_string(), span, resolved);
 			}
 			Stmt::Return(span, expr) => {
 				if context != Context::Func {
