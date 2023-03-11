@@ -362,6 +362,7 @@ impl Privacy {
 pub struct FuncAttribs {
 	pub is_pure: bool,
 	pub is_mut: bool,
+	pub is_unsafe: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

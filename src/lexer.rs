@@ -187,6 +187,7 @@ def_token!(
 		"loop" => Loop,
 		"if" => If,
 		"import" => Import,
+		"unsafe" => Unsafe,
 		"~" => DontCare,
 	}
 

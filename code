@@ -3,6 +3,10 @@ import std::fmt::*;
 
 i32 get_a_number() => 3;
 
+void hold_knife() unsafe {
+
+}
+
 void main() {
 
 	// TODO: lex /***/ properly

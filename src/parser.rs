@@ -50,6 +50,7 @@ fn func_attribs() -> token_parser!(FuncAttribs) {
 	func_attribs!(
 		Pure => is_pure
 		Mut => is_mut
+		Unsafe => is_unsafe
 	)
 }
 
