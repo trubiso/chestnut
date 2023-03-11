@@ -195,7 +195,7 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn add_var(&mut self, span: Span, ty_ident: TypedIdent, value: Option<Expr>) {
+	pub fn add_var(&mut self, span: Span, ty_ident: TypedIdent, value: Option<ResolvedExpr>) {
 		// TODO: do something with duplicate idents. perhaps mangle them in codegen
 		if ty_ident.ident.is_discarded() {
 			return;
@@ -218,13 +218,13 @@ impl ResolvedScope {
 		self.data.type_spans.insert(name, span);
 	}
 
-	pub fn set_var(&mut self, ident: Ident, expr: Expr) {
+	pub fn set_var(&mut self, ident: Ident, resolved_expr: ResolvedExpr) {
 		if ident.is_discarded() {
 			return;
 		}
 		if let Some(x) = self.get_var_mut(&ident.to_string()) {
 			if !x.ty.is_mut() {
-				let span = ident.span() + expr.span();
+				let span = ident.span() + resolved_expr.span();
 				let var_span = self.get_var_span(&ident.to_string()).unwrap();
 				add_diagnostic(
 					Diagnostic::error()
@@ -237,9 +237,9 @@ impl ResolvedScope {
 				);
 				return;
 			}
-			x.value = Some(expr);
+			x.value = Some(resolved_expr);
 		} else {
-			let span = ident.span() + expr.span();
+			let span = ident.span() + resolved_expr.span();
 			add_diagnostic(
 				Diagnostic::error()
 					.with_message("tried to set non-existing symbol")
@@ -303,7 +303,6 @@ impl ResolvedScope {
 					)
 				} else if let ResolvedExpr::Lambda(span, func) = *func_expr {
 					// TODO: add args to inherit scope
-					let (scope, ty) = resolve(func.body, Context::Func, None, None).unwrap();
 					(func, span)
 				} else {
 					let span = func_expr.span();
@@ -430,22 +429,125 @@ impl ResolvedScope {
 			}
 			ResolvedExpr::Call(span, callee, _args) => {
 				match *callee {
-					ResolvedExpr::Identifier(_, i) => self.get_func(&i.to_string()).map(|x| x.return_ty).unwrap(),
+					ResolvedExpr::Identifier(_, i) => {
+						self.get_func(&i.to_string()).map(|x| x.return_ty).unwrap()
+					}
 					ResolvedExpr::Lambda(_, f) => f.return_ty,
-					// TODO: func signature builtin type. so we'd do self.get_expr_ty(expr) then simply force it to be a func and get its return ty
+					// TODO: func signature builtin type. so we'd do self.get_expr_ty(expr) then
+					// simply force it to be a func and get its return ty
 					ResolvedExpr::Call(_, _, _) => todo!(),
-					_ => builtin!(span, Error)
+					_ => builtin!(span, Error),
 				}
-			},
+			}
 		}
+	}
+
+	pub fn resolve_func(&self, name: String, func_span: Span, func: Func) -> ResolvedFunc {
+		let mut frs = self.clone();
+		for generic in &func.generics {
+			// TODO: deal with discarded generics
+			let name = generic.to_string();
+			frs.add_type(
+				generic.span(),
+				name.clone(),
+				ResolvedType {
+					name,
+					generic_count: 0,
+					fields: HashMap::new(), // NOTE: potentially in the future we will change this
+					funcs: HashMap::new(),
+					body: None,
+				},
+			);
+		}
+		frs.check_type(func.return_ty.clone());
+		for arg in &func.args {
+			// TODO: deal with discarded args
+			frs.check_type(arg.ty.clone());
+			frs.add_var(arg.span.clone(), arg.clone(), None);
+		}
+		// TODO: use resolved scope
+		let mut return_ty = func.return_ty.clone();
+		let body = if return_ty.is_inferred() {
+			match resolve(func.body.clone(), Context::Func, Some(frs), None) {
+				Ok((scope, ty)) => {
+					return_ty = ty;
+					scope
+				}
+				Err(_) => ResolvedScope::default(),
+			}
+		} else {
+			match resolve(
+				func.body.clone(),
+				Context::Func,
+				Some(frs),
+				Some((func_span, return_ty.span(), return_ty.clone())),
+			) {
+				Ok((scope, _)) => scope,
+				Err(_) => ResolvedScope::default(),
+			}
+		};
+		let attribs = func.attribs.clone();
+		let mut args = vec![];
+		for arg in func.args {
+			args.push(ResolvedArg {
+				name: arg.ident_str(),
+				ty: arg.ty,
+			});
+		}
+		ResolvedFunc {
+			name,
+			args,
+			return_ty,
+			body,
+			attribs,
+		}
+	}
+
+	pub fn resolve_expr(&self, expr: Expr) -> ResolvedExpr {
+		match expr {
+			Expr::CharLiteral(s, v) => ResolvedExpr::CharLiteral(s, v),
+			Expr::StringLiteral(s, v) => ResolvedExpr::StringLiteral(s, v),
+			Expr::NumberLiteral(s, v) => ResolvedExpr::NumberLiteral(s, v),
+			Expr::Identifier(s, v) => ResolvedExpr::Identifier(s, v),
+			Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(
+				s,
+				Box::new(self.resolve_expr(*l)),
+				o,
+				Box::new(self.resolve_expr(*r)),
+			),
+			Expr::UnaryOp(s, o, v) => ResolvedExpr::UnaryOp(s, o, Box::new(self.resolve_expr(*v))),
+			// TODO: better lambda span
+			Expr::Lambda(s, f) => {
+				ResolvedExpr::Lambda(s.clone(), self.resolve_func("~".into(), s, f))
+			}
+			Expr::Call(s, c, a) => ResolvedExpr::Call(
+				s,
+				Box::new(self.resolve_expr(*c)),
+				a.iter().map(|x| self.resolve_expr(x.clone())).collect(),
+			),
+			Expr::Error(_) => panic!(),
+		}
+	}
+
+	pub fn resolve_and_check_expr(&self, expr: Expr) -> ResolvedExpr {
+		let resolved_expr = self.resolve_expr(expr);
+		self.check_expr(resolved_expr.clone());
+		resolved_expr
+	}
+
+	pub fn examine_expr(&self, expr: Expr) -> (ResolvedExpr, Type) {
+		let resolved_expr = self.resolve_and_check_expr(expr);
+		let ty = self.get_expr_ty(resolved_expr.clone());
+		(resolved_expr, ty)
 	}
 }
 
 #[derive(Debug, Clone)]
 pub struct ResolvedVar {
 	pub name: String,
-	pub ty: Type,            // TODO: should we make another type?
-	pub value: Option<Expr>, // NOTE: in the future we might support uninitialized variables
+	pub ty: Type, // TODO: should we make another type?
+	// NOTE: in the future we might support uninitialized variables
+	pub value: Option<ResolvedExpr>,
 }
 
 #[derive(Debug, Clone)]
@@ -501,102 +603,6 @@ fn check_privacy(privacy: Privacy, context: Context) {
 	}
 }
 
-fn resolve_func(
-	resolved_scope: &ResolvedScope,
-	name: String,
-	func_span: Span,
-	func: Func,
-) -> ResolvedFunc {
-	let mut frs = resolved_scope.clone();
-	for generic in &func.generics {
-		// TODO: deal with discarded generics
-		let name = generic.to_string();
-		frs.add_type(
-			generic.span(),
-			name.clone(),
-			ResolvedType {
-				name,
-				generic_count: 0,
-				fields: HashMap::new(), // NOTE: potentially in the future we will change this
-				funcs: HashMap::new(),
-				body: None,
-			},
-		);
-	}
-	frs.check_type(func.return_ty.clone());
-	for arg in &func.args {
-		// TODO: deal with discarded args
-		frs.check_type(arg.ty.clone());
-		frs.add_var(arg.span.clone(), arg.clone(), None);
-	}
-	// TODO: use resolved scope
-	let mut return_ty = func.return_ty.clone();
-	let body = if return_ty.is_inferred() {
-		match resolve(func.body.clone(), Context::Func, Some(frs), None) {
-			Ok((scope, ty)) => {
-				return_ty = ty;
-				scope
-			}
-			Err(_) => ResolvedScope::default(),
-		}
-	} else {
-		match resolve(
-			func.body.clone(),
-			Context::Func,
-			Some(frs),
-			Some((func_span, return_ty.span(), return_ty.clone())),
-		) {
-			Ok((scope, _)) => scope,
-			Err(_) => ResolvedScope::default(),
-		}
-	};
-	let attribs = func.attribs.clone();
-	let mut args = vec![];
-	for arg in func.args {
-		args.push(ResolvedArg {
-			name: arg.ident_str(),
-			ty: arg.ty,
-		});
-	}
-	ResolvedFunc {
-		name,
-		args,
-		return_ty,
-		body,
-		attribs,
-	}
-}
-
-fn resolve_expr(resolved_scope: &ResolvedScope, expr: Expr) -> ResolvedExpr {
-	match expr {
-		Expr::CharLiteral(s, v) => ResolvedExpr::CharLiteral(s, v),
-		Expr::StringLiteral(s, v) => ResolvedExpr::StringLiteral(s, v),
-		Expr::NumberLiteral(s, v) => ResolvedExpr::NumberLiteral(s, v),
-		Expr::Identifier(s, v) => ResolvedExpr::Identifier(s, v),
-		Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(
-			s,
-			Box::new(resolve_expr(resolved_scope, *l)),
-			o,
-			Box::new(resolve_expr(resolved_scope, *r)),
-		),
-		Expr::UnaryOp(s, o, v) => {
-			ResolvedExpr::UnaryOp(s, o, Box::new(resolve_expr(resolved_scope, *v)))
-		}
-		// TODO: better lambda span
-		Expr::Lambda(s, f) => {
-			ResolvedExpr::Lambda(s.clone(), resolve_func(resolved_scope, "~".into(), s, f))
-		}
-		Expr::Call(s, c, a) => ResolvedExpr::Call(
-			s,
-			Box::new(resolve_expr(resolved_scope, *c)),
-			a.iter()
-				.map(|x| resolve_expr(resolved_scope, x.clone()))
-				.collect(),
-		),
-		Expr::Error(_) => panic!(),
-	}
-}
-
 pub fn resolve(
 	scope: Scope,
 	context: Context,
@@ -614,9 +620,8 @@ pub fn resolve(
 			Stmt::Create(span, privacy, mut ty_ident, expr) => {
 				check_privacy(privacy.clone(), context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
-				resolved_scope.check_expr(expr.clone());
+				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr);
 				let lhs = ty_ident.ty.ignore_mut().clone();
-				let rhs = resolved_scope.get_expr_ty(expr.clone());
 				let lhs_span = ty_ident.ty.span();
 				let rhs_span = expr.span();
 				if !lhs.is_inferred() && lhs != rhs {
@@ -636,15 +641,18 @@ pub fn resolve(
 					Type::Mut(_, _) => Type::Mut(lhs_span, Box::new(rhs)),
 					_ => rhs,
 				};
-				resolved_scope.add_var(span.clone(), ty_ident.clone(), Some(expr.clone()));
+				resolved_scope.add_var(span.clone(), ty_ident.clone(), Some(resolved_expr.clone()));
 				if !ty_ident.ident.is_discarded() {
-					resolved_scope
-						.stmts
-						.push(ResolvedStmt::Create(span, privacy, ty_ident, expr));
+					resolved_scope.stmts.push(ResolvedStmt::Create(
+						span,
+						privacy,
+						ty_ident,
+						resolved_expr,
+					));
 				} else {
 					resolved_scope
 						.stmts
-						.push(ResolvedStmt::BareExpr(span, expr));
+						.push(ResolvedStmt::BareExpr(span, resolved_expr));
 				}
 			}
 			Stmt::Declare(span, privacy, ty_ident) => {
@@ -658,11 +666,10 @@ pub fn resolve(
 			}
 			Stmt::Set(span, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
-				resolved_scope.check_expr(expr.clone());
+				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr);
 				let lhs_span = ident.span();
-				let lhs =
-					resolved_scope.get_expr_ty(Expr::Identifier(lhs_span.clone(), ident.clone()));
-				let rhs = resolved_scope.get_expr_ty(expr.clone());
+				let lhs = resolved_scope
+					.get_expr_ty(ResolvedExpr::Identifier(lhs_span.clone(), ident.clone()));
 				let rhs_span = expr.span();
 				if lhs != rhs {
 					add_diagnostic(
@@ -677,14 +684,14 @@ pub fn resolve(
 							]),
 					)
 				}
-				resolved_scope.set_var(ident.clone(), expr.clone());
+				resolved_scope.set_var(ident.clone(), resolved_expr.clone());
 				resolved_scope
 					.stmts
-					.push(ResolvedStmt::Set(span, ident, expr));
+					.push(ResolvedStmt::Set(span, ident, resolved_expr));
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
-				let resolved = resolve_func(&resolved_scope, ident.to_string(), ident.span(), func);
+				let resolved = resolved_scope.resolve_func(ident.to_string(), ident.span(), func);
 				// TODO: use another, better span
 				resolved_scope.add_func(ident.to_string(), span, resolved);
 			}
@@ -697,11 +704,12 @@ pub fn resolve(
 								.with_message("return statement in global scope")]),
 					);
 				}
-				let resolved_expr = resolve_expr(&resolved_scope, expr);
-				resolved_scope.check_expr(resolved_expr.clone());
-				return_ty = resolved_scope.get_expr_ty(resolved_expr.clone());
+				let (resolved_expr, ty) = resolved_scope.examine_expr(expr);
+				return_ty = ty;
 				return_span = Some(span.clone());
-				resolved_scope.stmts.push(ResolvedStmt::Return(span, resolved_expr));
+				resolved_scope
+					.stmts
+					.push(ResolvedStmt::Return(span, resolved_expr));
 			}
 			Stmt::Class(span, privacy, ident, generics, body) => {
 				check_privacy(privacy, context.clone());
@@ -723,8 +731,8 @@ pub fn resolve(
 						ResolvedType {
 							name,
 							generic_count: 0,
-							fields: HashMap::new(), /* NOTE: potentially in the future we will
-							                         * change this */
+							// NOTE: potentially in the future we will change this
+							fields: HashMap::new(),
 							funcs: HashMap::new(),
 							body: None,
 						},
@@ -738,8 +746,7 @@ pub fn resolve(
 				resolved_scope.add_type(span, name, ty);
 			}
 			Stmt::BareExpr(span, expr) => {
-				let resolved_expr = resolve_expr(&resolved_scope, expr);
-				resolved_scope.check_expr(resolved_expr.clone());
+				let resolved_expr = resolved_scope.resolve_and_check_expr(expr);
 				resolved_scope
 					.stmts
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));
