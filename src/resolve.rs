@@ -420,7 +420,7 @@ impl ResolvedScope {
 			ResolvedExpr::UnaryOp(_, _op, val) => {
 				self.check_expr(*val);
 			}
-			ResolvedExpr::Lambda(_, func) => {
+			ResolvedExpr::Lambda(_, _func) => {
 				// TODO: maybe infer arg types
 			}
 			ResolvedExpr::Call(span, func_expr, args) => {
@@ -934,7 +934,7 @@ pub enum Context {
 	TopLevel,
 	#[display(fmt = "class")]
 	Class,
-	#[display(fmt = "func")]
+	#[display(fmt = "function")]
 	Func,
 }
 
@@ -957,6 +957,52 @@ fn check_privacy(privacy: Privacy, context: Context) {
 	}
 }
 
+impl Stmt {
+	pub fn variant(&self) -> String {
+		match self {
+			Self::Create(_, _, _, _) => "creation".into(),
+			Self::Declare(_, _, _) => "declaration".into(),
+			Self::Set(_, _, _) => "set".into(),
+			Self::Func(_, _, _, _) => "function".into(),
+			Self::Return(_, _) => "return".into(),
+			Self::Class(_, _, _, _, _) => "class".into(),
+			Self::Import(_, _, _) => "import".into(),
+			Self::BareExpr(_, _) => "bare expression".into(),
+		}
+	}
+}
+
+macro_rules! check_stmt {
+	($($v:ident($($i:tt),*) => $($ctx:ident)*;)*) => {
+		fn check_stmt(stmt: &Stmt, context: &Context) {
+			match stmt {
+				$(
+					Stmt::$v($($i,)*) => {
+						if $(*context != Context::$ctx)&&* {
+							add_diagnostic(
+								Diagnostic::error()
+									.with_message(format!("invalid {} statement in {context} context", stmt.variant()))
+									.with_labels(vec![Label::primary(stmt.span().file_id, stmt.span().range())]),
+							);
+						}
+					}
+				)*
+				_ => {}
+			}
+		}
+	};
+}
+
+check_stmt!(
+	Create(_, _, _, _) => TopLevel Class Func;
+	Declare(_, _, _) => TopLevel Class Func;
+	Set(_, _, _) => TopLevel Func;
+	Return(_, _) => Func;
+	Class(_, _, _, _, _) => TopLevel Func; // NOTE: maybe Class too?
+	Import(_, _, _) => TopLevel;
+	BareExpr(_, _) => Func;
+);
+
 pub fn resolve(
 	scope: Scope,
 	context: Context,
@@ -970,6 +1016,7 @@ pub fn resolve(
 	let mut return_ty = builtin!(scope.span, Void);
 	let mut return_span = None;
 	for stmt in scope.stmts {
+		check_stmt(&stmt, &context);
 		match stmt {
 			Stmt::Create(span, privacy, ty_ident, expr) => {
 				check_privacy(privacy.clone(), context.clone());
@@ -1052,14 +1099,6 @@ pub fn resolve(
 				resolved_scope.add_func(ident.to_string(), span, resolved);
 			}
 			Stmt::Return(span, expr) => {
-				if context != Context::Func {
-					add_diagnostic(
-						Diagnostic::error()
-							.with_message("tried to return from non-function")
-							.with_labels(vec![Label::primary(span.file_id, span.range())
-								.with_message("return statement in global scope")]),
-					);
-				}
 				let (resolved_expr, ty) = resolved_scope.examine_expr(expr);
 				return_ty = ty;
 				return_span = Some(span.clone());

@@ -4,8 +4,8 @@ import std::fmt::*;
 // TODO: why does this parse?
 i32 get_a_number() => 3 4;
 
-
-
 void main() {
+	import std::io;
+
 	// TODO: lex /***/ properly
 }
