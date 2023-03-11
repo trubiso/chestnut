@@ -1,26 +1,59 @@
 use crate::{
-	builtin,
 	lexer::{NumberLiteral, Operator},
 	parser::types::{
-		BuiltinType, Expr, Func, FuncAttribs, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
+		join_comma, BareType, BuiltinType, Expr, Func, FuncAttribs, Ident, Privacy, Scope, Stmt,
+		Type, TypedIdent,
 	},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
-use std::{cmp::Ordering, collections::HashMap, sync::Mutex};
+use std::{cmp::Ordering, collections::HashMap, fmt, sync::Mutex};
 
 // TODO: FuncSignature (only types)
 // TODO: ClassSignature (only types)
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
+#[display(fmt = "{ty} {ident}")]
+pub struct ResolvedTypedIdent {
+	pub span: Span,
+	pub ty: ResolvedType,
+	pub ident: Ident,
+}
+
+impl ResolvedTypedIdent {
+	pub fn ident_str(&self) -> String {
+		self.ident.to_string()
+	}
+
+	pub fn make_mut(self) -> Self {
+		Self {
+			span: self.span.clone(),
+			ty: ResolvedType::Mut(self.span, Box::new(self.ty)),
+			ident: self.ident,
+		}
+	}
+}
+
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum ResolvedStmt {
-	Create(Span, Privacy, TypedIdent, ResolvedExpr),
-	Declare(Span, Privacy, TypedIdent),
+	#[display(fmt = "{_1} {_2} = {_3};")]
+	Create(Span, Privacy, ResolvedTypedIdent, ResolvedExpr),
+	#[display(fmt = "{_1} {_2};")]
+	Declare(Span, Privacy, ResolvedTypedIdent),
+	#[display(fmt = "{_1} = {_2};")]
 	Set(Span, Ident, ResolvedExpr),
+	#[display(fmt = "return {_1};")]
 	Return(Span, ResolvedExpr),
+	#[display(fmt = "{_1};")]
 	BareExpr(Span, ResolvedExpr),
+}
+
+macro_rules! builtin {
+	($s:expr, $v:ident) => {
+		ResolvedType::Builtin($s, BuiltinType::$v)
+	};
 }
 
 impl ResolvedStmt {
@@ -47,6 +80,60 @@ pub enum ResolvedExpr {
 	Call(Span, Box<ResolvedExpr>, Vec<ResolvedExpr>),
 }
 
+macro_rules! i_hate_partial_eq {
+	($s:expr, $other:expr => $($v:ident($($f:ident),*)($($o:ident),*) => $c:expr;)*) => {
+		match $s {
+			$(
+				ResolvedExpr::$v(_, $($f,)*) => {
+					if let ResolvedExpr::$v(_, $($o,)*) = $other {
+						$c
+					} else {
+						false
+					}
+				}
+			)*
+		}
+	};
+}
+
+impl PartialEq for ResolvedExpr {
+	fn eq(&self, other: &Self) -> bool {
+		i_hate_partial_eq!(
+			self, other =>
+			CharLiteral(x)(y) => x == y;
+			StringLiteral(x)(y) => x == y;
+			NumberLiteral(x)(y) => x == y;
+			Identifier(x)(y) => x == y;
+			BinaryOp(a, b, c)(d, e, f) => (a.clone(), b, c.clone()) == (d.clone(), e, f.clone());
+			UnaryOp(a, b)(c, d) => a == c && b == d;
+			Lambda(f)(v) => f == v;
+			Call(a, b)(c, d) => a == c && b == d;
+		)
+	}
+}
+
+impl Eq for ResolvedExpr {}
+
+impl fmt::Display for ResolvedExpr {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			ResolvedExpr::CharLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			ResolvedExpr::StringLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			ResolvedExpr::NumberLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			ResolvedExpr::Identifier(_, x) => f.write_fmt(format_args!("{x}")),
+			ResolvedExpr::BinaryOp(_, lhs, op, rhs) => {
+				f.write_fmt(format_args!("({lhs} {op} {rhs})"))
+			}
+			ResolvedExpr::UnaryOp(_, op, expr) => f.write_fmt(format_args!("({op}{expr})")),
+			ResolvedExpr::Lambda(_, func) => f.write_fmt(format_args!("lambda {func}")),
+			ResolvedExpr::Call(_, callee, args) => f.write_fmt(format_args!(
+				"{callee}({})",
+				join_comma(args).unwrap_or("".to_string())
+			)),
+		}
+	}
+}
+
 impl ResolvedExpr {
 	pub fn span(&self) -> Span {
 		match self {
@@ -62,7 +149,7 @@ impl ResolvedExpr {
 	}
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct InheritableData {
 	pub vars: HashMap<String, ResolvedVar>,
 	pub var_spans: HashMap<String, Span>,
@@ -70,7 +157,7 @@ pub struct InheritableData {
 	// TODO: function overloads
 	pub funcs: HashMap<String, ResolvedFunc>,
 	pub func_spans: HashMap<String, Span>,
-	pub types: HashMap<String, ResolvedType>,
+	pub types: HashMap<String, ResolvedMadeType>,
 	pub type_spans: HashMap<String, Span>,
 	// TODO: remove scopes from type & func spans
 }
@@ -90,11 +177,41 @@ impl std::ops::Add for InheritableData {
 	}
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ResolvedScope {
 	pub data: InheritableData,
 	pub inherit: InheritableData,
 	pub stmts: Vec<ResolvedStmt>,
+}
+
+impl fmt::Display for ResolvedScope {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		for stmt in &self.stmts {
+			f.write_fmt(format_args!("{stmt}\n"))?;
+		}
+		Ok(())
+	}
+}
+
+impl ResolvedScope {
+	pub fn braced(&self) -> String {
+		let body = format!("{}", self);
+		format!(
+			"{{{}}}",
+			if self.stmts.is_empty() {
+				"".into()
+			} else {
+				format!("\n{}", {
+					let mut x: Vec<_> = body.split('\n').collect();
+					x.pop();
+					x.iter()
+						.map(|x| -> String { format!("\t{}\n", x) })
+						.reduce(|acc, b| acc + &b)
+						.unwrap()
+				})
+			},
+		)
+	}
 }
 
 lazy_static! {
@@ -131,16 +248,16 @@ macro_rules! get_datum {
 }
 
 impl ResolvedScope {
-	get_datum!(get_type get_type_mut has_type => types (ResolvedType));
+	get_datum!(get_type get_type_mut has_type => types (ResolvedMadeType));
 	get_datum!(get_type_span get_type_span_mut has_type_span => type_spans (Span));
 	get_datum!(get_var get_var_mut has_var => vars (ResolvedVar));
 	get_datum!(get_var_span get_var_span_mut has_var_span => var_spans (Span));
 	get_datum!(get_func get_func_mut has_func => funcs (ResolvedFunc));
 	get_datum!(get_func_span get_func_span_mut has_func_span => func_spans (Span));
 
-	pub fn check_type(&self, ty: Type) {
+	pub fn check_type(&self, ty: ResolvedType) {
 		match ty {
-			Type::BareType(span, x) => {
+			ResolvedType::BareType(span, x) => {
 				if [
 					"i8", "i16", "i32", "i64", "i128", "iz", "u8", "u16", "u32", "u64", "u128",
 					"uz", "f16", "f32", "f64", "f128", "void", "bool", "string", "char",
@@ -182,20 +299,24 @@ impl ResolvedScope {
 					self.check_type(generic);
 				}
 			}
-			Type::Ref(_, x) | Type::Mut(_, x) | Type::Optional(_, x) => self.check_type(*x),
-			Type::Array(_, x, size) => {
-				if let Some(x) = size {
-					self.check_expr(*x)
-				}
+			ResolvedType::Ref(_, x) | ResolvedType::Mut(_, x) | ResolvedType::Optional(_, x) => {
+				self.check_type(*x)
+			}
+			ResolvedType::Array(_, x, _size) => {
 				self.check_type(*x);
 			}
-			Type::Inferred(_) => {}
+			ResolvedType::Inferred(_) => {}
 			// we might have to remove inferred in some cases because type inference hehehe
-			Type::Builtin(_, _) => {}
+			ResolvedType::Builtin(_, _) => {}
 		}
 	}
 
-	pub fn add_var(&mut self, span: Span, ty_ident: TypedIdent, value: Option<ResolvedExpr>) {
+	pub fn add_var(
+		&mut self,
+		span: Span,
+		ty_ident: ResolvedTypedIdent,
+		value: Option<ResolvedExpr>,
+	) {
 		// TODO: do something with duplicate idents. perhaps mangle them in codegen
 		if ty_ident.ident.is_discarded() {
 			return;
@@ -213,7 +334,7 @@ impl ResolvedScope {
 		self.data.var_spans.insert(name, span);
 	}
 
-	pub fn add_type(&mut self, span: Span, name: String, ty: ResolvedType) {
+	pub fn add_type(&mut self, span: Span, name: String, ty: ResolvedMadeType) {
 		self.data.types.insert(name.clone(), ty);
 		self.data.type_spans.insert(name, span);
 	}
@@ -355,15 +476,17 @@ impl ResolvedScope {
 	}
 
 	// TODO: be lazier with int literals and automatically cast them in Stmt::Create
-	pub fn get_expr_ty(&self, expr: ResolvedExpr) -> Type {
+	pub fn get_expr_ty(&self, expr: ResolvedExpr) -> ResolvedType {
 		match expr {
-			ResolvedExpr::CharLiteral(span, _) => Type::Builtin(span, BuiltinType::Char),
-			ResolvedExpr::StringLiteral(span, _) => Type::Builtin(span, BuiltinType::String),
-			ResolvedExpr::NumberLiteral(span, literal) => Type::Builtin(span, literal.as_ty()),
+			ResolvedExpr::CharLiteral(span, _) => builtin!(span, Char),
+			ResolvedExpr::StringLiteral(span, _) => builtin!(span, String),
+			ResolvedExpr::NumberLiteral(span, literal) => {
+				ResolvedType::Builtin(span, literal.as_ty())
+			}
 			ResolvedExpr::Identifier(span, ident) => self
 				.get_var(&ident.to_string())
 				.map(|x| x.ty.clone())
-				.unwrap_or_else(|| Type::Builtin(span, BuiltinType::Error)),
+				.unwrap_or_else(|| builtin!(span, Error)),
 			ResolvedExpr::BinaryOp(span, lhs, op, rhs) => {
 				let lhs_span = lhs.span();
 				let rhs_span = rhs.span();
@@ -430,7 +553,7 @@ impl ResolvedScope {
 			ResolvedExpr::Call(span, callee, _args) => {
 				match *callee {
 					ResolvedExpr::Identifier(_, i) => {
-						self.get_func(&i.to_string()).map(|x| x.return_ty).unwrap()
+						self.get_func(&i.to_string()).map(|x| x.return_ty.clone()).unwrap()
 					}
 					ResolvedExpr::Lambda(_, f) => f.return_ty,
 					// TODO: func signature builtin type. so we'd do self.get_expr_ty(expr) then
@@ -450,7 +573,7 @@ impl ResolvedScope {
 			frs.add_type(
 				generic.span(),
 				name.clone(),
-				ResolvedType {
+				ResolvedMadeType {
 					name,
 					generic_count: 0,
 					fields: HashMap::new(), // NOTE: potentially in the future we will change this
@@ -459,14 +582,15 @@ impl ResolvedScope {
 				},
 			);
 		}
-		frs.check_type(func.return_ty.clone());
+		let resolved_return_ty = self.resolve_ty(func.return_ty);
+		frs.check_type(resolved_return_ty.clone());
 		for arg in &func.args {
 			// TODO: deal with discarded args
-			frs.check_type(arg.ty.clone());
-			frs.add_var(arg.span.clone(), arg.clone(), None);
+			frs.check_type(self.resolve_ty(arg.ty.clone()));
+			frs.add_var(arg.span.clone(), self.resolve_ty_ident(arg.clone()), None);
 		}
 		// TODO: use resolved scope
-		let mut return_ty = func.return_ty.clone();
+		let mut return_ty = resolved_return_ty;
 		let body = if return_ty.is_inferred() {
 			match resolve(func.body.clone(), Context::Func, Some(frs), None) {
 				Ok((scope, ty)) => {
@@ -489,9 +613,11 @@ impl ResolvedScope {
 		let attribs = func.attribs.clone();
 		let mut args = vec![];
 		for arg in func.args {
+			let name = arg.ident_str();
 			args.push(ResolvedArg {
-				name: arg.ident_str(),
-				ty: arg.ty,
+				span: arg.span,
+				name,
+				ty: self.resolve_ty(arg.ty),
 			});
 		}
 		ResolvedFunc {
@@ -535,43 +661,250 @@ impl ResolvedScope {
 		resolved_expr
 	}
 
-	pub fn examine_expr(&self, expr: Expr) -> (ResolvedExpr, Type) {
+	pub fn examine_expr(&self, expr: Expr) -> (ResolvedExpr, ResolvedType) {
 		let resolved_expr = self.resolve_and_check_expr(expr);
 		let ty = self.get_expr_ty(resolved_expr.clone());
 		(resolved_expr, ty)
 	}
+
+	fn resolve_bare_type(&self, bare_type: BareType) -> ResolvedBareType {
+		ResolvedBareType {
+			ident: bare_type.ident,
+			generics: bare_type
+				.generics
+				.iter()
+				.map(|x| self.resolve_ty(x.clone()))
+				.collect(),
+		}
+	}
+
+	pub fn resolve_ty(&self, ty: Type) -> ResolvedType {
+		match ty {
+			Type::BareType(a, b) => ResolvedType::BareType(a, self.resolve_bare_type(b)),
+			Type::Builtin(a, b) => ResolvedType::Builtin(a, b),
+			Type::Array(a, b, c) => ResolvedType::Array(
+				a,
+				Box::new(self.resolve_ty(*b)),
+				c.map(|x| Box::new(self.resolve_and_check_expr(*x))),
+			),
+			Type::Ref(a, b) => ResolvedType::Ref(a, Box::new(self.resolve_ty(*b))),
+			Type::Optional(a, b) => ResolvedType::Optional(a, Box::new(self.resolve_ty(*b))),
+			Type::Mut(a, b) => ResolvedType::Mut(a, Box::new(self.resolve_ty(*b))),
+			Type::Inferred(s) => ResolvedType::Inferred(s),
+		}
+	}
+
+	pub fn resolve_ty_ident(&self, ty_ident: TypedIdent) -> ResolvedTypedIdent {
+		ResolvedTypedIdent {
+			span: ty_ident.span,
+			ty: self.resolve_ty(ty_ident.ty),
+			ident: ty_ident.ident,
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedBareType {
+	pub ident: Ident,
+	pub generics: Vec<ResolvedType>,
+}
+
+impl fmt::Display for ResolvedBareType {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_fmt(format_args!(
+			"{}{}",
+			self.ident,
+			match join_comma(&self.generics) {
+				None => "".to_string(),
+				Some(x) => format!("<{x}>"),
+			},
+		))
+	}
 }
 
 #[derive(Debug, Clone)]
+pub enum ResolvedType {
+	BareType(Span, ResolvedBareType),
+	Builtin(Span, BuiltinType),
+	Array(Span, Box<ResolvedType>, Option<Box<ResolvedExpr>>),
+	Ref(Span, Box<ResolvedType>),
+	Optional(Span, Box<ResolvedType>),
+	Mut(Span, Box<ResolvedType>),
+	Inferred(Span),
+}
+
+impl PartialEq for ResolvedType {
+	fn eq(&self, other: &Self) -> bool {
+		match self {
+			Self::BareType(_, x) => {
+				if let Self::BareType(_, y) = other {
+					x == y
+				} else {
+					false
+				}
+			}
+			Self::Builtin(_, x) => {
+				if let Self::Builtin(_, y) = other {
+					x == y
+				} else {
+					false
+				}
+			}
+			Self::Array(_, a, b) => {
+				if let Self::Array(_, c, d) = other {
+					a == c && b == d
+				} else {
+					false
+				}
+			}
+			Self::Ref(_, x) => {
+				if let Self::Ref(_, y) = other {
+					*x == *y
+				} else {
+					false
+				}
+			}
+			Self::Optional(_, x) => {
+				if let Self::Optional(_, y) = other {
+					*x == *y
+				} else {
+					false
+				}
+			}
+			Self::Mut(_, x) => {
+				if let Self::Mut(_, y) = other {
+					*x == *y
+				} else {
+					false
+				}
+			}
+			Self::Inferred(_) => matches!(other, Self::Inferred(_)),
+		}
+	}
+}
+
+impl Eq for ResolvedType {}
+
+impl ResolvedType {
+	pub fn span(&self) -> Span {
+		match self {
+			Self::BareType(x, _)
+			| Self::Builtin(x, _)
+			| Self::Array(x, _, _)
+			| Self::Ref(x, _)
+			| Self::Optional(x, _)
+			| Self::Mut(x, _)
+			| Self::Inferred(x) => x.clone(),
+		}
+	}
+
+	pub fn is_inferred(&self) -> bool {
+		match self {
+			Self::Inferred(_) => true,
+			Self::BareType(_, _) | Self::Builtin(_, _) => false,
+			Self::Array(_, x, _) | Self::Ref(_, x) | Self::Optional(_, x) | Self::Mut(_, x) => {
+				x.is_inferred()
+			}
+		}
+	}
+
+	pub fn is_mut(&self) -> bool {
+		matches!(self, ResolvedType::Mut(_, _))
+	}
+
+	pub fn is_mut_inferred(&self) -> bool {
+		let ResolvedType::Mut(_, inner) = self else { return false; };
+		inner.is_inferred()
+	}
+
+	pub fn is_void(&self) -> bool {
+		let Self::Builtin(_, x) = self else { return false; };
+		*x == BuiltinType::Void
+	}
+
+	pub fn ignore_mut(&self) -> &Self {
+		match self {
+			ResolvedType::Mut(_, inner) => &**inner,
+			_ => self,
+		}
+	}
+}
+
+impl fmt::Display for ResolvedType {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			ResolvedType::BareType(_, x) => f.write_fmt(format_args!("{x}")),
+			ResolvedType::Builtin(_, x) => f.write_fmt(format_args!("{x}")),
+			ResolvedType::Array(_, x, len) => f.write_fmt(format_args!(
+				"{x}{}",
+				if let Some(len) = len {
+					format!("[{len}]")
+				} else {
+					"[]".to_string()
+				}
+			)),
+			ResolvedType::Ref(_, x) => f.write_fmt(format_args!("{x}&")),
+			ResolvedType::Optional(_, x) => f.write_fmt(format_args!("{x}?")),
+			ResolvedType::Mut(_, x) => f.write_fmt(format_args!("{x} mut")),
+			ResolvedType::Inferred(_) => f.write_str("~"),
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedVar {
 	pub name: String,
-	pub ty: Type, // TODO: should we make another type?
+	pub ty: ResolvedType,
 	// NOTE: in the future we might support uninitialized variables
 	pub value: Option<ResolvedExpr>,
 }
 
-#[derive(Debug, Clone)]
-pub struct ResolvedType {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedMadeType {
 	pub name: String,
 	pub generic_count: usize, // TODO: ResolvedGeneric
-	pub fields: HashMap<String, ResolvedType>,
+	pub fields: HashMap<String, ResolvedMadeType>,
 	pub funcs: HashMap<String, ResolvedFunc>,
 	pub body: Option<ResolvedScope>, // if it's a generic no body defines it
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedFunc {
 	pub name: String,
 	pub args: Vec<ResolvedArg>,
-	pub return_ty: Type,
+	pub return_ty: ResolvedType,
 	pub body: ResolvedScope,
 	pub attribs: FuncAttribs,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Display for ResolvedFunc {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_fmt(format_args!(
+			"({}) {}-> {} {}",
+			join_comma(&self.args).unwrap_or("".into()),
+			self.attribs,
+			self.return_ty,
+			self.body.braced(),
+		))
+	}
+}
+
+#[derive(Debug, Display, Clone, PartialEq, Eq)]
+#[display(fmt = "{ty} {name}")]
 pub struct ResolvedArg {
+	pub span: Span,
+	pub ty: ResolvedType,
 	pub name: String,
-	pub ty: Type,
+}
+
+impl ResolvedArg {
+	pub fn as_ty_ident(self) -> ResolvedTypedIdent {
+		ResolvedTypedIdent {
+			span: self.span.clone(),
+			ty: self.ty,
+			ident: Ident::Named(self.span, self.name),
+		}
+	}
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
@@ -607,23 +940,24 @@ pub fn resolve(
 	scope: Scope,
 	context: Context,
 	inherit_scope: Option<ResolvedScope>,
-	expected_func_ty: Option<(Span, Span, Type)>,
-) -> Result<(ResolvedScope, Type), Vec<Diagnostic<usize>>> {
+	expected_func_ty: Option<(Span, Span, ResolvedType)>,
+) -> Result<(ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>> {
 	let mut resolved_scope = ResolvedScope::default();
 	if let Some(scope) = inherit_scope {
 		resolved_scope.inherit = scope.data + scope.inherit;
 	}
-	let mut return_ty = Type::Builtin(scope.span, BuiltinType::Void);
+	let mut return_ty = builtin!(scope.span, Void);
 	let mut return_span = None;
 	for stmt in scope.stmts {
 		match stmt {
-			Stmt::Create(span, privacy, mut ty_ident, expr) => {
+			Stmt::Create(span, privacy, ty_ident, expr) => {
 				check_privacy(privacy.clone(), context.clone());
+				let mut ty_ident = resolved_scope.resolve_ty_ident(ty_ident);
 				resolved_scope.check_type(ty_ident.ty.clone());
+				let rhs_span = expr.span();
 				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr);
 				let lhs = ty_ident.ty.ignore_mut().clone();
 				let lhs_span = ty_ident.ty.span();
-				let rhs_span = expr.span();
 				if !lhs.is_inferred() && lhs != rhs {
 					add_diagnostic(
 						Diagnostic::error()
@@ -638,7 +972,7 @@ pub fn resolve(
 					)
 				}
 				ty_ident.ty = match ty_ident.ty {
-					Type::Mut(_, _) => Type::Mut(lhs_span, Box::new(rhs)),
+					ResolvedType::Mut(_, _) => ResolvedType::Mut(lhs_span, Box::new(rhs)),
 					_ => rhs,
 				};
 				resolved_scope.add_var(span.clone(), ty_ident.clone(), Some(resolved_expr.clone()));
@@ -658,6 +992,7 @@ pub fn resolve(
 			Stmt::Declare(span, privacy, ty_ident) => {
 				// TODO: add error if the type is ~
 				check_privacy(privacy.clone(), context.clone());
+				let ty_ident = resolved_scope.resolve_ty_ident(ty_ident);
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.add_var(span.clone(), ty_ident.clone(), None);
 				resolved_scope
@@ -666,11 +1001,11 @@ pub fn resolve(
 			}
 			Stmt::Set(span, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
+				let rhs_span = expr.span();
 				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr);
 				let lhs_span = ident.span();
 				let lhs = resolved_scope
 					.get_expr_ty(ResolvedExpr::Identifier(lhs_span.clone(), ident.clone()));
-				let rhs_span = expr.span();
 				if lhs != rhs {
 					add_diagnostic(
 						Diagnostic::error()
@@ -715,7 +1050,7 @@ pub fn resolve(
 				check_privacy(privacy, context.clone());
 				let name = ident.to_string();
 				let mut crs = resolved_scope.clone();
-				let mut ty = ResolvedType {
+				let mut ty = ResolvedMadeType {
 					name: name.clone(),
 					generic_count: generics.len(),
 					fields: HashMap::new(), // TODO
@@ -728,7 +1063,7 @@ pub fn resolve(
 					crs.add_type(
 						generic.span(),
 						name.clone(),
-						ResolvedType {
+						ResolvedMadeType {
 							name,
 							generic_count: 0,
 							// NOTE: potentially in the future we will change this

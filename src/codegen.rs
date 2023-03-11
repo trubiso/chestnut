@@ -1,7 +1,9 @@
 use crate::{
 	lexer::{NumberLiteralKind, NumberLiteralRepr},
-	parser::types::{Expr, Privacy, Type, TypedIdent},
-	resolve::{ResolvedFunc, ResolvedScope, ResolvedStmt},
+	parser::types::Privacy,
+	resolve::{
+		ResolvedExpr, ResolvedFunc, ResolvedScope, ResolvedStmt, ResolvedType, ResolvedTypedIdent,
+	},
 };
 
 pub fn comma<T>(args: Vec<T>, closure: fn(&T) -> String) -> String {
@@ -11,11 +13,11 @@ pub fn comma<T>(args: Vec<T>, closure: fn(&T) -> String) -> String {
 		.unwrap_or_else(String::new)
 }
 
-pub fn codegen_expr(expr: Expr) -> String {
+pub fn codegen_expr(expr: ResolvedExpr) -> String {
 	match expr {
-		Expr::CharLiteral(_, value) => value,
-		Expr::StringLiteral(_, value) => value,
-		Expr::NumberLiteral(_, number_literal) => {
+		ResolvedExpr::CharLiteral(_, value) => value,
+		ResolvedExpr::StringLiteral(_, value) => value,
+		ResolvedExpr::NumberLiteral(_, number_literal) => {
 			let prefix = match number_literal.repr {
 				NumberLiteralRepr::Binary => "0b",
 				NumberLiteralRepr::Octal => "0o",
@@ -29,32 +31,31 @@ pub fn codegen_expr(expr: Expr) -> String {
 				x => format!("{prefix}{value}{x}"),
 			}
 		}
-		Expr::Identifier(_, ident) => ident.to_string(),
-		Expr::BinaryOp(_, lhs, op, rhs) => {
+		ResolvedExpr::Identifier(_, ident) => ident.to_string(),
+		ResolvedExpr::BinaryOp(_, lhs, op, rhs) => {
 			format!("({}{op}{})", codegen_expr(*lhs), codegen_expr(*rhs))
 		}
-		Expr::UnaryOp(_, op, val) => format!("({op}{})", codegen_expr(*val)),
+		ResolvedExpr::UnaryOp(_, op, val) => format!("({op}{})", codegen_expr(*val)),
 		// TODO: we can't do this yet as this carries a Func and therefore a regular Scope
-		Expr::Lambda(_, func) => {
+		ResolvedExpr::Lambda(_, func) => {
 			format!(
 				"([&]({}){{}})",
-				comma(func.args, |x| codegen_ty_ident(x.clone()))
+				comma(func.args, |x| codegen_ty_ident(x.clone().as_ty_ident()))
 			)
 		}
-		Expr::Call(_, callee, args) => format!(
+		ResolvedExpr::Call(_, callee, args) => format!(
 			"{}({})",
 			codegen_expr(*callee),
 			comma(args, |x| codegen_expr(x.clone()))
 		),
-		Expr::Error(_) => panic!(),
 	}
 }
 
-pub fn codegen_ty(ty: Type) -> String {
-	fn inner(ty: Type, comes_from_mut: bool) -> String {
+pub fn codegen_ty(ty: ResolvedType) -> String {
+	fn inner(ty: ResolvedType, comes_from_mut: bool) -> String {
 		let m = if comes_from_mut { "" } else { " const" };
 		match ty {
-			Type::BareType(_, x) => format!(
+			ResolvedType::BareType(_, x) => format!(
 				"{}{}{m}",
 				x.ident.to_string(),
 				x.generics
@@ -64,23 +65,23 @@ pub fn codegen_ty(ty: Type) -> String {
 					.map(|x| format!("<{x}>"))
 					.unwrap_or_else(String::new)
 			),
-			Type::Builtin(_, x) => format!("{x}{m}"),
-			Type::Array(_, lhs, rhs) => format!(
+			ResolvedType::Builtin(_, x) => format!("{x}{m}"),
+			ResolvedType::Array(_, lhs, rhs) => format!(
 				"Array<{}{}>{m}",
 				inner(*lhs, false),
 				rhs.map(|x| ",".to_string() + &codegen_expr(*x))
 					.unwrap_or_else(String::new)
 			),
-			Type::Ref(_, x) => format!("Ref<{}>{m}", inner(*x, false)),
-			Type::Optional(_, x) => format!("Optional<{}>{m}", inner(*x, false)),
-			Type::Mut(_, x) => inner(*x, true),
-			Type::Inferred(_) => panic!("unsupported Inferred type in codegen!"),
+			ResolvedType::Ref(_, x) => format!("Ref<{}>{m}", inner(*x, false)),
+			ResolvedType::Optional(_, x) => format!("Optional<{}>{m}", inner(*x, false)),
+			ResolvedType::Mut(_, x) => inner(*x, true),
+			ResolvedType::Inferred(_) => panic!("unsupported Inferred type in codegen!"),
 		}
 	}
 	inner(ty, false)
 }
 
-pub fn codegen_ty_ident(ty_ident: TypedIdent) -> String {
+pub fn codegen_ty_ident(ty_ident: ResolvedTypedIdent) -> String {
 	format!("{} {}", codegen_ty(ty_ident.ty), ty_ident.ident.to_string())
 }
 

@@ -564,7 +564,7 @@ impl fmt::Display for Scope {
 	}
 }
 
-fn join_comma<T: fmt::Display>(vec: &[T]) -> Option<String> {
+pub fn join_comma<T: fmt::Display>(vec: &[T]) -> Option<String> {
 	vec.iter()
 		.map(|x| format!("{x}"))
 		.reduce(|acc, b| acc + ", " + &b)
