@@ -64,13 +64,6 @@ fn main() {
 		cpp_sources.push(format!("{arg}.cpp"));
 	}
 
-	let mut clang_format = std::process::Command::new("clang-format");
-	clang_format.arg("-i");
-	for file in &cpp_sources {
-		clang_format.arg(file);
-	}
-	clang_format.output().expect("failed to clang-format");
-
 	let mut gcc = std::process::Command::new("g++");
 	for file in &cpp_sources {
 		gcc.arg(file);
