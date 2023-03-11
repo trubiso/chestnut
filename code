@@ -1,13 +1,14 @@
 import std::io;
 import std::fmt::*;
 
-i32 get_a_number() => 3;
+i32 get_a_number() unsafe => 3;
 
 void hold_knife() unsafe {
-
+	let x = 9;
 }
 
 void main() {
+	let r = get_a_number();
 	hold_knife();
 	unsafe {
 		hold_knife();

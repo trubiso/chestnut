@@ -73,6 +73,7 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 		.then(generics_declare())
 		.then(func_args())
 		.then(func_attribs())
+		.map_with_span(|pre, span| (pre, span))
 		.then(choice((
 			jkeyword!(FatArrow)
 				.ignore_then(expr())
@@ -84,7 +85,7 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 			braced!(scope),
 		)))
 		.map_with_span(
-			|(((((privacy, ty_ident), generics), args), attribs), body), span| {
+			|((((((privacy, ty_ident), generics), args), attribs), decl_span), body), span| {
 				Stmt::Func(
 					span.clone(),
 					privacy,
@@ -96,6 +97,7 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 						generics,
 						body,
 						attribs,
+						decl_span,
 					},
 				)
 			},
@@ -161,7 +163,8 @@ fn mut_stmt() -> token_parser!(Stmt) {
 		})
 }
 
-/// Parses `import <qualified_ident>::[{ident_nodiscard, ...}|*]` into Stmt::Import
+/// Parses `import <qualified_ident>::[{ident_nodiscard, ...}|*]` into
+/// Stmt::Import
 fn import_stmt() -> token_parser!(Stmt) {
 	jkeyword!(Import)
 		.ignore_then(qualified_ident())

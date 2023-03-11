@@ -70,6 +70,7 @@ pub fn expr() -> token_parser!(Expr) {
 				ty_ident(Some(e.clone())),
 				ident().map(|x| x.infer_type())
 			)),)
+			.map_with_span(|pre, span| (pre, span))
 			.then(choice((
 				// bare_scope(),
 				jkeyword!(FatArrow)
@@ -85,7 +86,7 @@ pub fn expr() -> token_parser!(Expr) {
 						stmts: vec![Stmt::Return(span, expr)],
 					}),
 			)))
-			.map_with_span(|(args, body), span| {
+			.map_with_span(|((args, decl_span), body), span| {
 				Expr::Lambda(
 					span.clone(),
 					Func {
@@ -95,6 +96,7 @@ pub fn expr() -> token_parser!(Expr) {
 						generics: Vec::new(), // NOTE: should lambda generics?
 						args,
 						attribs: FuncAttribs::default(),
+						decl_span,
 					},
 				)
 			})

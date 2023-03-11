@@ -180,11 +180,23 @@ impl std::ops::Add for InheritableData {
 	}
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedScope {
+	pub span: Span,
 	pub data: InheritableData,
 	pub inherit: InheritableData,
 	pub stmts: Vec<ResolvedStmt>,
+}
+
+impl ResolvedScope {
+	pub fn new(span: Span) -> Self {
+		Self {
+			span,
+			data: InheritableData::default(),
+			inherit: InheritableData::default(),
+			stmts: Vec::new(),
+		}
+	}
 }
 
 impl fmt::Display for ResolvedScope {
@@ -372,9 +384,10 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn add_func(&mut self, name: String, span: Span, func: ResolvedFunc) {
+	pub fn add_func(&mut self, name: String, func: ResolvedFunc) {
+		let decl_span = func.decl_span.clone();
 		self.data.funcs.insert(name.clone(), func);
-		self.data.func_spans.insert(name, span);
+		self.data.func_spans.insert(name, decl_span);
 	}
 
 	pub fn check_ident_exists(&self, ident: Ident) {
@@ -639,7 +652,7 @@ impl ResolvedScope {
 					return_ty = ty;
 					scope
 				}
-				Err(_) => ResolvedScope::default(),
+				Err(_) => ResolvedScope::new(func.body.span),
 			}
 		} else {
 			match resolve(
@@ -649,7 +662,7 @@ impl ResolvedScope {
 				Some((func_span, return_ty.span(), return_ty.clone())),
 			) {
 				Ok((scope, _)) => scope,
-				Err(_) => ResolvedScope::default(),
+				Err(_) => ResolvedScope::new(func.body.span),
 			}
 		};
 		let attribs = func.attribs.clone();
@@ -669,6 +682,7 @@ impl ResolvedScope {
 			return_ty,
 			body,
 			attribs,
+			decl_span: func.decl_span,
 		}
 	}
 
@@ -926,6 +940,7 @@ pub struct ResolvedFunc {
 	pub return_ty: ResolvedType,
 	pub body: ResolvedScope,
 	pub attribs: FuncAttribs,
+	pub decl_span: Span,
 }
 
 impl fmt::Display for ResolvedFunc {
@@ -1044,7 +1059,7 @@ pub fn resolve(
 	inherit_scope: Option<ResolvedScope>,
 	expected_func_ty: Option<(Span, Span, ResolvedType)>,
 ) -> Result<(ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>> {
-	let mut resolved_scope = ResolvedScope::default();
+	let mut resolved_scope = ResolvedScope::new(scope.span.clone());
 	if let Some(scope) = inherit_scope {
 		resolved_scope.inherit = scope.data + scope.inherit;
 	}
@@ -1127,7 +1142,7 @@ pub fn resolve(
 					.stmts
 					.push(ResolvedStmt::Set(span, ident, resolved_expr));
 			}
-			Stmt::Func(span, privacy, ident, func) => {
+			Stmt::Func(_span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
 				let resolved = resolved_scope.resolve_func(
 					ident.to_string(),
@@ -1136,7 +1151,7 @@ pub fn resolve(
 					context.clone(),
 				);
 				// TODO: use another, better span
-				resolved_scope.add_func(ident.to_string(), span, resolved);
+				resolved_scope.add_func(ident.to_string(), resolved);
 			}
 			Stmt::Return(span, expr) => {
 				let (resolved_expr, ty) = resolved_scope.examine_expr(expr, context.clone());
@@ -1175,7 +1190,7 @@ pub fn resolve(
 				}
 				let scope = match resolve(body.clone(), Context::Class, Some(crs), None) {
 					Ok((scope, _)) => scope,
-					Err(_) => ResolvedScope::default(),
+					Err(_) => ResolvedScope::new(body.span),
 				};
 				ty.body = Some(scope);
 				resolved_scope.add_type(span, name, ty);
@@ -1188,10 +1203,11 @@ pub fn resolve(
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));
 			}
 			Stmt::Unsafe(span, scope) => {
+				let scope_span = scope.span.clone();
 				let resolved =
 					match resolve(scope, Context::Unsafe, Some(resolved_scope.clone()), None) {
 						Ok((scope, _)) => scope,
-						Err(_) => ResolvedScope::default(),
+						Err(_) => ResolvedScope::new(scope_span),
 					};
 				resolved_scope
 					.stmts

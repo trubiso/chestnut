@@ -373,6 +373,7 @@ pub struct Func {
 	pub generics: Vec<Ident>,  // TODO: same here
 	pub body: Scope,
 	pub attribs: FuncAttribs,
+	pub decl_span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
