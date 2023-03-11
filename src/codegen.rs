@@ -36,11 +36,11 @@ pub fn codegen_expr(expr: ResolvedExpr) -> String {
 			format!("({}{op}{})", codegen_expr(*lhs), codegen_expr(*rhs))
 		}
 		ResolvedExpr::UnaryOp(_, op, val) => format!("({op}{})", codegen_expr(*val)),
-		// TODO: we can't do this yet as this carries a Func and therefore a regular Scope
 		ResolvedExpr::Lambda(_, func) => {
 			format!(
-				"([&]({}){{}})",
-				comma(func.args, |x| codegen_ty_ident(x.clone().as_ty_ident()))
+				"([&]({}){{{}}})",
+				comma(func.args, |x| codegen_ty_ident(x.clone().as_ty_ident())),
+				codegen_scope(func.body),
 			)
 		}
 		ResolvedExpr::Call(_, callee, args) => format!(
@@ -75,7 +75,7 @@ pub fn codegen_ty(ty: ResolvedType) -> String {
 			ResolvedType::Ref(_, x) => format!("Ref<{}>{m}", inner(*x, false)),
 			ResolvedType::Optional(_, x) => format!("Optional<{}>{m}", inner(*x, false)),
 			ResolvedType::Mut(_, x) => inner(*x, true),
-			ResolvedType::Inferred(_) => panic!("unsupported Inferred type in codegen!"),
+			ResolvedType::Inferred(_) => "".into(),
 		}
 	}
 	inner(ty, false)
