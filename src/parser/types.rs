@@ -414,6 +414,7 @@ pub enum Stmt {
 	Class(Span, Privacy, Ident, Vec<Ident> /* generics */, Scope),
 	Import(Span, bool, Ident),
 	BareExpr(Span, Expr),
+	Unsafe(Span, Scope),
 }
 
 impl Stmt {
@@ -426,7 +427,8 @@ impl Stmt {
 			| Self::Return(x, _)
 			| Self::Class(x, _, _, _, _)
 			| Self::Import(x, _, _)
-			| Self::BareExpr(x, _) => x.clone(),
+			| Self::BareExpr(x, _)
+			| Self::Unsafe(x, _) => x.clone(),
 		}
 	}
 }
@@ -455,6 +457,7 @@ impl fmt::Display for Stmt {
 				if *glob { "::*" } else { "" }
 			)),
 			Stmt::BareExpr(_span, expr) => f.write_fmt(format_args!("{expr};")),
+			Stmt::Unsafe(_span, scope) => f.write_fmt(format_args!("unsafe {}", scope.braced())),
 		}
 	}
 }

@@ -8,6 +8,9 @@ void hold_knife() unsafe {
 }
 
 void main() {
+	unsafe {
+		hold_knife();
+	}
 
 	// TODO: lex /***/ properly
 }

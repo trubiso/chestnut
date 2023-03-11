@@ -161,12 +161,19 @@ fn mut_stmt() -> token_parser!(Stmt) {
 		})
 }
 
-/// Parses `import <qualified_ident>::[{ident_nodiscard, ...}|*]`
+/// Parses `import <qualified_ident>::[{ident_nodiscard, ...}|*]` into Stmt::Import
 fn import_stmt() -> token_parser!(Stmt) {
 	jkeyword!(Import)
 		.ignore_then(qualified_ident())
 		.then(jpunct!(ColonColon).then(jop!(Star)).map(|_| true).or_not())
 		.map_with_span(|(imported, glob), span| Stmt::Import(span, glob.is_some(), imported))
+}
+
+/// Parses `unsafe <scope>` into Stmt::Unsafe
+fn unsafe_scope_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
+	jkeyword!(Unsafe)
+		.ignore_then(braced!(scope))
+		.map_with_span(|scope, span| Stmt::Unsafe(span, scope))
 }
 
 /// Parses a bare scope (not wrapped in curly braces) into Scope

@@ -968,6 +968,7 @@ impl Stmt {
 			Self::Class(_, _, _, _, _) => "class".into(),
 			Self::Import(_, _, _) => "import".into(),
 			Self::BareExpr(_, _) => "bare expression".into(),
+			Self::Unsafe(_, _) => "unsafe scope".into(),
 		}
 	}
 }
@@ -1001,6 +1002,7 @@ check_stmt!(
 	Class(_, _, _, _, _) => TopLevel Func; // NOTE: maybe Class too?
 	Import(_, _, _) => TopLevel;
 	BareExpr(_, _) => Func;
+	Unsafe(_, _) => Func;
 );
 
 pub fn resolve(
@@ -1147,6 +1149,7 @@ pub fn resolve(
 					.stmts
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));
 			}
+			Stmt::Unsafe(_span, _scope) => {}
 		}
 	}
 	if let Some((func_span, return_ty_span, expected_ty)) = expected_func_ty {
