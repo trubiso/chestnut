@@ -8,7 +8,7 @@ void hold_knife() unsafe {
 }
 
 void print<T>(T thing) unsafe {
-	// let x = thing;
+	let x = thing;
 	unsafe {
 		cpp "std::cout << thing << std::endl;";
 	}
@@ -24,7 +24,7 @@ void main() {
 	unsafe {
 		hold_knife();
 		r = get_a_number();
-		// print<string>("e");
+		print<string>("e");
 	}
 
 	// TODO: lex /***/ properly

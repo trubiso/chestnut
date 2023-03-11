@@ -344,7 +344,7 @@ impl ResolvedScope {
 		&mut self,
 		span: Span,
 		ty_ident: ResolvedTypedIdent,
-		value: Option<ResolvedExpr>,
+		value: Option<Option<ResolvedExpr>>,
 	) {
 		// TODO: do something with duplicate idents. perhaps mangle them in codegen
 		if ty_ident.ident.is_discarded() {
@@ -387,7 +387,7 @@ impl ResolvedScope {
 				);
 				return;
 			}
-			x.value = Some(resolved_expr);
+			x.value = Some(Some(resolved_expr));
 		} else {
 			let span = ident.span() + resolved_expr.span();
 			add_diagnostic(
@@ -655,7 +655,7 @@ impl ResolvedScope {
 			frs.add_var(
 				arg.span.clone(),
 				self.resolve_ty_ident(arg.clone(), context.clone()),
-				None,
+				Some(None),
 			);
 		}
 		// TODO: use resolved scope
@@ -937,8 +937,8 @@ impl fmt::Display for ResolvedType {
 pub struct ResolvedVar {
 	pub name: String,
 	pub ty: ResolvedType,
-	// NOTE: in the future we might support uninitialized variables
-	pub value: Option<ResolvedExpr>,
+	// outer option = is initialized, inner option = is arg
+	pub value: Option<Option<ResolvedExpr>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1114,7 +1114,7 @@ pub fn resolve(
 					ResolvedType::Mut(_, _) => ResolvedType::Mut(lhs_span, Box::new(rhs)),
 					_ => rhs,
 				};
-				resolved_scope.add_var(span.clone(), ty_ident.clone(), Some(resolved_expr.clone()));
+				resolved_scope.add_var(span.clone(), ty_ident.clone(), Some(Some(resolved_expr.clone())));
 				if !ty_ident.ident.is_discarded() {
 					resolved_scope.stmts.push(ResolvedStmt::Create(
 						span,
