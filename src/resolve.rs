@@ -453,7 +453,7 @@ impl ResolvedScope {
 			ResolvedExpr::Lambda(_, _func) => {
 				// TODO: maybe infer arg types
 			}
-			ResolvedExpr::Call(span, func_expr, generics, args) => {
+			ResolvedExpr::Call(span, func_expr, mut generics, args) => {
 				self.check_expr(*func_expr.clone(), context.clone());
 				let func_expr_span = func_expr.span();
 				let (func, decl_span) = if let ResolvedExpr::Identifier(_, name) = *func_expr {
@@ -524,23 +524,19 @@ impl ResolvedScope {
 							);
 						}
 					} else {
-						add_diagnostic(
-							Diagnostic::error()
-								.with_message("not enough generics in function call")
-								.with_labels(vec![
-									Label::primary(span.file_id, span.range()),
-									Label::secondary(decl_span.file_id, decl_span.range())
-										.with_message("original declaration here"),
-								]),
-						);
+						generics = Some(vec![
+							ResolvedType::Inferred(span.clone());
+							func.generics.len()
+						])
 					}
 				}
 				let mut arg_types = Vec::new();
 				for arg in func.args {
-					arg_types.push(
-						arg.ty
-							.replace_generics(func.generics.clone(), generics.clone()),
-					);
+					arg_types.push(arg.ty.replace_generics(
+						span.clone(),
+						func.generics.clone(),
+						generics.clone(),
+					));
 				}
 				for (i, arg) in args.iter().enumerate() {
 					self.check_expr(arg.clone(), context.clone());
@@ -643,14 +639,15 @@ impl ResolvedScope {
 			ResolvedExpr::Call(span, callee, generics, _args) => {
 				match *callee {
 					ResolvedExpr::Identifier(_, i) => match self.get_func(&i.to_string()) {
-						Some(x) => x
-							.return_ty
-							.clone()
-							.replace_generics(x.generics.clone(), generics),
+						Some(x) => {
+							x.return_ty
+								.clone()
+								.replace_generics(span, x.generics.clone(), generics)
+						}
 						None => builtin!(span, Error),
 					},
 					ResolvedExpr::Lambda(_, f) => {
-						f.return_ty.replace_generics(f.generics, generics)
+						f.return_ty.replace_generics(span, f.generics, generics)
 					}
 					// TODO: func signature builtin type. so we'd do self.get_expr_ty(expr) then
 					// simply force it to be a func and get its return ty
@@ -969,7 +966,12 @@ impl ResolvedType {
 		}
 	}
 
-	pub fn replace_generics(mut self, names: Vec<String>, tys: Option<Vec<ResolvedType>>) -> Self {
+	pub fn replace_generics(
+		mut self,
+		span: Span,
+		names: Vec<String>,
+		tys: Option<Vec<ResolvedType>>,
+	) -> Self {
 		if let Some(tys) = tys {
 			if names.len() != tys.len() {
 				return self;
@@ -980,8 +982,15 @@ impl ResolvedType {
 					self = self.replace_generic(generic.clone(), curr_generic.clone());
 				}
 			}
+			self
+		} else {
+			let len = names.len();
+			self.replace_generics(
+				span.clone(),
+				names,
+				Some(vec![ResolvedType::Inferred(span); len]),
+			)
 		}
-		self
 	}
 }
 

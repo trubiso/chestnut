@@ -5,5 +5,5 @@ void print<T>(T thing) {
 }
 
 void main() {
-	print<string>("Hello World!");
+	print("Hello World!");
 }
