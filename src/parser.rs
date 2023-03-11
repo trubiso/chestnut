@@ -179,6 +179,16 @@ fn unsafe_scope_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 		.map_with_span(|scope, span| Stmt::Unsafe(span, scope))
 }
 
+/// Parses `cpp <string literal>` into Stmt::Cpp
+fn cpp_stmt() -> token_parser!(Stmt) {
+	jkeyword!(Cpp)
+		.ignore_then(filter(|x| match x {
+			Token::StringLiteral(_) => true,
+			_ => false,
+		}))
+		.map_with_span(|code, span| Stmt::Cpp(span, force_token!(code => StringLiteral)))
+}
+
 /// Parses a bare scope (not wrapped in curly braces) into Scope
 pub fn bare_scope() -> token_parser!(Scope) {
 	recursive(|scope| {

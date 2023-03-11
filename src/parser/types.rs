@@ -416,6 +416,7 @@ pub enum Stmt {
 	Import(Span, bool, Ident),
 	BareExpr(Span, Expr),
 	Unsafe(Span, Scope),
+	Cpp(Span, String),
 }
 
 impl Stmt {
@@ -429,7 +430,8 @@ impl Stmt {
 			| Self::Class(x, _, _, _, _)
 			| Self::Import(x, _, _)
 			| Self::BareExpr(x, _)
-			| Self::Unsafe(x, _) => x.clone(),
+			| Self::Unsafe(x, _)
+			| Self::Cpp(x, _) => x.clone(),
 		}
 	}
 }
@@ -459,6 +461,7 @@ impl fmt::Display for Stmt {
 			)),
 			Stmt::BareExpr(_span, expr) => f.write_fmt(format_args!("{expr};")),
 			Stmt::Unsafe(_span, scope) => f.write_fmt(format_args!("unsafe {}", scope.braced())),
+			Stmt::Cpp(_span, code) => f.write_fmt(format_args!(r#"cpp "{code}""#)),
 		}
 	}
 }

@@ -12,6 +12,7 @@ void main() {
 	unsafe {
 		hold_knife();
 		r = get_a_number();
+		cpp "std::cout << 1 + 2 + 3 << std::endl;";
 	}
 
 	// TODO: lex /***/ properly

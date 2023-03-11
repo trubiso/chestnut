@@ -118,6 +118,9 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 		ResolvedStmt::Unsafe(_, scope) => {
 			format!("{{{}}}", codegen_scope(scope))
 		}
+		ResolvedStmt::Cpp(_, code) => {
+			code[..code.len() - 1][1..].to_string()
+		}
 	}
 }
 

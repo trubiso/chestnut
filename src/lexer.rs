@@ -188,6 +188,7 @@ def_token!(
 		"if" => If,
 		"import" => Import,
 		"unsafe" => Unsafe,
+		"cpp" => Cpp,
 		"~" => DontCare,
 	}
 

@@ -50,6 +50,8 @@ pub enum ResolvedStmt {
 	BareExpr(Span, ResolvedExpr),
 	#[display(fmt = "unsafe {{{_1}}};")]
 	Unsafe(Span, ResolvedScope),
+	#[display(fmt = r#"cpp {_1};"#)]
+	Cpp(Span, String),
 }
 
 macro_rules! builtin {
@@ -66,7 +68,8 @@ impl ResolvedStmt {
 			| Self::Set(x, _, _)
 			| Self::Return(x, _)
 			| Self::BareExpr(x, _)
-			| Self::Unsafe(x, _) => x.clone(),
+			| Self::Unsafe(x, _)
+			| Self::Cpp(x, _) => x.clone(),
 		}
 	}
 }
@@ -1017,6 +1020,7 @@ impl Stmt {
 			Self::Import(_, _, _) => "import".into(),
 			Self::BareExpr(_, _) => "bare expression".into(),
 			Self::Unsafe(_, _) => "unsafe scope".into(),
+			Self::Cpp(_, _) => "inline c++".into(),
 		}
 	}
 }
@@ -1051,6 +1055,7 @@ check_stmt!(
 	Import(_, _, _) => TopLevel Unsafe;
 	BareExpr(_, _) => Func Unsafe;
 	Unsafe(_, _) => Func;
+	Cpp(_, _) => Unsafe;
 );
 
 pub fn resolve(
@@ -1211,7 +1216,10 @@ pub fn resolve(
 					};
 				resolved_scope
 					.stmts
-					.push(ResolvedStmt::Unsafe(span, resolved))
+					.push(ResolvedStmt::Unsafe(span, resolved));
+			}
+			Stmt::Cpp(span, code) => {
+				resolved_scope.stmts.push(ResolvedStmt::Cpp(span, code));
 			}
 		}
 	}
