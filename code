@@ -1,21 +1,9 @@
-import std::io;
-import std::fmt::*;
-
-T doubled<T>(T value) => value + value;
-
-void print<T>(T thing) unsafe {
+void print<T>(T thing) {
 	unsafe {
 		cpp "std::cout << thing << std::endl;";
 	}
 }
 
 void main() {
-	i32 mut r = 10;
-	r = doubled<i32>(r);
-	r -= 5;
-	unsafe {
-		print<i32>(r);
-	}
-
-	// TODO: lex /***/ properly
+	print<string>("Hello World!");
 }

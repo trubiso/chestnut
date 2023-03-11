@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <iostream>
+#include <string>
 
 namespace Chestnut {
 	typedef int8_t i8;
@@ -22,6 +23,7 @@ namespace Chestnut {
 	// TODO: char
 
 	void const main();
+	using string = ::std::string;
 }
 
 int main() {
