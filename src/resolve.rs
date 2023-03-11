@@ -1124,7 +1124,7 @@ pub fn resolve(
 				let lhs_span = ident.span();
 				let lhs = resolved_scope
 					.get_expr_ty(ResolvedExpr::Identifier(lhs_span.clone(), ident.clone()));
-				if lhs != rhs {
+				if *lhs.ignore_mut() != rhs {
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("assignment between incompatible types")

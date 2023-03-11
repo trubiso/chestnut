@@ -8,10 +8,10 @@ void hold_knife() unsafe {
 }
 
 void main() {
-	let r = get_a_number();
-	hold_knife();
+	i32 mut r;
 	unsafe {
 		hold_knife();
+		r = get_a_number();
 	}
 
 	// TODO: lex /***/ properly
