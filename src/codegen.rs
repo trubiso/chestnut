@@ -44,9 +44,13 @@ pub fn codegen_expr(expr: ResolvedExpr) -> String {
 			)
 		}
 		// TODO: codegen generics
-		ResolvedExpr::Call(_, callee, _generics, args) => format!(
-			"{}({})",
+		ResolvedExpr::Call(_, callee, generics, args) => format!(
+			"{}{}({})",
 			codegen_expr(*callee),
+			generics
+				.map(|x| x.iter().map(|y| codegen_ty(y.clone())).collect::<String>())
+				.map(|x| "<".to_string() + &x + ">")
+				.unwrap_or("".to_string()),
 			comma(args, |x| codegen_expr(x.clone()))
 		),
 	}

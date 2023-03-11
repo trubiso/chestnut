@@ -551,7 +551,7 @@ impl ResolvedScope {
 					self.check_expr(arg.clone(), context.clone());
 					let arg_ty = self.get_expr_ty(arg.clone());
 					let expected_ty = arg_types[i].clone();
-					if arg_ty != expected_ty {
+					if arg_ty.ignore_mut() != expected_ty.ignore_mut() {
 						add_diagnostic(
 							Diagnostic::error()
 								.with_message("incorrect argument type")
