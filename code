@@ -24,7 +24,7 @@ void main() {
 	unsafe {
 		hold_knife();
 		r = get_a_number();
-		print<string>("e");
+		print<i32>("e");
 	}
 
 	// TODO: lex /***/ properly

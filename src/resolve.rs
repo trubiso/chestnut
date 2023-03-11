@@ -453,7 +453,7 @@ impl ResolvedScope {
 			ResolvedExpr::Lambda(_, _func) => {
 				// TODO: maybe infer arg types
 			}
-			ResolvedExpr::Call(span, func_expr, _generics, args) => {
+			ResolvedExpr::Call(span, func_expr, generics, args) => {
 				self.check_expr(*func_expr.clone(), context.clone());
 				let func_expr_span = func_expr.span();
 				let (func, decl_span) = if let ResolvedExpr::Identifier(_, name) = *func_expr {
@@ -506,10 +506,51 @@ impl ResolvedScope {
 							]),
 					)
 				}
+				if !func.generics.is_empty() {
+					if let Some(generics) = generics.clone() {
+						if generics.len() != func.generics.len() {
+							add_diagnostic(
+								Diagnostic::error()
+									.with_message(match generics.len().cmp(&func.generics.len()) {
+										Ordering::Less => "not enough generics in function call",
+										Ordering::Greater => "too many generics in function call",
+										Ordering::Equal => unreachable!(),
+									})
+									.with_labels(vec![
+										Label::primary(span.file_id, span.range()),
+										Label::secondary(decl_span.file_id, decl_span.range())
+											.with_message("original declaration here"),
+									]),
+							);
+						}
+					} else {
+						add_diagnostic(
+							Diagnostic::error()
+								.with_message("not enough generics in function call")
+								.with_labels(vec![
+									Label::primary(span.file_id, span.range()),
+									Label::secondary(decl_span.file_id, decl_span.range())
+										.with_message("original declaration here"),
+								]),
+						);
+					}
+				}
+				let mut arg_types = Vec::new();
+				for arg in func.args {
+					let mut ty = arg.ty;
+					if !func.generics.is_empty() {
+						for (i, generic) in func.generics.iter().enumerate() {
+							let Some(generics) = generics.clone() else { return; };
+							let Some(curr_generic) = generics.get(i) else { return; };
+							ty = ty.replace_generic(generic.clone(), curr_generic.clone());
+						}
+					}
+					arg_types.push(ty);
+				}
 				for (i, arg) in args.iter().enumerate() {
 					self.check_expr(arg.clone(), context.clone());
 					let arg_ty = self.get_expr_ty(arg.clone());
-					let expected_ty = func.args[i].ty.clone();
+					let expected_ty = arg_types[i].clone();
 					if arg_ty != expected_ty {
 						add_diagnostic(
 							Diagnostic::error()
@@ -644,6 +685,7 @@ impl ResolvedScope {
 					fields: HashMap::new(), // NOTE: potentially in the future we will change this
 					funcs: HashMap::new(),
 					body: None,
+					is_generic: true,
 				},
 			);
 		}
@@ -910,6 +952,24 @@ impl ResolvedType {
 			_ => self,
 		}
 	}
+
+	pub fn replace_generic(self, name: String, ty: ResolvedType) -> Self {
+		match self {
+			Self::BareType(span, x) => {
+				if x.ident.to_string() == name {
+					ty
+				} else {
+					Self::BareType(span, x)
+				}
+			}
+			Self::Builtin(_, _) => self,
+			Self::Array(span, x, l) => Self::Array(span, Box::new(x.replace_generic(name, ty)), l),
+			Self::Ref(span, x) => Self::Ref(span, Box::new(x.replace_generic(name, ty))),
+			Self::Optional(span, x) => Self::Optional(span, Box::new(x.replace_generic(name, ty))),
+			Self::Mut(span, x) => Self::Mut(span, Box::new(x.replace_generic(name, ty))),
+			Self::Inferred(_) => self,
+		}
+	}
 }
 
 impl fmt::Display for ResolvedType {
@@ -948,6 +1008,7 @@ pub struct ResolvedMadeType {
 	pub fields: HashMap<String, ResolvedMadeType>,
 	pub funcs: HashMap<String, ResolvedFunc>,
 	pub body: Option<ResolvedScope>, // if it's a generic no body defines it
+	pub is_generic: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1114,7 +1175,11 @@ pub fn resolve(
 					ResolvedType::Mut(_, _) => ResolvedType::Mut(lhs_span, Box::new(rhs)),
 					_ => rhs,
 				};
-				resolved_scope.add_var(span.clone(), ty_ident.clone(), Some(Some(resolved_expr.clone())));
+				resolved_scope.add_var(
+					span.clone(),
+					ty_ident.clone(),
+					Some(Some(resolved_expr.clone())),
+				);
 				if !ty_ident.ident.is_discarded() {
 					resolved_scope.stmts.push(ResolvedStmt::Create(
 						span,
@@ -1192,6 +1257,7 @@ pub fn resolve(
 					fields: HashMap::new(), // TODO
 					funcs: HashMap::new(),  // TODO
 					body: None,
+					is_generic: false,
 				};
 				crs.add_type(span.clone(), name.clone(), ty.clone());
 				for generic in generics {
@@ -1206,6 +1272,7 @@ pub fn resolve(
 							fields: HashMap::new(),
 							funcs: HashMap::new(),
 							body: None,
+							is_generic: true,
 						},
 					)
 				}
