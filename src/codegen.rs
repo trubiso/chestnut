@@ -43,7 +43,8 @@ pub fn codegen_expr(expr: ResolvedExpr) -> String {
 				codegen_scope(func.body),
 			)
 		}
-		ResolvedExpr::Call(_, callee, args) => format!(
+		// TODO: codegen generics
+		ResolvedExpr::Call(_, callee, _generics, args) => format!(
 			"{}({})",
 			codegen_expr(*callee),
 			comma(args, |x| codegen_expr(x.clone()))
@@ -113,14 +114,12 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 			format!("return {};", codegen_expr(expr))
 		}
 		ResolvedStmt::BareExpr(_, expr) => {
-			format!("({});", expr)
+			format!("({});", codegen_expr(expr))
 		}
 		ResolvedStmt::Unsafe(_, scope) => {
 			format!("{{{}}}", codegen_scope(scope))
 		}
-		ResolvedStmt::Cpp(_, code) => {
-			code[..code.len() - 1][1..].to_string()
-		}
+		ResolvedStmt::Cpp(_, code) => code[..code.len() - 1][1..].to_string(),
 	}
 }
 

@@ -83,7 +83,12 @@ pub enum ResolvedExpr {
 	BinaryOp(Span, Box<ResolvedExpr>, Operator, Box<ResolvedExpr>),
 	UnaryOp(Span, Operator, Box<ResolvedExpr>),
 	Lambda(Span, ResolvedFunc),
-	Call(Span, Box<ResolvedExpr>, Vec<ResolvedExpr>),
+	Call(
+		Span,
+		Box<ResolvedExpr>,
+		Option<Vec<ResolvedType>>,
+		Vec<ResolvedExpr>,
+	),
 }
 
 macro_rules! i_hate_partial_eq {
@@ -113,7 +118,7 @@ impl PartialEq for ResolvedExpr {
 			BinaryOp(a, b, c)(d, e, f) => (a.clone(), b, c.clone()) == (d.clone(), e, f.clone());
 			UnaryOp(a, b)(c, d) => a == c && b == d;
 			Lambda(f)(v) => f == v;
-			Call(a, b)(c, d) => a == c && b == d;
+			Call(a, g, b)(c, j, d) => a == c && b == d && g == j;
 		)
 	}
 }
@@ -132,8 +137,14 @@ impl fmt::Display for ResolvedExpr {
 			}
 			ResolvedExpr::UnaryOp(_, op, expr) => f.write_fmt(format_args!("({op}{expr})")),
 			ResolvedExpr::Lambda(_, func) => f.write_fmt(format_args!("lambda {func}")),
-			ResolvedExpr::Call(_, callee, args) => f.write_fmt(format_args!(
-				"{callee}({})",
+			ResolvedExpr::Call(_, callee, generics, args) => f.write_fmt(format_args!(
+				"{callee}{}({})",
+				generics
+					.as_ref()
+					.map(|g| join_comma(&g)
+						.map(|x| format!("<{x}>"))
+						.unwrap_or("".to_string()))
+					.unwrap_or("".to_string()),
 				join_comma(args).unwrap_or("".to_string())
 			)),
 		}
@@ -150,7 +161,7 @@ impl ResolvedExpr {
 			| Self::BinaryOp(x, _, _, _)
 			| Self::UnaryOp(x, _, _)
 			| Self::Lambda(x, _)
-			| Self::Call(x, _, _) => x.clone(),
+			| Self::Call(x, _, _, _) => x.clone(),
 		}
 	}
 }
@@ -442,7 +453,7 @@ impl ResolvedScope {
 			ResolvedExpr::Lambda(_, _func) => {
 				// TODO: maybe infer arg types
 			}
-			ResolvedExpr::Call(span, func_expr, args) => {
+			ResolvedExpr::Call(span, func_expr, _generics, args) => {
 				self.check_expr(*func_expr.clone(), context.clone());
 				let func_expr_span = func_expr.span();
 				let (func, decl_span) = if let ResolvedExpr::Identifier(_, name) = *func_expr {
@@ -593,7 +604,7 @@ impl ResolvedScope {
 				// TODO: resolve lambda
 				builtin!(span, Error)
 			}
-			ResolvedExpr::Call(span, callee, _args) => {
+			ResolvedExpr::Call(span, callee, _generics, _args) => {
 				match *callee {
 					ResolvedExpr::Identifier(_, i) => {
 						match self.get_func(&i.to_string()).map(|x| x.return_ty.clone()) {
@@ -604,7 +615,7 @@ impl ResolvedScope {
 					ResolvedExpr::Lambda(_, f) => f.return_ty,
 					// TODO: func signature builtin type. so we'd do self.get_expr_ty(expr) then
 					// simply force it to be a func and get its return ty
-					ResolvedExpr::Call(_, _, _) => todo!(),
+					ResolvedExpr::Call(_, _, _, _) => todo!(),
 					_ => builtin!(span, Error),
 				}
 			}
@@ -708,9 +719,14 @@ impl ResolvedScope {
 			Expr::Lambda(s, f) => {
 				ResolvedExpr::Lambda(s.clone(), self.resolve_func("~".into(), s, f, context))
 			}
-			Expr::Call(s, c, a) => ResolvedExpr::Call(
+			Expr::Call(s, c, g, a) => ResolvedExpr::Call(
 				s,
 				Box::new(self.resolve_expr(*c, context.clone())),
+				g.map(|gen| {
+					gen.iter()
+						.map(|x| self.resolve_ty(x.clone(), context.clone()))
+						.collect()
+				}),
 				a.iter()
 					.map(|x| self.resolve_expr(x.clone(), context.clone()))
 					.collect(),

@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <iostream>
 
 namespace Chestnut {
 	typedef int8_t i8;

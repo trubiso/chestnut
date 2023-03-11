@@ -1,4 +1,5 @@
 use super::ident::{ident, potentially_qualified_ident};
+use super::ty::ty;
 use super::ty_ident::ty_ident;
 use super::types::{Expr, Func, FuncAttribs, Scope, Stmt, Type};
 use crate::span::Span;
@@ -49,10 +50,18 @@ pub fn expr() -> token_parser!(Expr) {
 		// TODO: dot access parser
 		let fc_parser = || {
 			span!(atom())
-				.then(span!(parened!(e.clone(),)).repeated())
-				.foldl(|(lhs, ls), (args, rs)| {
+				.then(
+					span!(angled!(ty(Some(e.clone())),)
+						.or_not()
+						.then(parened!(e.clone(),)))
+					.repeated(),
+				)
+				.foldl(|(lhs, ls), ((generics, args), rs)| {
 					let span: Span = ls + rs;
-					(Expr::Call(span.clone(), Box::new(lhs), args), span)
+					(
+						Expr::Call(span.clone(), Box::new(lhs), generics, args),
+						span,
+					)
 				})
 				.map(|(x, _)| x)
 		};

@@ -385,7 +385,7 @@ pub enum Expr {
 	BinaryOp(Span, Box<Expr>, Operator, Box<Expr>),
 	UnaryOp(Span, Operator, Box<Expr>),
 	Lambda(Span, Func),
-	Call(Span, Box<Expr>, Vec<Expr>),
+	Call(Span, Box<Expr>, Option<Vec<Type>>, Vec<Expr>),
 	Error(Span),
 }
 
@@ -399,7 +399,7 @@ impl Expr {
 			| Self::BinaryOp(x, _, _, _)
 			| Self::UnaryOp(x, _, _)
 			| Self::Lambda(x, _)
-			| Self::Call(x, _, _)
+			| Self::Call(x, _, _, _)
 			| Self::Error(x) => x.clone(),
 		}
 	}
@@ -560,8 +560,14 @@ impl fmt::Display for Expr {
 			Expr::BinaryOp(_, lhs, op, rhs) => f.write_fmt(format_args!("({lhs} {op} {rhs})")),
 			Expr::UnaryOp(_, op, expr) => f.write_fmt(format_args!("({op}{expr})")),
 			Expr::Lambda(_, func) => f.write_fmt(format_args!("lambda {func}")),
-			Expr::Call(_, callee, args) => f.write_fmt(format_args!(
-				"{callee}({})",
+			Expr::Call(_, callee, generics, args) => f.write_fmt(format_args!(
+				"{callee}{}({})",
+				generics
+					.as_ref()
+					.map(|g| join_comma(&g)
+						.map(|x| format!("<{x}>"))
+						.unwrap_or("".to_string()))
+					.unwrap_or("".to_string()),
 				join_comma(args).unwrap_or("".to_string())
 			)),
 			Expr::Error(_) => f.write_str("[ERROR]"),

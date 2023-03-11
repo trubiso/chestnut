@@ -7,12 +7,24 @@ void hold_knife() unsafe {
 	let x = 9;
 }
 
+void print<T>(T thing) unsafe {
+	// let x = thing;
+	unsafe {
+		cpp "std::cout << thing << std::endl;";
+	}
+}
+
+void doo<T>() {
+
+}
+
 void main() {
 	i32 mut r;
+	doo<i32>();
 	unsafe {
 		hold_knife();
 		r = get_a_number();
-		cpp "std::cout << 1 + 2 + 3 << std::endl;";
+		// print<string>("e");
 	}
 
 	// TODO: lex /***/ properly
