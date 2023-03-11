@@ -1088,6 +1088,9 @@ pub fn resolve(
 				ty.body = Some(scope);
 				resolved_scope.add_type(span, name, ty);
 			}
+			Stmt::Import(_span, _glob, _imported) => {
+
+			}
 			Stmt::BareExpr(span, expr) => {
 				let resolved_expr = resolved_scope.resolve_and_check_expr(expr);
 				resolved_scope

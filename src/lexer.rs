@@ -186,6 +186,7 @@ def_token!(
 		"while" => While,
 		"loop" => Loop,
 		"if" => If,
+		"import" => Import,
 		"~" => DontCare,
 	}
 

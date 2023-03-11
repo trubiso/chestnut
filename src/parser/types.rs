@@ -411,6 +411,7 @@ pub enum Stmt {
 	Func(Span, Privacy, Ident, Func),
 	Return(Span, Expr),
 	Class(Span, Privacy, Ident, Vec<Ident> /* generics */, Scope),
+	Import(Span, bool, Ident),
 	BareExpr(Span, Expr),
 }
 
@@ -423,6 +424,7 @@ impl Stmt {
 			| Self::Func(x, _, _, _)
 			| Self::Return(x, _)
 			| Self::Class(x, _, _, _, _)
+			| Self::Import(x, _, _)
 			| Self::BareExpr(x, _) => x.clone(),
 		}
 	}
@@ -446,6 +448,10 @@ impl fmt::Display for Stmt {
 				"class {privacy}{ident}{} {}",
 				join_generics(generics),
 				body.braced()
+			)),
+			Stmt::Import(_span, glob, imported) => f.write_fmt(format_args!(
+				"import {imported}{};",
+				if *glob { "::*" } else { "" }
 			)),
 			Stmt::BareExpr(_span, expr) => f.write_fmt(format_args!("{expr};")),
 		}

@@ -1,7 +1,7 @@
 use super::types::{ScopeRecursive, Stmt};
 use crate::parser::{
 	bare_expr_stmt, class_stmt, create_stmt, declare_stmt, func_stmt, let_stmt, return_stmt,
-	stmt::assg::assg, mut_stmt,
+	stmt::assg::assg, mut_stmt, import_stmt,
 };
 use chumsky::prelude::*;
 
@@ -20,7 +20,7 @@ pub fn stmt(scope: ScopeRecursive, semi: bool) -> token_parser!(Stmt : '_) {
 	}
 	choice((
 		semi!(Y let_stmt()),
-		// TODO: `import <qualified_ident>::[{ident_nodiscard, ...}|*]`
+		semi!(Y import_stmt()),
 		semi!(Y create_stmt()),
 		semi!(Y mut_stmt()),
 		semi!(Y declare_stmt()),

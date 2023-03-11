@@ -159,6 +159,14 @@ fn mut_stmt() -> token_parser!(Stmt) {
 		})
 }
 
+/// Parses `import <qualified_ident>::[{ident_nodiscard, ...}|*]`
+fn import_stmt() -> token_parser!(Stmt) {
+	jkeyword!(Import)
+		.ignore_then(qualified_ident())
+		.then(jpunct!(ColonColon).then(jop!(Star)).map(|_| true).or_not())
+		.map_with_span(|(imported, glob), span| Stmt::Import(span, glob.is_some(), imported))
+}
+
 /// Parses a bare scope (not wrapped in curly braces) into Scope
 pub fn bare_scope() -> token_parser!(Scope) {
 	recursive(|scope| {
