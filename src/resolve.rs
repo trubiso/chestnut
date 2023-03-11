@@ -420,8 +420,8 @@ impl ResolvedScope {
 			ResolvedExpr::UnaryOp(_, _op, val) => {
 				self.check_expr(*val);
 			}
-			ResolvedExpr::Lambda(_, _func) => {
-				// TODO: resolve lambda
+			ResolvedExpr::Lambda(_, func) => {
+				// TODO: maybe infer arg types
 			}
 			ResolvedExpr::Call(span, func_expr, args) => {
 				self.check_expr(*func_expr.clone());
