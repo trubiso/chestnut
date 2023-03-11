@@ -48,6 +48,8 @@ pub enum ResolvedStmt {
 	Return(Span, ResolvedExpr),
 	#[display(fmt = "{_1};")]
 	BareExpr(Span, ResolvedExpr),
+	#[display(fmt = "unsafe {{{_1}}};")]
+	Unsafe(Span, ResolvedScope),
 }
 
 macro_rules! builtin {
@@ -63,7 +65,8 @@ impl ResolvedStmt {
 			| Self::Declare(x, _, _)
 			| Self::Set(x, _, _)
 			| Self::Return(x, _)
-			| Self::BareExpr(x, _) => x.clone(),
+			| Self::BareExpr(x, _)
+			| Self::Unsafe(x, _) => x.clone(),
 		}
 	}
 }
@@ -388,7 +391,7 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn check_expr(&self, expr: ResolvedExpr) {
+	pub fn check_expr(&self, expr: ResolvedExpr, context: Context) {
 		match expr {
 			ResolvedExpr::CharLiteral(_, _) => {}
 			ResolvedExpr::StringLiteral(_, _) => {}
@@ -411,20 +414,20 @@ impl ResolvedScope {
 				}
 			}
 			ResolvedExpr::BinaryOp(_, lhs, _op, rhs) => {
-				self.check_expr(*lhs.clone());
-				self.check_expr(*rhs.clone());
+				self.check_expr(*lhs.clone(), context.clone());
+				self.check_expr(*rhs.clone(), context);
 				// this may seem useless but it checks for types in binary ops
 				self.get_expr_ty(*lhs);
 				self.get_expr_ty(*rhs);
 			}
 			ResolvedExpr::UnaryOp(_, _op, val) => {
-				self.check_expr(*val);
+				self.check_expr(*val, context);
 			}
 			ResolvedExpr::Lambda(_, _func) => {
 				// TODO: maybe infer arg types
 			}
 			ResolvedExpr::Call(span, func_expr, args) => {
-				self.check_expr(*func_expr.clone());
+				self.check_expr(*func_expr.clone(), context.clone());
 				let func_expr_span = func_expr.span();
 				let (func, decl_span) = if let ResolvedExpr::Identifier(_, name) = *func_expr {
 					self.check_ident_exists(name.clone());
@@ -465,8 +468,19 @@ impl ResolvedScope {
 					);
 					return;
 				}
+				if func.attribs.is_unsafe && context != Context::Unsafe {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("calling unsafe function from non-unsafe context")
+							.with_labels(vec![
+								Label::primary(span.file_id, span.range()),
+								Label::secondary(decl_span.file_id, decl_span.range())
+									.with_message("original declaration here"),
+							]),
+					)
+				}
 				for (i, arg) in args.iter().enumerate() {
-					self.check_expr(arg.clone());
+					self.check_expr(arg.clone(), context.clone());
 					let arg_ty = self.get_expr_ty(arg.clone());
 					let expected_ty = func.args[i].ty.clone();
 					if arg_ty != expected_ty {
@@ -581,7 +595,13 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn resolve_func(&self, name: String, func_span: Span, func: Func) -> ResolvedFunc {
+	pub fn resolve_func(
+		&self,
+		name: String,
+		func_span: Span,
+		func: Func,
+		context: Context,
+	) -> ResolvedFunc {
 		let mut frs = self.clone();
 		let mut generics = Vec::new();
 		for generic in &func.generics {
@@ -600,12 +620,16 @@ impl ResolvedScope {
 				},
 			);
 		}
-		let resolved_return_ty = self.resolve_ty(func.return_ty);
+		let resolved_return_ty = self.resolve_ty(func.return_ty, context.clone());
 		frs.check_type(resolved_return_ty.clone());
 		for arg in &func.args {
 			// TODO: deal with discarded args
-			frs.check_type(self.resolve_ty(arg.ty.clone()));
-			frs.add_var(arg.span.clone(), self.resolve_ty_ident(arg.clone()), None);
+			frs.check_type(self.resolve_ty(arg.ty.clone(), context.clone()));
+			frs.add_var(
+				arg.span.clone(),
+				self.resolve_ty_ident(arg.clone(), context.clone()),
+				None,
+			);
 		}
 		// TODO: use resolved scope
 		let mut return_ty = resolved_return_ty;
@@ -635,7 +659,7 @@ impl ResolvedScope {
 			args.push(ResolvedArg {
 				span: arg.span,
 				name,
-				ty: self.resolve_ty(arg.ty),
+				ty: self.resolve_ty(arg.ty, context.clone()),
 			});
 		}
 		ResolvedFunc {
@@ -648,7 +672,7 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn resolve_expr(&self, expr: Expr) -> ResolvedExpr {
+	pub fn resolve_expr(&self, expr: Expr, context: Context) -> ResolvedExpr {
 		match expr {
 			Expr::CharLiteral(s, v) => ResolvedExpr::CharLiteral(s, v),
 			Expr::StringLiteral(s, v) => ResolvedExpr::StringLiteral(s, v),
@@ -656,67 +680,73 @@ impl ResolvedScope {
 			Expr::Identifier(s, v) => ResolvedExpr::Identifier(s, v),
 			Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(
 				s,
-				Box::new(self.resolve_expr(*l)),
+				Box::new(self.resolve_expr(*l, context.clone())),
 				o,
-				Box::new(self.resolve_expr(*r)),
+				Box::new(self.resolve_expr(*r, context)),
 			),
-			Expr::UnaryOp(s, o, v) => ResolvedExpr::UnaryOp(s, o, Box::new(self.resolve_expr(*v))),
+			Expr::UnaryOp(s, o, v) => {
+				ResolvedExpr::UnaryOp(s, o, Box::new(self.resolve_expr(*v, context)))
+			}
 			// TODO: better lambda span
 			Expr::Lambda(s, f) => {
-				ResolvedExpr::Lambda(s.clone(), self.resolve_func("~".into(), s, f))
+				ResolvedExpr::Lambda(s.clone(), self.resolve_func("~".into(), s, f, context))
 			}
 			Expr::Call(s, c, a) => ResolvedExpr::Call(
 				s,
-				Box::new(self.resolve_expr(*c)),
-				a.iter().map(|x| self.resolve_expr(x.clone())).collect(),
+				Box::new(self.resolve_expr(*c, context.clone())),
+				a.iter()
+					.map(|x| self.resolve_expr(x.clone(), context.clone()))
+					.collect(),
 			),
 			Expr::Error(_) => panic!(),
 		}
 	}
 
-	pub fn resolve_and_check_expr(&self, expr: Expr) -> ResolvedExpr {
-		let resolved_expr = self.resolve_expr(expr);
-		self.check_expr(resolved_expr.clone());
+	pub fn resolve_and_check_expr(&self, expr: Expr, context: Context) -> ResolvedExpr {
+		let resolved_expr = self.resolve_expr(expr, context.clone());
+		self.check_expr(resolved_expr.clone(), context);
 		resolved_expr
 	}
 
-	pub fn examine_expr(&self, expr: Expr) -> (ResolvedExpr, ResolvedType) {
-		let resolved_expr = self.resolve_and_check_expr(expr);
+	pub fn examine_expr(&self, expr: Expr, context: Context) -> (ResolvedExpr, ResolvedType) {
+		let resolved_expr = self.resolve_and_check_expr(expr, context);
 		let ty = self.get_expr_ty(resolved_expr.clone());
 		(resolved_expr, ty)
 	}
 
-	fn resolve_bare_type(&self, bare_type: BareType) -> ResolvedBareType {
+	fn resolve_bare_type(&self, bare_type: BareType, context: Context) -> ResolvedBareType {
 		ResolvedBareType {
 			ident: bare_type.ident,
 			generics: bare_type
 				.generics
 				.iter()
-				.map(|x| self.resolve_ty(x.clone()))
+				.map(|x| self.resolve_ty(x.clone(), context.clone()))
 				.collect(),
 		}
 	}
 
-	pub fn resolve_ty(&self, ty: Type) -> ResolvedType {
+	pub fn resolve_ty(&self, ty: Type, context: Context) -> ResolvedType {
 		match ty {
-			Type::BareType(a, b) => ResolvedType::BareType(a, self.resolve_bare_type(b)),
+			Type::BareType(a, b) => ResolvedType::BareType(a, self.resolve_bare_type(b, context)),
 			Type::Builtin(a, b) => ResolvedType::Builtin(a, b),
 			Type::Array(a, b, c) => ResolvedType::Array(
 				a,
-				Box::new(self.resolve_ty(*b)),
-				c.map(|x| Box::new(self.resolve_and_check_expr(*x))),
+				Box::new(self.resolve_ty(*b, context.clone())),
+				c.map(|x| Box::new(self.resolve_and_check_expr(*x, context))),
 			),
-			Type::Ref(a, b) => ResolvedType::Ref(a, Box::new(self.resolve_ty(*b))),
-			Type::Optional(a, b) => ResolvedType::Optional(a, Box::new(self.resolve_ty(*b))),
-			Type::Mut(a, b) => ResolvedType::Mut(a, Box::new(self.resolve_ty(*b))),
+			Type::Ref(a, b) => ResolvedType::Ref(a, Box::new(self.resolve_ty(*b, context))),
+			Type::Optional(a, b) => {
+				ResolvedType::Optional(a, Box::new(self.resolve_ty(*b, context)))
+			}
+			Type::Mut(a, b) => ResolvedType::Mut(a, Box::new(self.resolve_ty(*b, context))),
 			Type::Inferred(s) => ResolvedType::Inferred(s),
 		}
 	}
 
-	pub fn resolve_ty_ident(&self, ty_ident: TypedIdent) -> ResolvedTypedIdent {
+	pub fn resolve_ty_ident(&self, ty_ident: TypedIdent, context: Context) -> ResolvedTypedIdent {
 		ResolvedTypedIdent {
 			span: ty_ident.span,
-			ty: self.resolve_ty(ty_ident.ty),
+			ty: self.resolve_ty(ty_ident.ty, context),
 			ident: ty_ident.ident,
 		}
 	}
@@ -936,6 +966,8 @@ pub enum Context {
 	Class,
 	#[display(fmt = "function")]
 	Func,
+	#[display(fmt = "unsafe")]
+	Unsafe,
 }
 
 fn check_privacy(privacy: Privacy, context: Context) {
@@ -944,6 +976,7 @@ fn check_privacy(privacy: Privacy, context: Context) {
 			Context::TopLevel => privacy.is_export(),
 			Context::Class => !privacy.is_export(),
 			Context::Func => false,
+			Context::Unsafe => false,
 		};
 	if !is_valid {
 		let span = privacy.span().unwrap(); // never Default => never None
@@ -995,13 +1028,13 @@ macro_rules! check_stmt {
 }
 
 check_stmt!(
-	Create(_, _, _, _) => TopLevel Class Func;
-	Declare(_, _, _) => TopLevel Class Func;
-	Set(_, _, _) => TopLevel Func;
+	Create(_, _, _, _) => TopLevel Class Func Unsafe;
+	Declare(_, _, _) => TopLevel Class Func Unsafe;
+	Set(_, _, _) => TopLevel Func Unsafe;
 	Return(_, _) => Func;
 	Class(_, _, _, _, _) => TopLevel Func; // NOTE: maybe Class too?
-	Import(_, _, _) => TopLevel;
-	BareExpr(_, _) => Func;
+	Import(_, _, _) => TopLevel Unsafe;
+	BareExpr(_, _) => Func Unsafe;
 	Unsafe(_, _) => Func;
 );
 
@@ -1022,10 +1055,10 @@ pub fn resolve(
 		match stmt {
 			Stmt::Create(span, privacy, ty_ident, expr) => {
 				check_privacy(privacy.clone(), context.clone());
-				let mut ty_ident = resolved_scope.resolve_ty_ident(ty_ident);
+				let mut ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
 				let rhs_span = expr.span();
-				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr);
+				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr, context.clone());
 				let lhs = ty_ident.ty.ignore_mut().clone();
 				let lhs_span = ty_ident.ty.span();
 				if !lhs.is_inferred() && lhs != rhs {
@@ -1062,7 +1095,7 @@ pub fn resolve(
 			Stmt::Declare(span, privacy, ty_ident) => {
 				// TODO: add error if the type is ~
 				check_privacy(privacy.clone(), context.clone());
-				let ty_ident = resolved_scope.resolve_ty_ident(ty_ident);
+				let ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.add_var(span.clone(), ty_ident.clone(), None);
 				resolved_scope
@@ -1072,7 +1105,7 @@ pub fn resolve(
 			Stmt::Set(span, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
 				let rhs_span = expr.span();
-				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr);
+				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr, context.clone());
 				let lhs_span = ident.span();
 				let lhs = resolved_scope
 					.get_expr_ty(ResolvedExpr::Identifier(lhs_span.clone(), ident.clone()));
@@ -1096,12 +1129,17 @@ pub fn resolve(
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
-				let resolved = resolved_scope.resolve_func(ident.to_string(), ident.span(), func);
+				let resolved = resolved_scope.resolve_func(
+					ident.to_string(),
+					ident.span(),
+					func,
+					context.clone(),
+				);
 				// TODO: use another, better span
 				resolved_scope.add_func(ident.to_string(), span, resolved);
 			}
 			Stmt::Return(span, expr) => {
-				let (resolved_expr, ty) = resolved_scope.examine_expr(expr);
+				let (resolved_expr, ty) = resolved_scope.examine_expr(expr, context.clone());
 				return_ty = ty;
 				return_span = Some(span.clone());
 				resolved_scope
@@ -1144,12 +1182,21 @@ pub fn resolve(
 			}
 			Stmt::Import(_span, _glob, _imported) => {}
 			Stmt::BareExpr(span, expr) => {
-				let resolved_expr = resolved_scope.resolve_and_check_expr(expr);
+				let resolved_expr = resolved_scope.resolve_and_check_expr(expr, context.clone());
 				resolved_scope
 					.stmts
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));
 			}
-			Stmt::Unsafe(_span, _scope) => {}
+			Stmt::Unsafe(span, scope) => {
+				let resolved =
+					match resolve(scope, Context::Unsafe, Some(resolved_scope.clone()), None) {
+						Ok((scope, _)) => scope,
+						Err(_) => ResolvedScope::default(),
+					};
+				resolved_scope
+					.stmts
+					.push(ResolvedStmt::Unsafe(span, resolved))
+			}
 		}
 	}
 	if let Some((func_span, return_ty_span, expected_ty)) = expected_func_ty {

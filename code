@@ -8,6 +8,7 @@ void hold_knife() unsafe {
 }
 
 void main() {
+	hold_knife();
 	unsafe {
 		hold_knife();
 	}
