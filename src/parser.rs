@@ -75,6 +75,7 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 		.then(choice((
 			jkeyword!(FatArrow)
 				.ignore_then(expr())
+				.then_ignore(jpunct!(Semicolon))
 				.map_with_span(|expr, span| Scope {
 					span: span.clone(),
 					stmts: vec![Stmt::Return(span, expr)],
