@@ -86,6 +86,7 @@ pub struct BareType {
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum BuiltinType {
+	// TODO: func signature type
 	#[display(fmt = "i8")]
 	I8,
 	#[display(fmt = "i16")]

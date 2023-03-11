@@ -267,32 +267,32 @@ impl ResolvedScope {
 		}
 	}
 
-	pub fn check_expr(&self, expr: Expr) {
+	pub fn check_expr(&self, expr: ResolvedExpr) {
 		match expr {
-			Expr::CharLiteral(_, _) => {}
-			Expr::StringLiteral(_, _) => {}
-			Expr::NumberLiteral(_, _) => {}
-			Expr::Identifier(_, ident) => {
+			ResolvedExpr::CharLiteral(_, _) => {}
+			ResolvedExpr::StringLiteral(_, _) => {}
+			ResolvedExpr::NumberLiteral(_, _) => {}
+			ResolvedExpr::Identifier(_, ident) => {
 				// TODO: add error if it's not initialized
 				self.check_ident_exists(ident);
 			}
-			Expr::BinaryOp(_, lhs, _op, rhs) => {
+			ResolvedExpr::BinaryOp(_, lhs, _op, rhs) => {
 				self.check_expr(*lhs.clone());
 				self.check_expr(*rhs.clone());
 				// this may seem useless but it checks for types in binary ops
 				self.get_expr_ty(*lhs);
 				self.get_expr_ty(*rhs);
 			}
-			Expr::UnaryOp(_, _op, val) => {
+			ResolvedExpr::UnaryOp(_, _op, val) => {
 				self.check_expr(*val);
 			}
-			Expr::Lambda(_, _func) => {
+			ResolvedExpr::Lambda(_, _func) => {
 				// TODO: resolve lambda
 			}
-			Expr::Call(span, func_expr, args) => {
+			ResolvedExpr::Call(span, func_expr, args) => {
 				self.check_expr(*func_expr.clone());
 				let func_expr_span = func_expr.span();
-				let (func, decl_span) = if let Expr::Identifier(_, name) = *func_expr {
+				let (func, decl_span) = if let ResolvedExpr::Identifier(_, name) = *func_expr {
 					self.check_ident_exists(name.clone());
 					let Some(func) = self.get_func(&name.to_string()) else { return; };
 					(
@@ -301,26 +301,10 @@ impl ResolvedScope {
 							.cloned()
 							.unwrap_or(func_expr_span),
 					)
-				} else if let Expr::Lambda(_, func) = *func_expr {
+				} else if let ResolvedExpr::Lambda(span, func) = *func_expr {
 					// TODO: add args to inherit scope
 					let (scope, ty) = resolve(func.body, Context::Func, None, None).unwrap();
-					(
-						ResolvedFunc {
-							name: "~".into(),
-							args: func
-								.args
-								.iter()
-								.map(|x| ResolvedArg {
-									name: x.ident.to_string(),
-									ty: x.ty.clone(),
-								})
-								.collect(),
-							return_ty: ty,
-							body: scope,
-							attribs: FuncAttribs::default(),
-						},
-						func.span,
-					)
+					(func, span)
 				} else {
 					let span = func_expr.span();
 					let ty = self.get_expr_ty(*func_expr);
@@ -368,21 +352,20 @@ impl ResolvedScope {
 					}
 				}
 			}
-			Expr::Error(_) => panic!("???"),
 		}
 	}
 
 	// TODO: be lazier with int literals and automatically cast them in Stmt::Create
 	pub fn get_expr_ty(&self, expr: Expr) -> Type {
 		match expr {
-			Expr::CharLiteral(span, _) => Type::Builtin(span, BuiltinType::Char),
-			Expr::StringLiteral(span, _) => Type::Builtin(span, BuiltinType::String),
-			Expr::NumberLiteral(span, literal) => Type::Builtin(span, literal.as_ty()),
-			Expr::Identifier(span, ident) => self
+			ResolvedExpr::CharLiteral(span, _) => Type::Builtin(span, BuiltinType::Char),
+			ResolvedExpr::StringLiteral(span, _) => Type::Builtin(span, BuiltinType::String),
+			ResolvedExpr::NumberLiteral(span, literal) => Type::Builtin(span, literal.as_ty()),
+			ResolvedExpr::Identifier(span, ident) => self
 				.get_var(&ident.to_string())
 				.map(|x| x.ty.clone())
 				.unwrap_or_else(|| Type::Builtin(span, BuiltinType::Error)),
-			Expr::BinaryOp(span, lhs, op, rhs) => {
+			ResolvedExpr::BinaryOp(span, lhs, op, rhs) => {
 				let lhs_span = lhs.span();
 				let rhs_span = rhs.span();
 				let lhs_ty = self.get_expr_ty(*lhs);
@@ -419,7 +402,7 @@ impl ResolvedScope {
 			}
 			// TODO: overload with defined operator in case of operator existing
 			// TODO: &x, *x => ref + deref. these would return non-reffed or reffed tys.
-			Expr::UnaryOp(_span, op, val) => {
+			ResolvedExpr::UnaryOp(_span, op, val) => {
 				let ty = self.get_expr_ty(*val);
 				match op {
 					Operator::Question => todo!(), // optional chaining or try, idk
@@ -441,19 +424,19 @@ impl ResolvedScope {
 					}
 				}
 			}
-			Expr::Lambda(span, _func) => {
+			ResolvedExpr::Lambda(span, _func) => {
 				// TODO: resolve lambda
-				Type::Builtin(span, BuiltinType::Error)
+				builtin!(span, Error)
 			}
-			Expr::Call(span, ident, _args) => self
-				.get_func(&ident.to_string())
-				.map(|x| x.return_ty.clone())
-				.unwrap_or_else(|| {
-					// TODO: ???
-					let Expr::Lambda(_, func) = *ident else { return Type::Builtin(span, BuiltinType::Error); };
-					func.return_ty
-				}),
-			Expr::Error(_) => panic!("???"),
+			ResolvedExpr::Call(span, callee, _args) => {
+				match *callee {
+					ResolvedExpr::Identifier(_, i) => self.get_func(&i.to_string()).map(|x| x.return_ty).unwrap(),
+					ResolvedExpr::Lambda(_, f) => f.return_ty,
+					// TODO: func signature builtin type. so we'd do self.get_expr_ty(expr) then simply force it to be a func and get its return ty
+					ResolvedExpr::Call(_, _, _) => todo!(),
+					_ => builtin!(span, Error)
+				}
+			},
 		}
 	}
 }
@@ -701,8 +684,7 @@ pub fn resolve(
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
-				let resolved =
-					resolve_func(&resolved_scope, ident.to_string(), ident.span(), func);
+				let resolved = resolve_func(&resolved_scope, ident.to_string(), ident.span(), func);
 				// TODO: use another, better span
 				resolved_scope.add_func(ident.to_string(), span, resolved);
 			}
