@@ -553,7 +553,10 @@ impl ResolvedScope {
 			ResolvedExpr::Call(span, callee, _args) => {
 				match *callee {
 					ResolvedExpr::Identifier(_, i) => {
-						self.get_func(&i.to_string()).map(|x| x.return_ty.clone()).unwrap()
+						match self.get_func(&i.to_string()).map(|x| x.return_ty.clone()) {
+							Some(x) => x,
+							None => builtin!(span, Error),
+						}
 					}
 					ResolvedExpr::Lambda(_, f) => f.return_ty,
 					// TODO: func signature builtin type. so we'd do self.get_expr_ty(expr) then

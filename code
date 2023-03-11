@@ -1,13 +1,85 @@
-i32 double_value(i32 x)  pure => x * 2;
-i32 quarter(i32 x) pure => x / 4;
+class Tuple<A, B> {}
+class GridPiece {}
+class Array<T> {}
+
+void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
+
+void print_grid(GridPiece&[3][4]?[] pieces) {}
+
+export i32 do_thing(Array<~> arr) {
+	return 0;
+}
+
+void print(string arg) {
+
+}
+
+void silly() {
+
+}
+
+void set_error_callback() {
+
+}
+
+export void set_element() mut {
+
+}
+
+class Node<T> {
+	Node<T>& next;
+	public T value;
+
+	public void traverse() {
+		let x = 9;
+	}
+
+	public void set() mut {
+
+	}
+}
+
+T add<T>(T a, T b) pure {
+	return a + b;
+}
+
+i32 do_thing(i32 only_arg) {
+	let a = only_arg;
+	let b = 10;
+	let c = a + b;
+	let d = a * c;
+	let e = a + b + c + d;
+	return e;
+}
 
 void main() {
-	let x = 10;
-	let y = 20;
-	let z = quarter(double_value(x) + y + x);
-	i32 mut a = 10;
-	a *= 2;
-	a -= 5;
-	a /= 3;
-	a += 1 + a;
+	// print_position(3);
+	// let ~ = do_thing();
+	i32 x = 2 + (3 - 4);
+	~mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
+	a += 10;
+	a *= 9 + 10;
+	// print("Hello World!", 9+3-4);
+	4+2+4;
+	// .3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
+
+	~mut r = 10;
+
+	let c = do_thing(3); // TODO: lex /***/ properly
+
+	let aa = 'a';
+	3 + a();
+
+	void goofy_void() {
+		
+	}
+
+	let b = 'b';
+	let cc = 'c';
+
+	a + b();
+
+	(string err) => print(err);
 }
+
+i32 divided_by_two(i32 x) => x / 2;
