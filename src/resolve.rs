@@ -1171,7 +1171,7 @@ pub fn resolve(
 				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr, context.clone());
 				let lhs = ty_ident.ty.ignore_mut().clone();
 				let lhs_span = ty_ident.ty.span();
-				if !lhs.is_inferred() && lhs != rhs {
+				if !lhs.is_inferred() && lhs != *rhs.ignore_mut() {
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("assignment between incompatible types")
@@ -1223,7 +1223,7 @@ pub fn resolve(
 				let lhs_span = ident.span();
 				let lhs = resolved_scope
 					.get_expr_ty(ResolvedExpr::Identifier(lhs_span.clone(), ident.clone()));
-				if *lhs.ignore_mut() != rhs {
+				if *lhs.ignore_mut() != *rhs.ignore_mut() {
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("assignment between incompatible types")

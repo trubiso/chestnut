@@ -1,30 +1,19 @@
 import std::io;
 import std::fmt::*;
 
-i32 get_a_number() unsafe => 3;
-
-void hold_knife() unsafe {
-	let x = 9;
-}
+T doubled<T>(T value) => value + value;
 
 void print<T>(T thing) unsafe {
-	let x = thing;
 	unsafe {
 		cpp "std::cout << thing << std::endl;";
 	}
 }
 
-T doo<T>(T x) {
-	return x + x;
-}
-
 void main() {
 	i32 mut r = 10;
-	i64 y = 20i64;
-	r = doo<i64>(y);
+	r = doubled<i32>(r);
+	r -= 5;
 	unsafe {
-		hold_knife();
-		r = get_a_number();
 		print<i32>(r);
 	}
 
