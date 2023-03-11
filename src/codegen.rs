@@ -112,7 +112,12 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 		ResolvedStmt::Return(_, expr) => {
 			format!("return {};", codegen_expr(expr))
 		}
-		_ => "".into(),
+		ResolvedStmt::BareExpr(_, expr) => {
+			format!("({});", expr)
+		}
+		ResolvedStmt::Unsafe(_, scope) => {
+			format!("{{{}}}", codegen_scope(scope))
+		}
 	}
 }
 
