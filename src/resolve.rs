@@ -1,6 +1,6 @@
 use crate::{
 	builtin,
-	lexer::Operator,
+	lexer::{NumberLiteral, Operator},
 	parser::types::{
 		BuiltinType, Expr, Func, FuncAttribs, Ident, Privacy, Scope, Stmt, Type, TypedIdent,
 	},
@@ -10,6 +10,9 @@ use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
 use std::{cmp::Ordering, collections::HashMap, sync::Mutex};
+
+// TODO: FuncSignature (only types)
+// TODO: ClassSignature (only types)
 
 #[derive(Debug, Clone)]
 pub enum ResolvedStmt {
@@ -28,6 +31,33 @@ impl ResolvedStmt {
 			| Self::Set(x, _, _)
 			| Self::Return(x, _)
 			| Self::BareExpr(x, _) => x.clone(),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub enum ResolvedExpr {
+	CharLiteral(Span, String),
+	StringLiteral(Span, String),
+	NumberLiteral(Span, NumberLiteral),
+	Identifier(Span, Ident),
+	BinaryOp(Span, Box<ResolvedExpr>, Operator, Box<ResolvedExpr>),
+	UnaryOp(Span, Operator, Box<ResolvedExpr>),
+	Lambda(Span, ResolvedFunc),
+	Call(Span, Box<ResolvedExpr>, Vec<ResolvedExpr>),
+}
+
+impl ResolvedExpr {
+	pub fn span(&self) -> Span {
+		match self {
+			Self::CharLiteral(x, _)
+			| Self::StringLiteral(x, _)
+			| Self::NumberLiteral(x, _)
+			| Self::Identifier(x, _)
+			| Self::BinaryOp(x, _, _, _)
+			| Self::UnaryOp(x, _, _)
+			| Self::Lambda(x, _)
+			| Self::Call(x, _, _) => x.clone(),
 		}
 	}
 }
@@ -263,7 +293,6 @@ impl ResolvedScope {
 	}
 
 	pub fn check_expr(&self, expr: Expr) {
-		// TODO: ResolvedExpr (could probably carry type as well :D)
 		match expr {
 			Expr::CharLiteral(_, _) => {}
 			Expr::StringLiteral(_, _) => {}
@@ -511,6 +540,82 @@ fn check_privacy(privacy: Privacy, context: Context) {
 				))
 				.with_labels(vec![Label::primary(span.file_id, span.range())]),
 		);
+	}
+}
+
+fn resolve_func(resolved_scope: &ResolvedScope, name: String, func_span: Span, func: Func) -> ResolvedFunc {
+	let mut frs = resolved_scope.clone();
+	for generic in &func.generics {
+		// TODO: deal with discarded generics
+		let name = generic.to_string();
+		frs.add_type(
+			generic.span(),
+			name.clone(),
+			ResolvedType {
+				name,
+				generic_count: 0,
+				fields: HashMap::new(), // NOTE: potentially in the future we will change this
+				funcs: HashMap::new(),
+				body: None,
+			},
+		);
+	}
+	frs.check_type(func.return_ty.clone());
+	for arg in &func.args {
+		// TODO: deal with discarded args
+		frs.check_type(arg.ty.clone());
+		frs.add_var(arg.span.clone(), arg.clone(), None);
+	}
+	// TODO: use resolved scope
+	let mut return_ty = func.return_ty.clone();
+	let body = if return_ty.is_inferred() {
+		match resolve(func.body.clone(), Context::Func, Some(frs), None) {
+			Ok((scope, ty)) => {
+				return_ty = ty;
+				scope
+			}
+			Err(_) => ResolvedScope::default(),
+		}
+	} else {
+		match resolve(
+			func.body.clone(),
+			Context::Func,
+			Some(frs),
+			Some((func_span, return_ty.span(), return_ty.clone())),
+		) {
+			Ok((scope, _)) => scope,
+			Err(_) => ResolvedScope::default(),
+		}
+	};
+	let attribs = func.attribs.clone();
+	let mut args = vec![];
+	for arg in func.args {
+		args.push(ResolvedArg {
+			name: arg.ident_str(),
+			ty: arg.ty,
+		});
+	}
+	ResolvedFunc {
+		name,
+		args,
+		return_ty,
+		body,
+		attribs,
+	}
+}
+
+fn resolve_expr(resolved_scope: &ResolvedScope, expr: Expr) -> ResolvedExpr {
+	match expr {
+		Expr::CharLiteral(s, v) => ResolvedExpr::CharLiteral(s, v),
+		Expr::StringLiteral(s, v) => ResolvedExpr::StringLiteral(s, v),
+		Expr::NumberLiteral(s, v) => ResolvedExpr::NumberLiteral(s, v),
+		Expr::Identifier(s, v) => ResolvedExpr::Identifier(s, v),
+		Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(s, Box::new(resolve_expr(resolved_scope, *l)), o, Box::new(resolve_expr(resolved_scope, *r))),
+		Expr::UnaryOp(s, o, v) => ResolvedExpr::UnaryOp(s, o, Box::new(resolve_expr(resolved_scope, *v))),
+		// TODO: better lambda span
+		Expr::Lambda(s, f) => ResolvedExpr::Lambda(s.clone(), resolve_func(resolved_scope, "~".into(), s, f)),
+		Expr::Call(s, c, a) => ResolvedExpr::Call(s, Box::new(resolve_expr(resolved_scope, *c)), a.iter().map(|x| resolve_expr(resolved_scope, x.clone())).collect()),
+		Expr::Error(_) => panic!(),
 	}
 }
 

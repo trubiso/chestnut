@@ -14,6 +14,9 @@ pub mod parser;
 pub mod resolve;
 pub mod span;
 
+// TODO: store all lex, ast, parse and resolve in hashmaps that can be accessed
+// by the next passes. also do hashmap between source name & file id
+
 fn emit_errors(files: &SimpleFiles<String, String>, diagnostics: Vec<Diagnostic<usize>>) {
 	let writer = StandardStream::stderr(ColorChoice::Always);
 	let config = term::Config::default();
