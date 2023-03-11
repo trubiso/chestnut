@@ -118,6 +118,16 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 
 pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	let mut code = "".to_string();
+	if !func.generics.is_empty() {
+		code += "template <";
+		for (i, generic) in func.generics.iter().enumerate() {
+			code += &format!("typename {generic}");
+			if i < func.generics.len() - 1 {
+				code += ","
+			}
+		}
+		code += "> ";
+	}
 	if func.attribs.is_pure {
 		code += "constexpr ";
 	}

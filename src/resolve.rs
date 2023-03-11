@@ -570,8 +570,10 @@ impl ResolvedScope {
 
 	pub fn resolve_func(&self, name: String, func_span: Span, func: Func) -> ResolvedFunc {
 		let mut frs = self.clone();
+		let mut generics = Vec::new();
 		for generic in &func.generics {
 			// TODO: deal with discarded generics
+			generics.push(generic.to_string());
 			let name = generic.to_string();
 			frs.add_type(
 				generic.span(),
@@ -625,6 +627,7 @@ impl ResolvedScope {
 		}
 		ResolvedFunc {
 			name,
+			generics,
 			args,
 			return_ty,
 			body,
@@ -874,6 +877,8 @@ pub struct ResolvedMadeType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedFunc {
 	pub name: String,
+	// TODO: generic constraints
+	pub generics: Vec<String>, // stores names
 	pub args: Vec<ResolvedArg>,
 	pub return_ty: ResolvedType,
 	pub body: ResolvedScope,

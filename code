@@ -39,9 +39,7 @@ class Node<T> {
 	}
 }
 
-T add<T>(T a, T b) pure {
-	return a + b;
-}
+T add<T>(T a, T b) pure => a + b;
 
 i32 do_thing(i32 only_arg) {
 	let a = only_arg;
