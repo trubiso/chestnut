@@ -1,9 +1,0 @@
-void print<T>(T thing) {
-	unsafe {
-		cpp "std::cout << thing << std::endl;";
-	}
-}
-
-void main() {
-	print("Hello World!");
-}

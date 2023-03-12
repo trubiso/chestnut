@@ -412,7 +412,14 @@ pub enum Stmt {
 	Set(Span, Ident, Expr),
 	Func(Span, Privacy, Ident, Func),
 	Return(Span, Expr),
-	Class(Span, Privacy, Ident, Vec<Ident> /* generics */, Scope),
+	Class(
+		Span,
+		Privacy,
+		Ident,
+		Vec<Ident>, /* generics */
+		Span,
+		Scope,
+	),
 	Import(Span, bool, Ident),
 	BareExpr(Span, Expr),
 	Unsafe(Span, Scope),
@@ -427,7 +434,7 @@ impl Stmt {
 			| Self::Set(x, _, _)
 			| Self::Func(x, _, _, _)
 			| Self::Return(x, _)
-			| Self::Class(x, _, _, _, _)
+			| Self::Class(x, ..)
 			| Self::Import(x, _, _)
 			| Self::BareExpr(x, _)
 			| Self::Unsafe(x, _)
@@ -450,11 +457,13 @@ impl fmt::Display for Stmt {
 				f.write_fmt(format_args!("{privacy}{ident}{func}"))
 			}
 			Stmt::Return(_span, expr) => f.write_fmt(format_args!("return {expr};")),
-			Stmt::Class(_span, privacy, ident, generics, body) => f.write_fmt(format_args!(
-				"class {privacy}{ident}{} {}",
-				join_generics(generics),
-				body.braced()
-			)),
+			Stmt::Class(_span, privacy, ident, generics, _decl_span, body) => {
+				f.write_fmt(format_args!(
+					"class {privacy}{ident}{} {}",
+					join_generics(generics),
+					body.braced()
+				))
+			}
 			Stmt::Import(_span, glob, imported) => f.write_fmt(format_args!(
 				"import {imported}{};",
 				if *glob { "::*" } else { "" }

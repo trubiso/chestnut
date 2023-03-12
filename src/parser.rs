@@ -147,9 +147,10 @@ fn class_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 		.then_ignore(jkeyword!(Class))
 		.then(ident_nodiscard())
 		.then(generics_declare())
+		.map_with_span(|pre, span| (pre, span))
 		.then(braced!(scope))
-		.map_with_span(|(((privacy, ident), generics), body), span| {
-			Stmt::Class(span, privacy, ident, generics, body)
+		.map_with_span(|((((privacy, ident), generics), decl_span), body), span| {
+			Stmt::Class(span, privacy, ident, generics, decl_span, body)
 		})
 }
 

@@ -1110,26 +1110,26 @@ fn check_privacy(privacy: Privacy, context: Context) {
 impl Stmt {
 	pub fn variant(&self) -> String {
 		match self {
-			Self::Create(_, _, _, _) => "creation".into(),
-			Self::Declare(_, _, _) => "declaration".into(),
-			Self::Set(_, _, _) => "set".into(),
-			Self::Func(_, _, _, _) => "function".into(),
-			Self::Return(_, _) => "return".into(),
-			Self::Class(_, _, _, _, _) => "class".into(),
-			Self::Import(_, _, _) => "import".into(),
-			Self::BareExpr(_, _) => "bare expression".into(),
-			Self::Unsafe(_, _) => "unsafe scope".into(),
-			Self::Cpp(_, _) => "inline c++".into(),
+			Self::Create(..) => "creation".into(),
+			Self::Declare(..) => "declaration".into(),
+			Self::Set(..) => "set".into(),
+			Self::Func(..) => "function".into(),
+			Self::Return(..) => "return".into(),
+			Self::Class(..) => "class".into(),
+			Self::Import(..) => "import".into(),
+			Self::BareExpr(..) => "bare expression".into(),
+			Self::Unsafe(..) => "unsafe scope".into(),
+			Self::Cpp(..) => "inline c++".into(),
 		}
 	}
 }
 
 macro_rules! check_stmt {
-	($($v:ident($($i:tt),*) => $($ctx:ident)*;)*) => {
+	($($v:ident => $($ctx:ident)*;)*) => {
 		fn check_stmt(stmt: &Stmt, context: &Context) {
 			match stmt {
 				$(
-					Stmt::$v($($i,)*) => {
+					Stmt::$v(..) => {
 						if $(*context != Context::$ctx)&&* {
 							add_diagnostic(
 								Diagnostic::error()
@@ -1146,15 +1146,15 @@ macro_rules! check_stmt {
 }
 
 check_stmt!(
-	Create(_, _, _, _) => TopLevel Class Func Unsafe;
-	Declare(_, _, _) => TopLevel Class Func Unsafe;
-	Set(_, _, _) => TopLevel Func Unsafe;
-	Return(_, _) => Func;
-	Class(_, _, _, _, _) => TopLevel Func; // NOTE: maybe Class too?
-	Import(_, _, _) => TopLevel Unsafe;
-	BareExpr(_, _) => Func Unsafe;
-	Unsafe(_, _) => Func;
-	Cpp(_, _) => Unsafe;
+	Create => TopLevel Class Func Unsafe;
+	Declare => TopLevel Class Func Unsafe;
+	Set => TopLevel Func Unsafe;
+	Return => Func;
+	Class => TopLevel Func; // NOTE: maybe Class too?
+	Import => TopLevel Unsafe;
+	BareExpr => Func Unsafe;
+	Unsafe => Func;
+	Cpp => Unsafe;
 );
 
 pub fn resolve(
@@ -1194,7 +1194,7 @@ pub fn resolve(
 					)
 				}
 				ty_ident.ty = match ty_ident.ty {
-					ResolvedType::Mut(_, _) => ResolvedType::Mut(lhs_span, Box::new(rhs)),
+					ResolvedType::Mut(..) => ResolvedType::Mut(lhs_span, Box::new(rhs)),
 					_ => rhs,
 				};
 				resolved_scope.add_var(
@@ -1269,7 +1269,7 @@ pub fn resolve(
 					.stmts
 					.push(ResolvedStmt::Return(span, resolved_expr));
 			}
-			Stmt::Class(span, privacy, ident, generics, body) => {
+			Stmt::Class(_span, privacy, ident, generics, decl_span, body) => {
 				check_privacy(privacy, context.clone());
 				let name = ident.to_string();
 				let mut crs = resolved_scope.clone();
@@ -1281,7 +1281,7 @@ pub fn resolve(
 					body: None,
 					is_generic: false,
 				};
-				crs.add_type(span.clone(), name.clone(), ty.clone());
+				crs.add_type(decl_span.clone(), name.clone(), ty.clone());
 				for generic in generics {
 					let name = generic.to_string();
 					crs.add_type(
@@ -1303,7 +1303,7 @@ pub fn resolve(
 					Err(_) => ResolvedScope::new(body.span),
 				};
 				ty.body = Some(scope);
-				resolved_scope.add_type(span, name, ty);
+				resolved_scope.add_type(decl_span, name, ty);
 			}
 			Stmt::Import(_span, _glob, _imported) => {}
 			Stmt::BareExpr(span, expr) => {

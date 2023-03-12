@@ -1,0 +1,21 @@
+void print<T>(T thing) {
+	unsafe {
+		cpp "std::cout << thing << std::endl;";
+	}
+}
+
+class Node<T> {
+	T value;
+	Node<T>& next;
+
+	Node get_next() {
+		
+	}
+}
+
+void main() {
+	/* yo */
+	print<string>("Hello World!");
+	(() => print<string>("bye"))();
+	// hey
+}
