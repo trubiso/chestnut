@@ -157,7 +157,7 @@ pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	}
 	code += &format!("{} {}(", codegen_ty(func.return_ty.clone()), codegen_mangle(&func.name));
 	for (i, arg) in func.args.iter().enumerate() {
-		code += &format!("{} {}", codegen_ty(arg.ty.clone()), arg.name);
+		code += &format!("{} {}", codegen_ty(arg.ty.clone()), codegen_mangle(&arg.name));
 		if i < func.args.len() - 1 {
 			code += ", ";
 		}

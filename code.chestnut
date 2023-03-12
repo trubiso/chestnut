@@ -1,6 +1,6 @@
 void print<T>(T thing) {
 	unsafe {
-		cpp "std::cout << thing << std::endl;";
+		cpp "std::cout << Chn_thing << std::endl;";
 	}
 }
 
@@ -17,6 +17,8 @@ void calculate<MyGeneric>(i32 whatever) {
 
 }
 
+T double<T>(T x) => x + x;
+
 void main() {
 	/* yo */
 	let my_variable = 5;
@@ -26,6 +28,7 @@ void main() {
 	let true = 1;
 	let false = -1;
 	x *= true - false;
+	x = double<i32>(x);
 	print<i32>(x);
 	print<string>("Hello World!");
 	(() => print<string>("bye"))();
