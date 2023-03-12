@@ -324,9 +324,7 @@ impl ResolvedScope {
 					self.check_type(generic);
 				}
 			}
-			ResolvedType::Ref(_, x, _) | ResolvedType::Optional(_, x) => {
-				self.check_type(*x)
-			}
+			ResolvedType::Ref(_, x, _) | ResolvedType::Optional(_, x) => self.check_type(*x),
 			ResolvedType::Array(_, x, _size) => {
 				self.check_type(*x);
 			}
@@ -1197,6 +1195,11 @@ pub fn resolve(
 			Stmt::Declare(span, privacy, ty_ident, is_mut) => {
 				// TODO: add error if the type is ~
 				check_privacy(privacy.clone(), context.clone());
+				if context != Context::Class {
+					if !is_mut {
+						add_diagnostic(Diagnostic::warning().with_message("non-class immutable declaration").with_labels(vec![Label::primary(span.file_id.clone(), span.range())]).with_notes(vec!["you will not be able to use or assign this variable, which is probably not intended".into()]));
+					}
+				}
 				let ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
 				check_case(
 					ty_ident.ident.span(),

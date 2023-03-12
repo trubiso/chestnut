@@ -21,7 +21,7 @@ void main() {
 	/* yo */
 	let my_variable = 5;
 	mut x = 10;
-	mut i32 mut&&&mut&mut&&&&mut& r;
+	string r;
 	x += 2;
 	x += 3;
 	print<i32>(x);
