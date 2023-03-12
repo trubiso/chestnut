@@ -11,6 +11,10 @@ use derive_more::Display;
 use lazy_static::lazy_static;
 use std::{cmp::Ordering, collections::HashMap, fmt, sync::Mutex};
 
+use self::case::{check_case, Case};
+
+pub mod case;
+
 // TODO: FuncSignature (only types)
 // TODO: ClassSignature (only types)
 
@@ -671,6 +675,7 @@ impl ResolvedScope {
 			// TODO: deal with discarded generics
 			generics.push(generic.to_string());
 			let name = generic.to_string();
+			check_case(generic.span(), generic.to_string(), Case::PascalCase);
 			frs.add_type(
 				generic.span(),
 				name.clone(),
@@ -689,6 +694,7 @@ impl ResolvedScope {
 		for arg in &func.args {
 			// TODO: deal with discarded args
 			frs.check_type(self.resolve_ty(arg.ty.clone(), context.clone()));
+			check_case(arg.ident.span(), arg.ident.to_string(), Case::SnakeCase);
 			frs.add_var(
 				arg.span.clone(),
 				self.resolve_ty_ident(arg.clone(), context.clone()),
@@ -1175,6 +1181,7 @@ pub fn resolve(
 			Stmt::Create(span, privacy, ty_ident, expr) => {
 				check_privacy(privacy.clone(), context.clone());
 				let mut ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
+				check_case(ty_ident.ident.span(), ty_ident.ident.to_string(), Case::SnakeCase);
 				resolved_scope.check_type(ty_ident.ty.clone());
 				let rhs_span = expr.span();
 				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr, context.clone());
@@ -1219,6 +1226,7 @@ pub fn resolve(
 				// TODO: add error if the type is ~
 				check_privacy(privacy.clone(), context.clone());
 				let ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
+				check_case(ty_ident.ident.span(), ty_ident.ident.to_string(), Case::SnakeCase);
 				resolved_scope.check_type(ty_ident.ty.clone());
 				resolved_scope.add_var(span.clone(), ty_ident.clone(), None);
 				resolved_scope
@@ -1252,6 +1260,7 @@ pub fn resolve(
 			}
 			Stmt::Func(_span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
+				check_case(ident.span(), ident.to_string(), Case::SnakeCase);
 				let resolved = resolved_scope.resolve_func(
 					ident.to_string(),
 					ident.span(),
@@ -1271,6 +1280,7 @@ pub fn resolve(
 			}
 			Stmt::Class(_span, privacy, ident, generics, decl_span, body) => {
 				check_privacy(privacy, context.clone());
+				check_case(ident.span(), ident.to_string(), Case::PascalCase);
 				let name = ident.to_string();
 				let mut crs = resolved_scope.clone();
 				let mut ty = ResolvedMadeType {
@@ -1283,6 +1293,7 @@ pub fn resolve(
 				};
 				crs.add_type(decl_span.clone(), name.clone(), ty.clone());
 				for generic in generics {
+					check_case(generic.span(), generic.to_string(), Case::PascalCase);
 					let name = generic.to_string();
 					crs.add_type(
 						generic.span(),

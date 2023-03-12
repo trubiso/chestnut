@@ -4,17 +4,22 @@ void print<T>(T thing) {
 	}
 }
 
-class Node<T> {
+class node<genericType> {
 	T value;
-	Node<T>& next;
+	node<T>& next;
 
-	Node get_next() {
+	node get_next() {
 		
 	}
 }
 
+void Calculate<my_generic>(i32 NumberToDo) {
+
+}
+
 void main() {
 	/* yo */
+	let MyVariable = 5;
 	print<string>("Hello World!");
 	(() => print<string>("bye"))();
 	// hey
