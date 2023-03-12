@@ -539,7 +539,7 @@ impl fmt::Display for Expr {
 				"{callee}{}({})",
 				generics
 					.as_ref()
-					.map(|g| join_comma(&g)
+					.map(|g| join_comma(g)
 						.map(|x| format!("<{x}>"))
 						.unwrap_or("".to_string()))
 					.unwrap_or("".to_string()),

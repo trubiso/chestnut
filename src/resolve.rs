@@ -137,7 +137,7 @@ impl fmt::Display for ResolvedExpr {
 				"{callee}{}({})",
 				generics
 					.as_ref()
-					.map(|g| join_comma(&g)
+					.map(|g| join_comma(g)
 						.map(|x| format!("<{x}>"))
 						.unwrap_or("".to_string()))
 					.unwrap_or("".to_string()),
@@ -1270,7 +1270,7 @@ pub fn resolve(
 				if context != Context::Class {
 					println!("context: {context}");
 					if !is_mut {
-						add_diagnostic(Diagnostic::warning().with_message("non-class immutable declaration").with_labels(vec![Label::primary(span.file_id.clone(), span.range())]).with_notes(vec!["you will not be able to use or assign this variable, which is probably not intended".into()]));
+						add_diagnostic(Diagnostic::warning().with_message("non-class immutable declaration").with_labels(vec![Label::primary(span.file_id, span.range())]).with_notes(vec!["you will not be able to use or assign this variable, which is probably not intended".into()]));
 					}
 				}
 				let ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());

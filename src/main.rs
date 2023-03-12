@@ -22,7 +22,10 @@ fn emit_errors(files: &SimpleFiles<String, String>, diagnostics: Vec<Diagnostic<
 	let writer = StandardStream::stderr(ColorChoice::Always);
 	let config = term::Config::default();
 	let amount = diagnostics.len();
-	let warnings = diagnostics.iter().filter(|x| x.severity == Severity::Warning).count();
+	let warnings = diagnostics
+		.iter()
+		.filter(|x| x.severity == Severity::Warning)
+		.count();
 	for diagnostic in diagnostics {
 		term::emit(&mut writer.lock(), &config, files, &diagnostic).unwrap();
 	}
@@ -65,7 +68,7 @@ fn main() {
 	args.next();
 	let mut cpp_sources = Vec::new();
 	let mut should_format = false;
-	while let Some(arg) = args.next() {
+	for arg in args {
 		if arg == "--pretty" {
 			should_format = true;
 			continue;

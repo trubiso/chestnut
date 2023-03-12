@@ -10,7 +10,7 @@ pub fn comma<T>(args: Vec<T>, closure: fn(&T) -> String) -> String {
 	args.iter()
 		.map(closure)
 		.reduce(|acc, b| acc + "," + &b)
-		.unwrap_or_else(String::new)
+		.unwrap_or_default()
 }
 
 pub fn codegen_mangle(str: &str) -> String {
@@ -155,9 +155,17 @@ pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	if func.attribs.is_pure {
 		code += "constexpr ";
 	}
-	code += &format!("{} {}(", codegen_ty(func.return_ty.clone()), codegen_mangle(&func.name));
+	code += &format!(
+		"{} {}(",
+		codegen_ty(func.return_ty.clone()),
+		codegen_mangle(&func.name)
+	);
 	for (i, arg) in func.args.iter().enumerate() {
-		code += &format!("{} {}", codegen_ty(arg.ty.clone()), codegen_mangle(&arg.name));
+		code += &format!(
+			"{} {}",
+			codegen_ty(arg.ty.clone()),
+			codegen_mangle(&arg.name)
+		);
 		if i < func.args.len() - 1 {
 			code += ", ";
 		}

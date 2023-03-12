@@ -31,7 +31,7 @@ pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
 							span,
 							BareType {
 								ident,
-								generics: generics.unwrap_or(vec![]).iter().cloned().collect(),
+								generics: generics.unwrap_or(vec![]).to_vec(),
 							},
 						)
 					}

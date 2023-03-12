@@ -189,10 +189,7 @@ fn unsafe_scope_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 /// Parses `cpp <string literal>` into Stmt::Cpp
 fn cpp_stmt() -> token_parser!(Stmt) {
 	jkeyword!(Cpp)
-		.ignore_then(filter(|x| match x {
-			Token::StringLiteral(_) => true,
-			_ => false,
-		}))
+		.ignore_then(filter(|x| matches!(x, Token::StringLiteral(_))))
 		.map_with_span(|code, span| Stmt::Cpp(span, force_token!(code => StringLiteral)))
 }
 

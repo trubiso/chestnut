@@ -42,7 +42,7 @@ fn begins_with_uppercase(str: &str) -> bool {
 pub fn check_case(span: Span, name: String, wanted: Case) {
 	let found = match wanted {
 		Case::PascalCase => {
-			if name.contains("_") {
+			if name.contains('_') {
 				if is_uppercase(&name) {
 					Case::UpperSnakeCase
 				} else {
@@ -60,9 +60,9 @@ pub fn check_case(span: Span, name: String, wanted: Case) {
 		}
 		Case::SnakeCase => {
 			if has_uppercase(&name) {
-				if name.contains("_") && !is_uppercase(&name) {
+				if name.contains('_') && !is_uppercase(&name) {
 					Case::SnakeCase
-				} else if name.contains("_") {
+				} else if name.contains('_') {
 					Case::UpperSnakeCase
 				} else {
 					Case::PascalCase
@@ -73,7 +73,7 @@ pub fn check_case(span: Span, name: String, wanted: Case) {
 		}
 		Case::UpperSnakeCase => {
 			if !is_uppercase(&name) {
-				if name.contains("_") {
+				if name.contains('_') {
 					Case::SnakeCase
 				} else {
 					Case::PascalCase
@@ -82,7 +82,7 @@ pub fn check_case(span: Span, name: String, wanted: Case) {
 				Case::UpperSnakeCase
 			}
 		}
-		_ => panic!("why")
+		_ => panic!("why"),
 	};
 	if found != wanted {
 		add_diagnostic(
