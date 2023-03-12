@@ -84,7 +84,10 @@ fn main() {
 			Err(x) => return emit_errors(&files, x),
 		};
 
-		let hoisted = hoister::hoist(parsed.clone(), None);
+		let hoisted = match hoister::hoist(parsed.clone(), None) {
+			Ok(x) => x,
+			Err(x) => return emit_errors(&files, x),
+		};
 
 		let resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None, None) {
 			Ok((x, _)) => x,

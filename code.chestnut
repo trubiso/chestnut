@@ -13,11 +13,16 @@ class Node<T> {
 	}
 }
 
+class Node {}
+
 void calculate<MyGeneric>(i32 whatever) {
 
 }
 
 T double<T>(T x) => x + x;
+i32 double() {
+
+}
 
 void main() {
 	/* yo */

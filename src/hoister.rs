@@ -1,11 +1,18 @@
-use std::collections::HashMap;
-
-use codespan_reporting::diagnostic::Diagnostic;
-
 use crate::{
 	parser::types::{Expr, Func, FuncAttribs, Ident, Privacy, Scope, Stmt, Type, TypedIdent},
 	span::Span,
 };
+use codespan_reporting::diagnostic::{Diagnostic, Label};
+use lazy_static::lazy_static;
+use std::{collections::HashMap, sync::Mutex};
+
+lazy_static! {
+	static ref DIAGNOSTICS: Mutex<Vec<Diagnostic<usize>>> = Mutex::new(vec![]);
+}
+
+pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
+	DIAGNOSTICS.lock().unwrap().push(diagnostic);
+}
 
 #[derive(Debug, Clone)]
 pub struct FuncSignature {
@@ -14,7 +21,7 @@ pub struct FuncSignature {
 	pub return_ty: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct MadeTypeSignature {
 	pub fields: HashMap<String, Type>,
 	pub funcs: HashMap<String, FuncSignature>,
@@ -65,8 +72,11 @@ pub enum HoistedStmt {
 #[derive(Debug, Default, Clone)]
 pub struct HoistedScope {
 	pub vars: HashMap<String, Type>,
+	pub var_spans: HashMap<String, Span>,
 	pub funcs: HashMap<String, FuncSignature>,
+	pub func_spans: HashMap<String, Span>,
 	pub tys: HashMap<String, MadeTypeSignature>,
+	pub ty_spans: HashMap<String, Span>,
 	pub stmts: Vec<HoistedStmt>,
 }
 
@@ -93,6 +103,18 @@ macro_rules! ignore_hoist {
 	};
 }
 
+fn redeclaration_error(name: &str, span: &Span, decl_span: &Span) {
+	add_diagnostic(
+		Diagnostic::error()
+			.with_message(format!("{name} redeclaration"))
+			.with_labels(vec![
+				Label::primary(span.file_id, span.range()).with_message("new declaration here"),
+				Label::secondary(decl_span.file_id, decl_span.range())
+					.with_message("original declaration here"),
+			]),
+	)
+}
+
 pub fn hoist(
 	scope: Scope,
 	inherit: Option<HoistedScope>,
@@ -102,20 +124,24 @@ pub fn hoist(
 		hoisted.stmts.push(match stmt {
 			Stmt::Create(span, privacy, ty_ident, is_mut, expr) => {
 				if hoisted.vars.contains_key(&ty_ident.ident_str()) {
-					// TODO: add diagnostic (redeclaration of variable)
+					let decl_span = hoisted.var_spans.get(&ty_ident.ident_str()).unwrap();
+					redeclaration_error("variable", &span, decl_span);
 				}
 				hoisted
 					.vars
 					.insert(ty_ident.ident_str(), ty_ident.ty.clone());
+				hoisted.var_spans.insert(ty_ident.ident_str(), span.clone());
 				HoistedStmt::Create(span, privacy, ty_ident, is_mut, expr)
 			}
 			Stmt::Declare(span, privacy, ty_ident, is_mut) => {
 				if hoisted.vars.contains_key(&ty_ident.ident_str()) {
-					// TODO: add diagnostic (redeclaration of variable)
+					let decl_span = hoisted.var_spans.get(&ty_ident.ident_str()).unwrap();
+					redeclaration_error("variable", &span, decl_span);
 				}
 				hoisted
 					.vars
 					.insert(ty_ident.ident_str(), ty_ident.ty.clone());
+				hoisted.var_spans.insert(ty_ident.ident_str(), span.clone());
 				HoistedStmt::Declare(span, privacy, ty_ident, is_mut)
 			}
 			Stmt::Set(span, ident, expr) => {
@@ -126,19 +152,27 @@ pub fn hoist(
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				if hoisted.funcs.contains_key(&ident.to_string()) {
-					// TODO: add diagnostic (redeclaration of func) (until we
-					// have overloads)
+					let decl_span = hoisted.func_spans.get(&ident.to_string()).unwrap();
+					redeclaration_error("function", &func.decl_span, decl_span);
 				}
 				// TODO: this is stupid, as it will not hoist fully in the top level
 				let hoisted_func = func.hoist(Some(hoisted.clone()));
 				hoisted
 					.funcs
 					.insert(ident.to_string(), hoisted_func.signature());
+				hoisted.func_spans.insert(ident.to_string(), span.clone());
 				HoistedStmt::Func(span, privacy, ident, hoisted_func)
 			}
 			Stmt::Class(span, privacy, ident, generics, decl_span, body) => {
+				if hoisted.tys.contains_key(&ident.to_string()) {
+					let old_decl_span = hoisted.ty_spans.get(&ident.to_string()).unwrap();
+					redeclaration_error("type", &decl_span, old_decl_span);
+				}
 				// TODO: this is stupid, as it will not hoist fully in the top level
 				let hoisted_scope = hoist(body, Some(hoisted.clone())).unwrap_or_default();
+				// TODO: get the actual made type signature
+				hoisted.tys.insert(ident.to_string(), MadeTypeSignature::default());
+				hoisted.ty_spans.insert(ident.to_string(), decl_span.clone());
 				HoistedStmt::Class(span, privacy, ident, generics, decl_span, hoisted_scope)
 			}
 			Stmt::Unsafe(span, scope) => {
@@ -155,5 +189,10 @@ pub fn hoist(
 			}
 		})
 	}
-	Ok(hoisted)
+	if !DIAGNOSTICS.lock().unwrap().is_empty() {
+		let diagnostics = DIAGNOSTICS.lock().unwrap();
+		Err(diagnostics.clone())
+	} else {
+		Ok(hoisted)
+	}
 }
