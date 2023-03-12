@@ -22,7 +22,7 @@ namespace Chestnut {
 	// TODO: string
 	// TODO: char
 
-	void const main();
+	void main();
 	using string = ::std::string;
 }
 

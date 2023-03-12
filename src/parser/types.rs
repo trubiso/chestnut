@@ -191,9 +191,8 @@ pub enum Type {
 	BareType(Span, BareType),
 	Builtin(Span, BuiltinType),
 	Array(Span, Box<Type>, Option<Box<Expr>>),
-	Ref(Span, Box<Type>),
+	Ref(Span, Box<Type>, bool),
 	Optional(Span, Box<Type>),
-	Mut(Span, Box<Type>),
 	Inferred(Span),
 }
 
@@ -221,22 +220,15 @@ impl PartialEq for Type {
 					false
 				}
 			}
-			Self::Ref(_, x) => {
-				if let Self::Ref(_, y) = other {
-					*x == *y
+			Self::Ref(_, x, a) => {
+				if let Self::Ref(_, y, b) = other {
+					*x == *y && *a == *b
 				} else {
 					false
 				}
 			}
 			Self::Optional(_, x) => {
 				if let Self::Optional(_, y) = other {
-					*x == *y
-				} else {
-					false
-				}
-			}
-			Self::Mut(_, x) => {
-				if let Self::Mut(_, y) = other {
 					*x == *y
 				} else {
 					false
@@ -252,13 +244,12 @@ impl Eq for Type {}
 impl Type {
 	pub fn span(&self) -> Span {
 		match self {
-			Self::BareType(x, _)
-			| Self::Builtin(x, _)
-			| Self::Array(x, _, _)
-			| Self::Ref(x, _)
-			| Self::Optional(x, _)
-			| Self::Mut(x, _)
-			| Self::Inferred(x) => x.clone(),
+			Self::BareType(x, ..)
+			| Self::Builtin(x, ..)
+			| Self::Array(x, ..)
+			| Self::Ref(x, ..)
+			| Self::Optional(x, ..)
+			| Self::Inferred(x, ..) => x.clone(),
 		}
 	}
 
@@ -266,31 +257,13 @@ impl Type {
 		match self {
 			Self::Inferred(_) => true,
 			Self::BareType(_, _) | Self::Builtin(_, _) => false,
-			Self::Array(_, x, _) | Self::Ref(_, x) | Self::Optional(_, x) | Self::Mut(_, x) => {
-				x.is_inferred()
-			}
+			Self::Array(_, x, _) | Self::Ref(_, x, _) | Self::Optional(_, x) => x.is_inferred(),
 		}
-	}
-
-	pub fn is_mut(&self) -> bool {
-		matches!(self, Type::Mut(_, _))
-	}
-
-	pub fn is_mut_inferred(&self) -> bool {
-		let Type::Mut(_, inner) = self else { return false; };
-		inner.is_inferred()
 	}
 
 	pub fn is_void(&self) -> bool {
 		let Self::Builtin(_, x) = self else { return false; };
 		*x == BuiltinType::Void
-	}
-
-	pub fn ignore_mut(&self) -> &Self {
-		match self {
-			Type::Mut(_, inner) => &**inner,
-			_ => self,
-		}
 	}
 }
 
@@ -305,14 +278,6 @@ pub struct TypedIdent {
 impl TypedIdent {
 	pub fn ident_str(&self) -> String {
 		self.ident.to_string()
-	}
-
-	pub fn make_mut(self) -> Self {
-		Self {
-			span: self.span.clone(),
-			ty: Type::Mut(self.span, Box::new(self.ty)),
-			ident: self.ident,
-		}
 	}
 }
 
@@ -407,8 +372,8 @@ impl Expr {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
-	Create(Span, Privacy, TypedIdent, Expr),
-	Declare(Span, Privacy, TypedIdent),
+	Create(Span, Privacy, TypedIdent, bool, Expr),
+	Declare(Span, Privacy, TypedIdent, bool),
 	Set(Span, Ident, Expr),
 	Func(Span, Privacy, Ident, Func),
 	Return(Span, Expr),
@@ -429,16 +394,16 @@ pub enum Stmt {
 impl Stmt {
 	pub fn span(&self) -> Span {
 		match self {
-			Self::Create(x, _, _, _)
-			| Self::Declare(x, _, _)
-			| Self::Set(x, _, _)
-			| Self::Func(x, _, _, _)
-			| Self::Return(x, _)
+			Self::Create(x, ..)
+			| Self::Declare(x, ..)
+			| Self::Set(x, ..)
+			| Self::Func(x, ..)
+			| Self::Return(x, ..)
 			| Self::Class(x, ..)
-			| Self::Import(x, _, _)
-			| Self::BareExpr(x, _)
-			| Self::Unsafe(x, _)
-			| Self::Cpp(x, _) => x.clone(),
+			| Self::Import(x, ..)
+			| Self::BareExpr(x, ..)
+			| Self::Unsafe(x, ..)
+			| Self::Cpp(x, ..) => x.clone(),
 		}
 	}
 }
@@ -446,12 +411,14 @@ impl Stmt {
 impl fmt::Display for Stmt {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Stmt::Create(_span, privacy, ty_ident, expr) => {
-				f.write_fmt(format_args!("{privacy}{ty_ident} = {expr};"))
-			}
-			Stmt::Declare(_span, privacy, ty_ident) => {
-				f.write_fmt(format_args!("declare {privacy}{ty_ident};"))
-			}
+			Stmt::Create(_span, privacy, ty_ident, is_mut, expr) => f.write_fmt(format_args!(
+				"{privacy}{}{ty_ident} = {expr};",
+				if *is_mut { "mut " } else { "" }
+			)),
+			Stmt::Declare(_span, privacy, ty_ident, is_mut) => f.write_fmt(format_args!(
+				"declare {privacy}{}{ty_ident};",
+				if *is_mut { "mut " } else { "" }
+			)),
 			Stmt::Set(_span, ident, expr) => f.write_fmt(format_args!("{ident} = {expr};")),
 			Stmt::Func(_span, privacy, ident, func) => {
 				f.write_fmt(format_args!("{privacy}{ident}{func}"))
@@ -528,9 +495,8 @@ impl fmt::Display for Type {
 					"[]".to_string()
 				}
 			)),
-			Type::Ref(_, x) => f.write_fmt(format_args!("{x}&")),
+			Type::Ref(_, x, m) => f.write_fmt(format_args!("{x}{}&", if *m { "mut" } else { "" })),
 			Type::Optional(_, x) => f.write_fmt(format_args!("{x}?")),
-			Type::Mut(_, x) => f.write_fmt(format_args!("{x} mut")),
 			Type::Inferred(_) => f.write_str("~"),
 		}
 	}

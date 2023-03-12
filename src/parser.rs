@@ -110,23 +110,29 @@ fn let_stmt() -> token_parser!(Stmt) {
 		.then_ignore(jkeyword!(Let))
 		.then(assg!(ignore Set))
 		.map_with_span(|(privacy, (lhs, value)), span| {
-			Stmt::Create(span, privacy, lhs.infer_type(), value)
+			Stmt::Create(span, privacy, lhs.infer_type(), false, value)
 		})
 }
 
 /// Parses `<ty ident> = <expr>;` into Stmt::Create
 fn create_stmt() -> token_parser!(Stmt) {
 	privacy_attribs()
+		.then(jkeyword!(Mut).map(|_| true).or_not())
 		.then(ty_ident(None))
 		.then(assg!(noident ignore Set))
-		.map_with_span(|((privacy, lhs), value), span| Stmt::Create(span, privacy, lhs, value))
+		.map_with_span(|(((privacy, mutness), lhs), value), span| {
+			Stmt::Create(span, privacy, lhs, mutness.is_some(), value)
+		})
 }
 
 /// Parses `<ty ident>;` into Stmt::Declare
 fn declare_stmt() -> token_parser!(Stmt) {
 	privacy_attribs()
+		.then(jkeyword!(Mut).map(|_| true).or_not())
 		.then(ty_ident_nodiscard(None))
-		.map_with_span(|(privacy, ty_ident), span| Stmt::Declare(span, privacy, ty_ident))
+		.map_with_span(|((privacy, mutness), ty_ident), span| {
+			Stmt::Declare(span, privacy, ty_ident, mutness.is_some())
+		})
 }
 
 /// Parses `<expr>;` into Stmt::BareExpr
@@ -160,7 +166,7 @@ fn mut_stmt() -> token_parser!(Stmt) {
 		.then_ignore(jkeyword!(Mut))
 		.then(assg!(ignore Set))
 		.map_with_span(|(privacy, (lhs, value)), span| {
-			Stmt::Create(span, privacy, lhs.infer_type().make_mut(), value)
+			Stmt::Create(span, privacy, lhs.infer_type(), true, value)
 		})
 }
 

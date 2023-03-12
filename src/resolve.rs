@@ -30,14 +30,6 @@ impl ResolvedTypedIdent {
 	pub fn ident_str(&self) -> String {
 		self.ident.to_string()
 	}
-
-	pub fn make_mut(self) -> Self {
-		Self {
-			span: self.span.clone(),
-			ty: ResolvedType::Mut(self.span, Box::new(self.ty)),
-			ident: self.ident,
-		}
-	}
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
@@ -332,7 +324,7 @@ impl ResolvedScope {
 					self.check_type(generic);
 				}
 			}
-			ResolvedType::Ref(_, x) | ResolvedType::Mut(_, x) | ResolvedType::Optional(_, x) => {
+			ResolvedType::Ref(_, x, _) | ResolvedType::Optional(_, x) => {
 				self.check_type(*x)
 			}
 			ResolvedType::Array(_, x, _size) => {
@@ -348,6 +340,7 @@ impl ResolvedScope {
 		&mut self,
 		span: Span,
 		ty_ident: ResolvedTypedIdent,
+		is_mut: bool,
 		value: Option<Option<ResolvedExpr>>,
 	) {
 		// TODO: do something with duplicate idents. perhaps mangle them in codegen
@@ -361,6 +354,7 @@ impl ResolvedScope {
 			ResolvedVar {
 				name: name.clone(),
 				ty,
+				is_mut,
 				value,
 			},
 		);
@@ -377,7 +371,7 @@ impl ResolvedScope {
 			return;
 		}
 		if let Some(x) = self.get_var_mut(&ident.to_string()) {
-			if !x.ty.is_mut() {
+			if !x.is_mut {
 				let span = ident.span() + resolved_expr.span();
 				let var_span = self.get_var_span(&ident.to_string()).unwrap();
 				add_diagnostic(
@@ -546,7 +540,7 @@ impl ResolvedScope {
 					self.check_expr(arg.clone(), context.clone());
 					let arg_ty = self.get_expr_ty(arg.clone());
 					let expected_ty = arg_types[i].clone();
-					if arg_ty.ignore_mut() != expected_ty.ignore_mut() {
+					if arg_ty != expected_ty {
 						add_diagnostic(
 							Diagnostic::error()
 								.with_message("incorrect argument type")
@@ -582,7 +576,7 @@ impl ResolvedScope {
 				let rhs_span = rhs.span();
 				let lhs_ty = self.get_expr_ty(*lhs);
 				let rhs_ty = self.get_expr_ty(*rhs);
-				if lhs_ty.ignore_mut() != rhs_ty.ignore_mut() {
+				if lhs_ty != rhs_ty {
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("operating with incompatible types")
@@ -698,6 +692,7 @@ impl ResolvedScope {
 			frs.add_var(
 				arg.span.clone(),
 				self.resolve_ty_ident(arg.clone(), context.clone()),
+				false, // TODO: mut args
 				Some(None),
 			);
 		}
@@ -810,11 +805,10 @@ impl ResolvedScope {
 				Box::new(self.resolve_ty(*b, context.clone())),
 				c.map(|x| Box::new(self.resolve_and_check_expr(*x, context))),
 			),
-			Type::Ref(a, b) => ResolvedType::Ref(a, Box::new(self.resolve_ty(*b, context))),
+			Type::Ref(a, b, c) => ResolvedType::Ref(a, Box::new(self.resolve_ty(*b, context)), c),
 			Type::Optional(a, b) => {
 				ResolvedType::Optional(a, Box::new(self.resolve_ty(*b, context)))
 			}
-			Type::Mut(a, b) => ResolvedType::Mut(a, Box::new(self.resolve_ty(*b, context))),
 			Type::Inferred(s) => ResolvedType::Inferred(s),
 		}
 	}
@@ -852,9 +846,8 @@ pub enum ResolvedType {
 	BareType(Span, ResolvedBareType),
 	Builtin(Span, BuiltinType),
 	Array(Span, Box<ResolvedType>, Option<Box<ResolvedExpr>>),
-	Ref(Span, Box<ResolvedType>),
+	Ref(Span, Box<ResolvedType>, bool),
 	Optional(Span, Box<ResolvedType>),
-	Mut(Span, Box<ResolvedType>),
 	Inferred(Span),
 }
 
@@ -882,22 +875,15 @@ impl PartialEq for ResolvedType {
 					false
 				}
 			}
-			Self::Ref(_, x) => {
-				if let Self::Ref(_, y) = other {
-					*x == *y
+			Self::Ref(_, x, a) => {
+				if let Self::Ref(_, y, b) = other {
+					*x == *y && *a == *b
 				} else {
 					false
 				}
 			}
 			Self::Optional(_, x) => {
 				if let Self::Optional(_, y) = other {
-					*x == *y
-				} else {
-					false
-				}
-			}
-			Self::Mut(_, x) => {
-				if let Self::Mut(_, y) = other {
 					*x == *y
 				} else {
 					false
@@ -913,13 +899,12 @@ impl Eq for ResolvedType {}
 impl ResolvedType {
 	pub fn span(&self) -> Span {
 		match self {
-			Self::BareType(x, _)
-			| Self::Builtin(x, _)
-			| Self::Array(x, _, _)
-			| Self::Ref(x, _)
-			| Self::Optional(x, _)
-			| Self::Mut(x, _)
-			| Self::Inferred(x) => x.clone(),
+			Self::BareType(x, ..)
+			| Self::Builtin(x, ..)
+			| Self::Array(x, ..)
+			| Self::Ref(x, ..)
+			| Self::Optional(x, ..)
+			| Self::Inferred(x, ..) => x.clone(),
 		}
 	}
 
@@ -927,31 +912,13 @@ impl ResolvedType {
 		match self {
 			Self::Inferred(_) => true,
 			Self::BareType(_, _) | Self::Builtin(_, _) => false,
-			Self::Array(_, x, _) | Self::Ref(_, x) | Self::Optional(_, x) | Self::Mut(_, x) => {
-				x.is_inferred()
-			}
+			Self::Array(_, x, _) | Self::Ref(_, x, _) | Self::Optional(_, x) => x.is_inferred(),
 		}
-	}
-
-	pub fn is_mut(&self) -> bool {
-		matches!(self, ResolvedType::Mut(_, _))
-	}
-
-	pub fn is_mut_inferred(&self) -> bool {
-		let ResolvedType::Mut(_, inner) = self else { return false; };
-		inner.is_inferred()
 	}
 
 	pub fn is_void(&self) -> bool {
 		let Self::Builtin(_, x) = self else { return false; };
 		*x == BuiltinType::Void
-	}
-
-	pub fn ignore_mut(&self) -> &Self {
-		match self {
-			ResolvedType::Mut(_, inner) => &**inner,
-			_ => self,
-		}
 	}
 
 	pub fn replace_generic(self, name: String, ty: ResolvedType) -> Self {
@@ -965,9 +932,10 @@ impl ResolvedType {
 			}
 			Self::Builtin(_, _) => self,
 			Self::Array(span, x, l) => Self::Array(span, Box::new(x.replace_generic(name, ty)), l),
-			Self::Ref(span, x) => Self::Ref(span, Box::new(x.replace_generic(name, ty))),
+			Self::Ref(span, x, is_mut) => {
+				Self::Ref(span, Box::new(x.replace_generic(name, ty)), is_mut)
+			}
 			Self::Optional(span, x) => Self::Optional(span, Box::new(x.replace_generic(name, ty))),
-			Self::Mut(span, x) => Self::Mut(span, Box::new(x.replace_generic(name, ty))),
 			Self::Inferred(_) => self,
 		}
 	}
@@ -1013,9 +981,10 @@ impl fmt::Display for ResolvedType {
 					"[]".to_string()
 				}
 			)),
-			ResolvedType::Ref(_, x) => f.write_fmt(format_args!("{x}&")),
+			ResolvedType::Ref(_, x, is_mut) => {
+				f.write_fmt(format_args!("{x}{}&", if *is_mut { " mut" } else { "" }))
+			}
 			ResolvedType::Optional(_, x) => f.write_fmt(format_args!("{x}?")),
-			ResolvedType::Mut(_, x) => f.write_fmt(format_args!("{x} mut")),
 			ResolvedType::Inferred(_) => f.write_str("~"),
 		}
 	}
@@ -1025,6 +994,7 @@ impl fmt::Display for ResolvedType {
 pub struct ResolvedVar {
 	pub name: String,
 	pub ty: ResolvedType,
+	pub is_mut: bool,
 	// outer option = is initialized, inner option = is arg
 	pub value: Option<Option<ResolvedExpr>>,
 }
@@ -1178,16 +1148,20 @@ pub fn resolve(
 	for stmt in scope.stmts {
 		check_stmt(&stmt, &context);
 		match stmt {
-			Stmt::Create(span, privacy, ty_ident, expr) => {
+			Stmt::Create(span, privacy, ty_ident, is_mut, expr) => {
 				check_privacy(privacy.clone(), context.clone());
 				let mut ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
-				check_case(ty_ident.ident.span(), ty_ident.ident.to_string(), Case::SnakeCase);
+				check_case(
+					ty_ident.ident.span(),
+					ty_ident.ident.to_string(),
+					Case::SnakeCase,
+				);
 				resolved_scope.check_type(ty_ident.ty.clone());
 				let rhs_span = expr.span();
 				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr, context.clone());
-				let lhs = ty_ident.ty.ignore_mut().clone();
+				let lhs = ty_ident.ty.clone();
 				let lhs_span = ty_ident.ty.span();
-				if !lhs.is_inferred() && lhs != *rhs.ignore_mut() {
+				if !lhs.is_inferred() && lhs != rhs {
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("assignment between incompatible types")
@@ -1200,13 +1174,11 @@ pub fn resolve(
 							]),
 					)
 				}
-				ty_ident.ty = match ty_ident.ty {
-					ResolvedType::Mut(..) => ResolvedType::Mut(lhs_span, Box::new(rhs)),
-					_ => rhs,
-				};
+				ty_ident.ty = if lhs.is_inferred() { rhs } else { lhs };
 				resolved_scope.add_var(
 					span.clone(),
 					ty_ident.clone(),
+					is_mut,
 					Some(Some(resolved_expr.clone())),
 				);
 				if !ty_ident.ident.is_discarded() {
@@ -1222,13 +1194,17 @@ pub fn resolve(
 						.push(ResolvedStmt::BareExpr(span, resolved_expr));
 				}
 			}
-			Stmt::Declare(span, privacy, ty_ident) => {
+			Stmt::Declare(span, privacy, ty_ident, is_mut) => {
 				// TODO: add error if the type is ~
 				check_privacy(privacy.clone(), context.clone());
 				let ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
-				check_case(ty_ident.ident.span(), ty_ident.ident.to_string(), Case::SnakeCase);
+				check_case(
+					ty_ident.ident.span(),
+					ty_ident.ident.to_string(),
+					Case::SnakeCase,
+				);
 				resolved_scope.check_type(ty_ident.ty.clone());
-				resolved_scope.add_var(span.clone(), ty_ident.clone(), None);
+				resolved_scope.add_var(span.clone(), ty_ident.clone(), is_mut, None);
 				resolved_scope
 					.stmts
 					.push(ResolvedStmt::Declare(span, privacy, ty_ident));
@@ -1240,7 +1216,7 @@ pub fn resolve(
 				let lhs_span = ident.span();
 				let lhs = resolved_scope
 					.get_expr_ty(ResolvedExpr::Identifier(lhs_span.clone(), ident.clone()));
-				if *lhs.ignore_mut() != *rhs.ignore_mut() {
+				if lhs != rhs {
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("assignment between incompatible types")

@@ -57,33 +57,33 @@ pub fn codegen_expr(expr: ResolvedExpr) -> String {
 }
 
 pub fn codegen_ty(ty: ResolvedType) -> String {
-	fn inner(ty: ResolvedType, comes_from_mut: bool) -> String {
-		let m = if comes_from_mut { "" } else { " const" };
+	fn inner(ty: ResolvedType) -> String {
 		match ty {
 			ResolvedType::BareType(_, x) => format!(
-				"{}{}{m}",
+				"{}{}",
 				x.ident.to_string(),
 				x.generics
 					.iter()
-					.map(|x| inner(x.clone(), false))
+					.map(|x| inner(x.clone()))
 					.reduce(|acc, b| acc + ", " + &b)
 					.map(|x| format!("<{x}>"))
 					.unwrap_or_else(String::new)
 			),
-			ResolvedType::Builtin(_, x) => format!("{x}{m}"),
+			ResolvedType::Builtin(_, x) => format!("{x}"),
 			ResolvedType::Array(_, lhs, rhs) => format!(
-				"Array<{}{}>{m}",
-				inner(*lhs, false),
+				"Array<{}{}>",
+				inner(*lhs),
 				rhs.map(|x| ",".to_string() + &codegen_expr(*x))
 					.unwrap_or_else(String::new)
 			),
-			ResolvedType::Ref(_, x) => format!("Ref<{}>{m}", inner(*x, false)),
-			ResolvedType::Optional(_, x) => format!("Optional<{}>{m}", inner(*x, false)),
-			ResolvedType::Mut(_, x) => inner(*x, true),
+			ResolvedType::Ref(_, x, is_mut) => {
+				format!("{}<{}>", if is_mut { "Ref" } else { "ConstRef" }, inner(*x))
+			}
+			ResolvedType::Optional(_, x) => format!("Optional<{}>", inner(*x)),
 			ResolvedType::Inferred(_) => "".into(),
 		}
 	}
-	inner(ty, false)
+	inner(ty)
 }
 
 pub fn codegen_ty_ident(ty_ident: ResolvedTypedIdent) -> String {
