@@ -1,9 +1,8 @@
 use crate::{
-	hoister::{FuncSignature, HoistedFunc, HoistedScope, HoistedStmt},
+	hoister::{HoistedFunc, HoistedScope, HoistedStmt},
 	lexer::{NumberLiteral, Operator},
 	parser::types::{
-		join_comma, BareType, BuiltinType, Expr, Func, FuncAttribs, Ident, Privacy, Scope, Stmt,
-		Type, TypedIdent,
+		join_comma, BareType, BuiltinType, Expr, FuncAttribs, Ident, Privacy, Type, TypedIdent,
 	},
 	span::Span,
 };
@@ -414,7 +413,6 @@ impl ResolvedScope {
 			{
 				return;
 			}
-			println!("{:?}{:?}", self.old_hoisted.data.funcs, self.old_hoisted.inherit.funcs);
 			let span = ident.span();
 			add_diagnostic(
 				Diagnostic::error()
@@ -449,10 +447,10 @@ impl ResolvedScope {
 			}
 			ResolvedExpr::BinaryOp(_, lhs, _op, rhs) => {
 				self.check_expr(*lhs.clone(), context.clone());
-				self.check_expr(*rhs.clone(), context);
+				self.check_expr(*rhs.clone(), context.clone());
 				// this may seem useless but it checks for types in binary ops
-				self.get_expr_ty(*lhs);
-				self.get_expr_ty(*rhs);
+				self.get_expr_ty(*lhs, context.clone());
+				self.get_expr_ty(*rhs, context);
 			}
 			ResolvedExpr::UnaryOp(_, _op, val) => {
 				self.check_expr(*val, context);
@@ -477,7 +475,7 @@ impl ResolvedScope {
 					(func, span)
 				} else {
 					let span = func_expr.span();
-					let ty = self.get_expr_ty(*func_expr);
+					let ty = self.get_expr_ty(*func_expr, context);
 					add_diagnostic(
 						Diagnostic::error()
 							.with_message("tried to call non-function")
@@ -547,7 +545,7 @@ impl ResolvedScope {
 				}
 				for (i, arg) in args.iter().enumerate() {
 					self.check_expr(arg.clone(), context.clone());
-					let arg_ty = self.get_expr_ty(arg.clone());
+					let arg_ty = self.get_expr_ty(arg.clone(), context.clone());
 					let expected_ty = arg_types[i].clone();
 					if arg_ty != expected_ty {
 						add_diagnostic(
@@ -569,7 +567,7 @@ impl ResolvedScope {
 	}
 
 	// TODO: be lazier with int literals and automatically cast them in Stmt::Create
-	pub fn get_expr_ty(&self, expr: ResolvedExpr) -> ResolvedType {
+	pub fn get_expr_ty(&self, expr: ResolvedExpr, context: Context) -> ResolvedType {
 		match expr {
 			ResolvedExpr::CharLiteral(span, _) => builtin!(span, Char),
 			ResolvedExpr::StringLiteral(span, _) => builtin!(span, String),
@@ -583,8 +581,8 @@ impl ResolvedScope {
 			ResolvedExpr::BinaryOp(span, lhs, op, rhs) => {
 				let lhs_span = lhs.span();
 				let rhs_span = rhs.span();
-				let lhs_ty = self.get_expr_ty(*lhs);
-				let rhs_ty = self.get_expr_ty(*rhs);
+				let lhs_ty = self.get_expr_ty(*lhs, context.clone());
+				let rhs_ty = self.get_expr_ty(*rhs, context);
 				if lhs_ty != rhs_ty {
 					add_diagnostic(
 						Diagnostic::error()
@@ -618,7 +616,7 @@ impl ResolvedScope {
 			// TODO: overload with defined operator in case of operator existing
 			// TODO: &x, *x => ref + deref. these would return non-reffed or reffed tys.
 			ResolvedExpr::UnaryOp(_span, op, val) => {
-				let ty = self.get_expr_ty(*val);
+				let ty = self.get_expr_ty(*val, context);
 				match op {
 					Operator::Question => todo!(), // optional chaining or try, idk
 					Operator::Bang => todo!(),     // maybe could be unwrap
@@ -651,7 +649,12 @@ impl ResolvedScope {
 								.clone()
 								.replace_generics(span, x.generics.clone(), generics)
 						}
-						None => builtin!(span, Error),
+						None => match self.old_hoisted.get_func(&i.to_string()) {
+							Some(x) => self
+								.resolve_ty(x.return_ty.clone(), context)
+								.replace_generics(span, x.generics.clone(), generics),
+							None => builtin!(span, Error),
+						},
 					},
 					ResolvedExpr::Lambda(_, f) => {
 						f.return_ty.replace_generics(span, f.generics, generics)
@@ -793,8 +796,8 @@ impl ResolvedScope {
 	}
 
 	pub fn examine_expr(&self, expr: Expr, context: Context) -> (ResolvedExpr, ResolvedType) {
-		let resolved_expr = self.resolve_and_check_expr(expr, context);
-		let ty = self.get_expr_ty(resolved_expr.clone());
+		let resolved_expr = self.resolve_and_check_expr(expr, context.clone());
+		let ty = self.get_expr_ty(resolved_expr.clone(), context);
 		(resolved_expr, ty)
 	}
 
@@ -1287,8 +1290,10 @@ pub fn resolve(
 				let rhs_span = expr.span();
 				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr, context.clone());
 				let lhs_span = ident.span();
-				let lhs = resolved_scope
-					.get_expr_ty(ResolvedExpr::Identifier(lhs_span.clone(), ident.clone()));
+				let lhs = resolved_scope.get_expr_ty(
+					ResolvedExpr::Identifier(lhs_span.clone(), ident.clone()),
+					context.clone(),
+				);
 				if lhs != rhs {
 					add_diagnostic(
 						Diagnostic::error()

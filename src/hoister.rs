@@ -182,6 +182,16 @@ fn redeclaration_error(name: &str, span: &Span, decl_span: &Span) {
 	)
 }
 
+impl Func {
+	pub fn signature(&self) -> FuncSignature {
+		FuncSignature {
+			generics: self.generics.clone(),
+			arg_tys: self.args.iter().map(|x| x.ty.clone()).collect(),
+			return_ty: self.return_ty.clone(),
+		}
+	}
+}
+
 pub fn hoist(
 	scope: Scope,
 	inherit: Option<HoistedScope>,
@@ -189,6 +199,7 @@ pub fn hoist(
 	let inherit_hoisted = inherit.unwrap_or_else(|| HoistedScope::new(scope.span.clone()));
 	let mut hoisted = HoistedScope::new(scope.span);
 	hoisted.inherit = inherit_hoisted.data + inherit_hoisted.inherit;
+	let mut for_later = Vec::new();
 	for stmt in scope.stmts {
 		match stmt {
 			Stmt::Create(span, privacy, ty_ident, is_mut, expr) => {
@@ -198,7 +209,9 @@ pub fn hoist(
 				}
 				hoisted.add_var(&ty_ident.ident_str(), ty_ident.ty.clone());
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
-				hoisted.stmts_mut().push(HoistedStmt::Create(span, privacy, ty_ident, is_mut, expr));
+				hoisted
+					.stmts_mut()
+					.push(HoistedStmt::Create(span, privacy, ty_ident, is_mut, expr));
 			}
 			Stmt::Declare(span, privacy, ty_ident, is_mut) => {
 				if hoisted.has_var(&ty_ident.ident_str()) {
@@ -207,24 +220,26 @@ pub fn hoist(
 				}
 				hoisted.add_var(&ty_ident.ident_str(), ty_ident.ty.clone());
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
-				hoisted.stmts_mut().push(HoistedStmt::Declare(span, privacy, ty_ident, is_mut));
+				hoisted
+					.stmts_mut()
+					.push(HoistedStmt::Declare(span, privacy, ty_ident, is_mut));
 			}
 			Stmt::Set(span, ident, expr) => {
 				if !hoisted.has_var(&ident.to_string()) {
 					// TODO: add diagnostic (non-existing variable)
 				}
-				hoisted.stmts_mut().push(HoistedStmt::Set(span, ident, expr));
+				hoisted
+					.stmts_mut()
+					.push(HoistedStmt::Set(span, ident, expr));
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				if hoisted.has_func(&ident.to_string()) {
 					let decl_span = hoisted.get_func_span(&ident.to_string()).unwrap();
 					redeclaration_error("function", &func.decl_span, decl_span);
 				}
-				// TODO: this is stupid, as it will not hoist fully in the top level
-				let hoisted_func = func.hoist(Some(hoisted.clone()));
-				hoisted.add_func(&ident.to_string(), hoisted_func.signature());
+				hoisted.add_func(&ident.to_string(), func.signature());
 				hoisted.add_func_span(&ident.to_string(), span.clone());
-				hoisted.stmts_mut().push(HoistedStmt::Func(span, privacy, ident, hoisted_func));
+				for_later.push(Stmt::Func(span, privacy, ident, func));
 			}
 			Stmt::Class(span, privacy, ident, generics, decl_span, body) => {
 				if hoisted.has_type(&ident.to_string()) {
@@ -237,12 +252,22 @@ pub fn hoist(
 				// TODO: get the actual made type signature
 				hoisted.add_type(&ident.to_string(), MadeTypeSignature::default());
 				hoisted.add_type_span(&ident.to_string(), decl_span.clone());
-				hoisted.stmts_mut().push(HoistedStmt::Class(span, privacy, ident, generics, decl_span, hoisted_scope));
+				// TODO: hoist the type in for_later
+				hoisted.stmts_mut().push(HoistedStmt::Class(
+					span,
+					privacy,
+					ident,
+					generics,
+					decl_span,
+					hoisted_scope,
+				));
 			}
 			Stmt::Unsafe(span, scope) => {
 				let hoisted_scope = hoist(scope, Some(hoisted.clone()))
 					.unwrap_or_else(|_| HoistedScope::new(span.clone()));
-				hoisted.stmts_mut().push(HoistedStmt::Unsafe(span, hoisted_scope));
+				hoisted
+					.stmts_mut()
+					.push(HoistedStmt::Unsafe(span, hoisted_scope));
 			}
 			stmt => {
 				ignore_hoist!(stmt, hoisted;
@@ -252,6 +277,17 @@ pub fn hoist(
 					Cpp(span, code)
 				)
 			}
+		}
+	}
+	for stmt in for_later {
+		match stmt {
+			Stmt::Func(span, privacy, ident, func) => {
+				let hoisted_func = func.hoist(Some(hoisted.clone()));
+				hoisted
+					.stmts_mut()
+					.push(HoistedStmt::Func(span, privacy, ident, hoisted_func));
+			}
+			_ => unreachable!(),
 		}
 	}
 	if !DIAGNOSTICS.lock().unwrap().is_empty() {
