@@ -145,7 +145,7 @@ pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	if !func.generics.is_empty() {
 		code += "template <";
 		for (i, generic) in func.generics.iter().enumerate() {
-			code += &format!("typename {}", codegen_mangle(generic));
+			code += &format!("typename {}", codegen_mangle(&generic.to_string()));
 			if i < func.generics.len() - 1 {
 				code += ","
 			}

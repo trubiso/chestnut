@@ -1,5 +1,5 @@
 use chumsky::Stream;
-use codespan_reporting::diagnostic::Diagnostic;
+use codespan_reporting::diagnostic::{Diagnostic, Severity};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term;
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
@@ -22,12 +22,16 @@ fn emit_errors(files: &SimpleFiles<String, String>, diagnostics: Vec<Diagnostic<
 	let writer = StandardStream::stderr(ColorChoice::Always);
 	let config = term::Config::default();
 	let amount = diagnostics.len();
+	let warnings = diagnostics.iter().filter(|x| x.severity == Severity::Warning).count();
 	for diagnostic in diagnostics {
 		term::emit(&mut writer.lock(), &config, files, &diagnostic).unwrap();
 	}
 	println!(
-		"{amount} diagnostic{} total",
-		if amount > 1 { "s" } else { "" }
+		"{amount} diagnostic{} total ({warnings} warning{}, {} error{})",
+		if amount != 1 { "s" } else { "" },
+		if warnings != 1 { "s" } else { "" },
+		amount - warnings,
+		if amount - warnings != 1 { "s" } else { "" },
 	);
 }
 
@@ -84,12 +88,12 @@ fn main() {
 			Err(x) => return emit_errors(&files, x),
 		};
 
-		let hoisted = match hoister::hoist(parsed.clone(), None) {
+		let hoisted = match hoister::hoist(parsed, None) {
 			Ok(x) => x,
 			Err(x) => return emit_errors(&files, x),
 		};
 
-		let resolved = match resolve::resolve(parsed, resolve::Context::TopLevel, None, None) {
+		let resolved = match resolve::resolve(hoisted, resolve::Context::TopLevel, None, None) {
 			Ok((x, _)) => x,
 			Err(x) => return emit_errors(&files, x),
 		};

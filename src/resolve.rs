@@ -1,4 +1,5 @@
 use crate::{
+	hoister::{FuncSignature, HoistedFunc, HoistedScope, HoistedStmt},
 	lexer::{NumberLiteral, Operator},
 	parser::types::{
 		join_comma, BareType, BuiltinType, Expr, Func, FuncAttribs, Ident, Privacy, Scope, Stmt,
@@ -32,7 +33,7 @@ impl ResolvedTypedIdent {
 	}
 }
 
-#[derive(Debug, Display, Clone, PartialEq, Eq)]
+#[derive(Debug, Display, Clone)]
 pub enum ResolvedStmt {
 	#[display(fmt = "{_1} {_2} = {_3};")]
 	Create(Span, Privacy, ResolvedTypedIdent, ResolvedExpr),
@@ -190,20 +191,22 @@ impl std::ops::Add for InheritableData {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct ResolvedScope {
 	pub span: Span,
 	pub data: InheritableData,
 	pub inherit: InheritableData,
+	pub old_hoisted: HoistedScope,
 	pub stmts: Vec<ResolvedStmt>,
 }
 
 impl ResolvedScope {
 	pub fn new(span: Span) -> Self {
 		Self {
-			span,
+			span: span.clone(),
 			data: InheritableData::default(),
 			inherit: InheritableData::default(),
+			old_hoisted: HoistedScope::new(span),
 			stmts: Vec::new(),
 		}
 	}
@@ -247,38 +250,40 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
+#[macro_export]
 macro_rules! get_datum {
-	($name:ident $nmut:ident $nhas:ident => $ident:ident ($ty:ty)) => {
-		#[allow(unused)]
-		fn $name(&self, name: &str) -> Option<&$ty> {
+	($nget:ident $nmut:ident $nhas:ident $nadd:ident => $ident:ident ($ty:ty)) => {
+		pub fn $nget(&self, name: &str) -> Option<&$ty> {
 			match self.data.$ident.get(name) {
 				Some(x) => Some(x),
 				None => self.inherit.$ident.get(name),
 			}
 		}
 
-		#[allow(unused)]
-		fn $nmut(&mut self, name: &str) -> Option<&mut $ty> {
+		pub fn $nmut(&mut self, name: &str) -> Option<&mut $ty> {
 			match self.data.$ident.get_mut(name) {
 				Some(x) => Some(x),
 				None => self.inherit.$ident.get_mut(name),
 			}
 		}
 
-		#[allow(unused)]
-		fn $nhas(&self, name: &str) -> bool {
+		pub fn $nhas(&self, name: &str) -> bool {
 			self.data.$ident.contains_key(name) || self.inherit.$ident.contains_key(name)
+		}
+
+		pub fn $nadd(&mut self, name: &str, thing: $ty) {
+			self.data.$ident.insert(name.to_string(), thing);
 		}
 	};
 }
 
 impl ResolvedScope {
-	get_datum!(get_type get_type_mut has_type => types (ResolvedMadeType));
-	get_datum!(get_type_span get_type_span_mut has_type_span => type_spans (Span));
-	get_datum!(get_var get_var_mut has_var => vars (ResolvedVar));
-	get_datum!(get_var_span get_var_span_mut has_var_span => var_spans (Span));
-	get_datum!(get_func get_func_mut has_func => funcs (ResolvedFunc));
-	get_datum!(get_func_span get_func_span_mut has_func_span => func_spans (Span));
+	get_datum!(get_type get_type_mut has_type _add_type => types (ResolvedMadeType));
+	get_datum!(get_type_span get_type_span_mut has_type_span _add_type_span => type_spans (Span));
+	get_datum!(get_var get_var_mut has_var _add_var => vars (ResolvedVar));
+	get_datum!(get_var_span get_var_span_mut has_var_span _add_var_span => var_spans (Span));
+	get_datum!(get_func get_func_mut has_func _add_func => funcs (ResolvedFunc));
+	get_datum!(get_func_span get_func_span_mut has_func_span _add_func_span => func_spans (Span));
 
 	pub fn check_type(&self, ty: ResolvedType) {
 		match ty {
@@ -404,6 +409,12 @@ impl ResolvedScope {
 		let vars_has = self.has_var(&ident.to_string());
 		let funcs_has = self.has_func(&ident.to_string());
 		if !vars_has && !funcs_has {
+			if self.old_hoisted.has_func(&ident.to_string())
+				|| self.old_hoisted.has_var(&ident.to_string())
+			{
+				return;
+			}
+			println!("{:?}{:?}", self.old_hoisted.data.funcs, self.old_hoisted.inherit.funcs);
 			let span = ident.span();
 			add_diagnostic(
 				Diagnostic::error()
@@ -658,14 +669,14 @@ impl ResolvedScope {
 		&self,
 		name: String,
 		func_span: Span,
-		func: Func,
+		func: HoistedFunc,
 		context: Context,
 	) -> ResolvedFunc {
 		let mut frs = self.clone();
 		let mut generics = Vec::new();
 		for generic in &func.generics {
 			// TODO: deal with discarded generics
-			generics.push(generic.to_string());
+			generics.push(generic.clone());
 			let name = generic.to_string();
 			check_case(generic.span(), generic.to_string(), Case::PascalCase);
 			frs.add_type(
@@ -753,7 +764,11 @@ impl ResolvedScope {
 			}
 			// TODO: better lambda span
 			Expr::Lambda(s, f) => {
-				ResolvedExpr::Lambda(s.clone(), self.resolve_func("~".into(), s, f, context))
+				// TODO: this is horrible
+				ResolvedExpr::Lambda(
+					s.clone(),
+					self.resolve_func("~".into(), s, f.hoist(None), context),
+				)
 			}
 			Expr::Call(s, c, g, a) => ResolvedExpr::Call(
 				s,
@@ -919,10 +934,10 @@ impl ResolvedType {
 		*x == BuiltinType::Void
 	}
 
-	pub fn replace_generic(self, name: String, ty: ResolvedType) -> Self {
+	pub fn replace_generic(self, name: Ident, ty: ResolvedType) -> Self {
 		match self {
 			Self::BareType(span, x) => {
-				if x.ident.to_string() == name {
+				if x.ident.to_string() == name.to_string() {
 					ty
 				} else {
 					Self::BareType(span, x)
@@ -941,7 +956,7 @@ impl ResolvedType {
 	pub fn replace_generics(
 		mut self,
 		span: Span,
-		names: Vec<String>,
+		names: Vec<Ident>,
 		tys: Option<Vec<ResolvedType>>,
 	) -> Self {
 		if let Some(tys) = tys {
@@ -997,7 +1012,13 @@ pub struct ResolvedVar {
 	pub value: Option<Option<ResolvedExpr>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ResolvedMadeTypeSignature {
+	pub fields: HashMap<String, ResolvedMadeType>,
+	pub funcs: HashMap<String, ResolvedFuncSignature>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ResolvedMadeType {
 	pub name: String,
 	pub generic_count: usize, // TODO: ResolvedGeneric
@@ -1007,17 +1028,63 @@ pub struct ResolvedMadeType {
 	pub is_generic: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl ResolvedMadeType {
+	pub fn signature(&self) -> ResolvedMadeTypeSignature {
+		ResolvedMadeTypeSignature {
+			fields: self.fields.clone(),
+			funcs: self
+				.funcs
+				.iter()
+				.map(|x| (x.0.clone(), x.1.signature()))
+				.collect(),
+		}
+	}
+}
+
+impl PartialEq for ResolvedMadeType {
+	fn eq(&self, other: &Self) -> bool {
+		self.signature() == other.signature()
+	}
+}
+
+impl Eq for ResolvedMadeType {}
+
+#[derive(Debug, Clone)]
 pub struct ResolvedFunc {
 	pub name: String,
 	// TODO: generic constraints
-	pub generics: Vec<String>, // stores names
+	pub generics: Vec<Ident>, // stores names
 	pub args: Vec<ResolvedArg>,
 	pub return_ty: ResolvedType,
 	pub body: ResolvedScope,
 	pub attribs: FuncAttribs,
 	pub decl_span: Span,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedFuncSignature {
+	pub generics: Vec<Ident>,
+	pub arg_tys: Vec<ResolvedType>,
+	pub return_ty: ResolvedType,
+}
+
+impl ResolvedFunc {
+	pub fn signature(&self) -> ResolvedFuncSignature {
+		ResolvedFuncSignature {
+			generics: self.generics.clone(),
+			arg_tys: self.args.iter().map(|x| x.ty.clone()).collect(),
+			return_ty: self.return_ty.clone(),
+		}
+	}
+}
+
+impl PartialEq for ResolvedFunc {
+	fn eq(&self, other: &Self) -> bool {
+		self.signature() == other.signature()
+	}
+}
+
+impl Eq for ResolvedFunc {}
 
 impl fmt::Display for ResolvedFunc {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1081,7 +1148,7 @@ fn check_privacy(privacy: Privacy, context: Context) {
 	}
 }
 
-impl Stmt {
+impl HoistedStmt {
 	pub fn variant(&self) -> String {
 		match self {
 			Self::Create(..) => "creation".into(),
@@ -1100,10 +1167,10 @@ impl Stmt {
 
 macro_rules! check_stmt {
 	($($v:ident => $($ctx:ident)*;)*) => {
-		fn check_stmt(stmt: &Stmt, context: &Context) {
+		fn check_stmt(stmt: &HoistedStmt, context: &Context) {
 			match stmt {
 				$(
-					Stmt::$v(..) => {
+					HoistedStmt::$v(..) => {
 						if $(*context != Context::$ctx)&&* {
 							add_diagnostic(
 								Diagnostic::error()
@@ -1132,7 +1199,7 @@ check_stmt!(
 );
 
 pub fn resolve(
-	scope: Scope,
+	scope: HoistedScope,
 	context: Context,
 	inherit_scope: Option<ResolvedScope>,
 	expected_func_ty: Option<(Span, Span, ResolvedType)>,
@@ -1141,12 +1208,14 @@ pub fn resolve(
 	if let Some(scope) = inherit_scope {
 		resolved_scope.inherit = scope.data + scope.inherit;
 	}
-	let mut return_ty = builtin!(scope.span, Void);
+	let mut return_ty = builtin!(scope.span.clone(), Void);
+	let stmts = scope.data.stmts.clone();
+	resolved_scope.old_hoisted = scope;
 	let mut return_span = None;
-	for stmt in scope.stmts {
+	for stmt in stmts {
 		check_stmt(&stmt, &context);
 		match stmt {
-			Stmt::Create(span, privacy, ty_ident, is_mut, expr) => {
+			HoistedStmt::Create(span, privacy, ty_ident, is_mut, expr) => {
 				check_privacy(privacy.clone(), context.clone());
 				let mut ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
 				check_case(
@@ -1192,10 +1261,11 @@ pub fn resolve(
 						.push(ResolvedStmt::BareExpr(span, resolved_expr));
 				}
 			}
-			Stmt::Declare(span, privacy, ty_ident, is_mut) => {
+			HoistedStmt::Declare(span, privacy, ty_ident, is_mut) => {
 				// TODO: add error if the type is ~
 				check_privacy(privacy.clone(), context.clone());
 				if context != Context::Class {
+					println!("context: {context}");
 					if !is_mut {
 						add_diagnostic(Diagnostic::warning().with_message("non-class immutable declaration").with_labels(vec![Label::primary(span.file_id.clone(), span.range())]).with_notes(vec!["you will not be able to use or assign this variable, which is probably not intended".into()]));
 					}
@@ -1212,7 +1282,7 @@ pub fn resolve(
 					.stmts
 					.push(ResolvedStmt::Declare(span, privacy, ty_ident));
 			}
-			Stmt::Set(span, ident, expr) => {
+			HoistedStmt::Set(span, ident, expr) => {
 				resolved_scope.check_ident_exists(ident.clone());
 				let rhs_span = expr.span();
 				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr, context.clone());
@@ -1237,7 +1307,7 @@ pub fn resolve(
 					.stmts
 					.push(ResolvedStmt::Set(span, ident, resolved_expr));
 			}
-			Stmt::Func(_span, privacy, ident, func) => {
+			HoistedStmt::Func(_span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
 				check_case(ident.span(), ident.to_string(), Case::SnakeCase);
 				let resolved = resolved_scope.resolve_func(
@@ -1249,7 +1319,7 @@ pub fn resolve(
 				// TODO: use another, better span
 				resolved_scope.add_func(ident.to_string(), resolved);
 			}
-			Stmt::Return(span, expr) => {
+			HoistedStmt::Return(span, expr) => {
 				let (resolved_expr, ty) = resolved_scope.examine_expr(expr, context.clone());
 				return_ty = ty;
 				return_span = Some(span.clone());
@@ -1257,7 +1327,7 @@ pub fn resolve(
 					.stmts
 					.push(ResolvedStmt::Return(span, resolved_expr));
 			}
-			Stmt::Class(_span, privacy, ident, generics, decl_span, body) => {
+			HoistedStmt::Class(_span, privacy, ident, generics, decl_span, body) => {
 				check_privacy(privacy, context.clone());
 				check_case(ident.span(), ident.to_string(), Case::PascalCase);
 				let name = ident.to_string();
@@ -1295,14 +1365,14 @@ pub fn resolve(
 				ty.body = Some(scope);
 				resolved_scope.add_type(decl_span, name, ty);
 			}
-			Stmt::Import(_span, _glob, _imported) => {}
-			Stmt::BareExpr(span, expr) => {
+			HoistedStmt::Import(_span, _glob, _imported) => {}
+			HoistedStmt::BareExpr(span, expr) => {
 				let resolved_expr = resolved_scope.resolve_and_check_expr(expr, context.clone());
 				resolved_scope
 					.stmts
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));
 			}
-			Stmt::Unsafe(span, scope) => {
+			HoistedStmt::Unsafe(span, scope) => {
 				let scope_span = scope.span.clone();
 				let resolved =
 					match resolve(scope, Context::Unsafe, Some(resolved_scope.clone()), None) {
@@ -1313,7 +1383,7 @@ pub fn resolve(
 					.stmts
 					.push(ResolvedStmt::Unsafe(span, resolved));
 			}
-			Stmt::Cpp(span, code) => {
+			HoistedStmt::Cpp(span, code) => {
 				resolved_scope.stmts.push(ResolvedStmt::Cpp(span, code));
 			}
 		}

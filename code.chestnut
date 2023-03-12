@@ -9,18 +9,11 @@ class Node<T> {
 	Node<T>& next;
 
 	void get_next() {
-		
+		unsafe {}
 	}
 }
 
-class Node {}
-
 void calculate<MyGeneric>(i32 whatever) {
-
-}
-
-T double<T>(T x) => x + x;
-i32 double() {
 
 }
 
@@ -37,5 +30,6 @@ void main() {
 	print<i32>(x);
 	print<string>("Hello World!");
 	(() => print<string>("bye"))();
+	T double<T>(T x) => x + x;
 	// hey
 }
