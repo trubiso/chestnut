@@ -1,6 +1,6 @@
 use crate::{
 	lexer::{NumberLiteralKind, NumberLiteralRepr},
-	parser::types::Privacy,
+	parser::types::{Ident, Privacy},
 	resolve::{
 		ResolvedExpr, ResolvedFunc, ResolvedScope, ResolvedStmt, ResolvedType, ResolvedTypedIdent,
 	},
@@ -11,6 +11,15 @@ pub fn comma<T>(args: Vec<T>, closure: fn(&T) -> String) -> String {
 		.map(closure)
 		.reduce(|acc, b| acc + "," + &b)
 		.unwrap_or_else(String::new)
+}
+
+pub fn codegen_mangle(str: &str) -> String {
+	let mangle_prefix = "Chn_".to_owned();
+	mangle_prefix + str
+}
+
+pub fn codegen_ident(ident: Ident) -> String {
+	codegen_mangle(&ident.to_string())
 }
 
 pub fn codegen_expr(expr: ResolvedExpr) -> String {
@@ -31,7 +40,7 @@ pub fn codegen_expr(expr: ResolvedExpr) -> String {
 				x => format!("{prefix}{value}{x}"),
 			}
 		}
-		ResolvedExpr::Identifier(_, ident) => ident.to_string(),
+		ResolvedExpr::Identifier(_, ident) => codegen_ident(ident),
 		ResolvedExpr::BinaryOp(_, lhs, op, rhs) => {
 			format!("({}{op}{})", codegen_expr(*lhs), codegen_expr(*rhs))
 		}
@@ -61,7 +70,7 @@ pub fn codegen_ty(ty: ResolvedType) -> String {
 		match ty {
 			ResolvedType::BareType(_, x) => format!(
 				"{}{}",
-				x.ident.to_string(),
+				codegen_ident(x.ident),
 				x.generics
 					.iter()
 					.map(|x| inner(x.clone()))
@@ -87,7 +96,11 @@ pub fn codegen_ty(ty: ResolvedType) -> String {
 }
 
 pub fn codegen_ty_ident(ty_ident: ResolvedTypedIdent) -> String {
-	format!("{} {}", codegen_ty(ty_ident.ty), ty_ident.ident.to_string())
+	format!(
+		"{} {}",
+		codegen_ty(ty_ident.ty),
+		codegen_ident(ty_ident.ident)
+	)
 }
 
 pub fn codegen_privacy(privacy: Privacy) -> String {
@@ -112,7 +125,7 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 			)
 		}
 		ResolvedStmt::Set(_, ident, expr) => {
-			format!("{} = {};", ident.to_string(), codegen_expr(expr))
+			format!("{} = {};", codegen_ident(ident), codegen_expr(expr))
 		}
 		ResolvedStmt::Return(_, expr) => {
 			format!("return {};", codegen_expr(expr))
@@ -132,7 +145,7 @@ pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	if !func.generics.is_empty() {
 		code += "template <";
 		for (i, generic) in func.generics.iter().enumerate() {
-			code += &format!("typename {generic}");
+			code += &format!("typename {}", codegen_mangle(generic));
 			if i < func.generics.len() - 1 {
 				code += ","
 			}
@@ -142,7 +155,7 @@ pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	if func.attribs.is_pure {
 		code += "constexpr ";
 	}
-	code += &format!("{} {}(", codegen_ty(func.return_ty.clone()), func.name);
+	code += &format!("{} {}(", codegen_ty(func.return_ty.clone()), codegen_mangle(&func.name));
 	for (i, arg) in func.args.iter().enumerate() {
 		code += &format!("{} {}", codegen_ty(arg.ty.clone()), arg.name);
 		if i < func.args.len() - 1 {

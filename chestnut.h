@@ -22,10 +22,10 @@ namespace Chestnut {
 	// TODO: string
 	// TODO: char
 
-	void main();
+	void Chn_main();
 	using string = ::std::string;
 }
 
 int main() {
-	Chestnut::main();
+	Chestnut::Chn_main();
 }

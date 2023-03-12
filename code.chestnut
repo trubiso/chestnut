@@ -21,9 +21,11 @@ void main() {
 	/* yo */
 	let my_variable = 5;
 	mut x = 10;
-	string r;
 	x += 2;
 	x += 3;
+	let true = 1;
+	let false = -1;
+	x *= true - false;
 	print<i32>(x);
 	print<string>("Hello World!");
 	(() => print<string>("bye"))();
