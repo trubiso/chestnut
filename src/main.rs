@@ -30,12 +30,42 @@ fn emit_errors(files: &SimpleFiles<String, String>, diagnostics: Vec<Diagnostic<
 	);
 }
 
+fn execute_cmd_on_all(name: &str, args: Vec<&str>, cpp_sources: Vec<String>) {
+	let mut cmd = std::process::Command::new(name);
+	for arg in args {
+		cmd.arg(arg);
+	}
+	for file in &cpp_sources {
+		cmd.arg(file);
+	}
+	let out = cmd.output();
+	match out {
+		Ok(r) => {
+			if !r.status.success() {
+				println!(
+					"{} error!\n{}\n{}",
+					name,
+					"-".repeat(name.len() + 7),
+					String::from_utf8(r.stderr).unwrap()
+				);
+			}
+		}
+		Err(x) => panic!("{x}"),
+	}
+}
+
 fn main() {
 	let mut files = SimpleFiles::new();
 	let mut args = std::env::args();
 	args.next();
 	let mut cpp_sources = Vec::new();
+	let mut should_format = false;
 	while let Some(arg) = args.next() {
+		if arg == "--pretty" {
+			should_format = true;
+			continue;
+		}
+
 		let code = fs::read_to_string(arg.clone()).unwrap();
 		let file_id = files.add(arg.clone(), code);
 
@@ -64,9 +94,8 @@ fn main() {
 		cpp_sources.push(format!("{arg}.cpp"));
 	}
 
-	let mut gcc = std::process::Command::new("g++");
-	for file in &cpp_sources {
-		gcc.arg(file);
+	if should_format {
+		execute_cmd_on_all("clang-format", vec!["-i"], cpp_sources.clone());
 	}
-	gcc.output().expect("failed to g++");
+	execute_cmd_on_all("g++", vec![], cpp_sources);
 }
