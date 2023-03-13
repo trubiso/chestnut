@@ -19,7 +19,7 @@ void calculate<MyGeneric>(i32 whatever) {
 
 void main() {
 	/* yo */
-	let my_variable = 5;
+	let my_variable = 5.e().r(5+4);
 	mut x = 10;
 	x += 2;
 	x += 3;

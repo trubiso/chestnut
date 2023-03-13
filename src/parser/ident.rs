@@ -23,6 +23,7 @@ pub fn ident_nodiscard() -> token_parser!(Ident) {
 /// Parses `<ident_nodiscard>::...` into Ident::Qualified
 pub fn qualified_ident() -> token_parser!(Ident) {
 	// TODO: maybe have a corresponding Vec<Span>
+	// TODO: leading :: (::a::b::c -> absolute, a::b::c -> relative)
 	ident_nodiscard()
 		.separated_by(jpunct!(ColonColon))
 		.at_least(2)

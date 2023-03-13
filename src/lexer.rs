@@ -227,6 +227,7 @@ def_token!(
 		"]" => RBracket,
 		"{" => LBrace,
 		"}" => RBrace,
+		"." => Dot,
 		"," => Comma,
 		":" => Colon,
 		"::" => ColonColon,

@@ -3,6 +3,7 @@ use super::ty::ty;
 use super::ty_ident::ty_ident;
 use super::types::{Expr, Func, FuncAttribs, Scope, Stmt, Type};
 use crate::span::Span;
+use chumsky::error::Simple;
 use chumsky::prelude::*;
 
 macro_rules! binop_parser {
@@ -47,7 +48,6 @@ pub fn expr() -> token_parser!(Expr) {
 				potentially_qualified_ident().map(|x| Expr::Identifier(x.span(), x)),
 			))
 		};
-		// TODO: dot access parser
 		let fc_parser = || {
 			span!(atom())
 				.then(
@@ -65,9 +65,29 @@ pub fn expr() -> token_parser!(Expr) {
 				})
 				.map(|(x, _)| x)
 		};
+		let dot_parser = || {
+			span!(fc_parser())
+				.then(jpunct!(Dot).ignore_then(span!(fc_parser())).repeated())
+				.validate(|stuff: ((Expr, Span), Vec<(Expr, Span)>), _, emit| {
+					let mut lhs = stuff.0 .0;
+					let mut lhs_span = stuff.0 .1;
+					for (rhs, rhs_span) in stuff.1 {
+						match rhs {
+							Expr::Identifier(..) | Expr::Call(..) => {}
+							ref other => emit(Simple::custom(
+								other.span(),
+								r#"invalid property "name""#,
+							)),
+						}
+						lhs_span = lhs_span + rhs_span;
+						lhs = Expr::Dot(lhs_span.clone(), Box::new(lhs), Box::new(rhs));
+					}
+					lhs
+				})
+		};
 		// TODO: qbparser (?!)
 		// TODO: ref_parser (&*)
-		let neg_parser = unop_parser!(Neg => fc_parser);
+		let neg_parser = unop_parser!(Neg => dot_parser);
 		let not_parser = unop_parser!(Bang => neg_parser);
 		let eq_parser = binop_parser!(Eq Ne Lt Gt Le Ge => not_parser);
 		let and_parser = binop_parser!(And => eq_parser);

@@ -785,6 +785,7 @@ impl ResolvedScope {
 					.map(|x| self.resolve_expr(x.clone(), context.clone()))
 					.collect(),
 			),
+			Expr::Dot(..) => {todo!()}
 			Expr::Error(_) => panic!(),
 		}
 	}

@@ -351,20 +351,22 @@ pub enum Expr {
 	UnaryOp(Span, Operator, Box<Expr>),
 	Lambda(Span, Func),
 	Call(Span, Box<Expr>, Option<Vec<Type>>, Vec<Expr>),
+	Dot(Span, Box<Expr>, Box<Expr>),
 	Error(Span),
 }
 
 impl Expr {
 	pub fn span(&self) -> Span {
 		match self {
-			Self::CharLiteral(x, _)
-			| Self::StringLiteral(x, _)
-			| Self::NumberLiteral(x, _)
-			| Self::Identifier(x, _)
-			| Self::BinaryOp(x, _, _, _)
-			| Self::UnaryOp(x, _, _)
-			| Self::Lambda(x, _)
-			| Self::Call(x, _, _, _)
+			Self::CharLiteral(x, ..)
+			| Self::StringLiteral(x, ..)
+			| Self::NumberLiteral(x, ..)
+			| Self::Identifier(x, ..)
+			| Self::BinaryOp(x, ..)
+			| Self::UnaryOp(x, ..)
+			| Self::Lambda(x, ..)
+			| Self::Call(x, ..)
+			| Self::Dot(x, ..)
 			| Self::Error(x) => x.clone(),
 		}
 	}
@@ -545,6 +547,7 @@ impl fmt::Display for Expr {
 					.unwrap_or("".to_string()),
 				join_comma(args).unwrap_or("".to_string())
 			)),
+			Expr::Dot(_, lhs, rhs) => f.write_fmt(format_args!("{lhs}.{rhs}")),
 			Expr::Error(_) => f.write_str("[ERROR]"),
 		}
 	}
