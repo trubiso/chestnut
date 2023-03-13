@@ -85,6 +85,7 @@ pub enum ResolvedExpr {
 		Option<Vec<ResolvedType>>,
 		Vec<ResolvedExpr>,
 	),
+	Dot(Span, Box<ResolvedExpr>, Box<ResolvedExpr>),
 }
 
 macro_rules! i_hate_partial_eq {
@@ -115,6 +116,7 @@ impl PartialEq for ResolvedExpr {
 			UnaryOp(a, b)(c, d) => a == c && b == d;
 			Lambda(f)(v) => f == v;
 			Call(a, g, b)(c, j, d) => a == c && b == d && g == j;
+			Dot(a, b)(c, d) => a == b && c == d;
 		)
 	}
 }
@@ -143,6 +145,7 @@ impl fmt::Display for ResolvedExpr {
 					.unwrap_or("".to_string()),
 				join_comma(args).unwrap_or("".to_string())
 			)),
+			ResolvedExpr::Dot(_, lhs, rhs) => f.write_fmt(format_args!("{lhs}.{rhs}")),
 		}
 	}
 }
@@ -150,14 +153,15 @@ impl fmt::Display for ResolvedExpr {
 impl ResolvedExpr {
 	pub fn span(&self) -> Span {
 		match self {
-			Self::CharLiteral(x, _)
-			| Self::StringLiteral(x, _)
-			| Self::NumberLiteral(x, _)
-			| Self::Identifier(x, _)
-			| Self::BinaryOp(x, _, _, _)
-			| Self::UnaryOp(x, _, _)
-			| Self::Lambda(x, _)
-			| Self::Call(x, _, _, _) => x.clone(),
+			Self::CharLiteral(x, ..)
+			| Self::StringLiteral(x, ..)
+			| Self::NumberLiteral(x, ..)
+			| Self::Identifier(x, ..)
+			| Self::BinaryOp(x, ..)
+			| Self::UnaryOp(x, ..)
+			| Self::Lambda(x, ..)
+			| Self::Call(x, ..)
+			| Self::Dot(x, ..) => x.clone(),
 		}
 	}
 }
@@ -563,6 +567,9 @@ impl ResolvedScope {
 					}
 				}
 			}
+			// we check this in the get type function
+			// TODO: still maybe check here
+			ResolvedExpr::Dot(..) => {}
 		}
 	}
 
@@ -665,6 +672,19 @@ impl ResolvedScope {
 					_ => builtin!(span, Error),
 				}
 			}
+			ResolvedExpr::Dot(span, lhs, rhs) => {
+				let lhs_ty = self.get_expr_ty(*lhs, context);
+				let fields = lhs_ty.fields();
+				let Some(field) = fields.get(&match *rhs {
+					ResolvedExpr::Identifier(_, x) => x.to_string(),
+					ResolvedExpr::Call(_, x, _, _) => match *x {
+						ResolvedExpr::Identifier(_, x) => x.to_string(),
+						_ => unreachable!() // TODO: disallow in expr parser
+					}
+					_ => unreachable!(),
+				}) else { return builtin!(span, Error); };
+				field.clone() // TODO: generics
+			}
 		}
 	}
 
@@ -751,20 +771,14 @@ impl ResolvedScope {
 	}
 
 	pub fn resolve_expr(&self, expr: Expr, context: Context) -> ResolvedExpr {
+		let box_res = |x: Box<Expr>| Box::new(self.resolve_expr(*x, context.clone()));
 		match expr {
 			Expr::CharLiteral(s, v) => ResolvedExpr::CharLiteral(s, v),
 			Expr::StringLiteral(s, v) => ResolvedExpr::StringLiteral(s, v),
 			Expr::NumberLiteral(s, v) => ResolvedExpr::NumberLiteral(s, v),
 			Expr::Identifier(s, v) => ResolvedExpr::Identifier(s, v),
-			Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(
-				s,
-				Box::new(self.resolve_expr(*l, context.clone())),
-				o,
-				Box::new(self.resolve_expr(*r, context)),
-			),
-			Expr::UnaryOp(s, o, v) => {
-				ResolvedExpr::UnaryOp(s, o, Box::new(self.resolve_expr(*v, context)))
-			}
+			Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(s, box_res(l), o, box_res(r)),
+			Expr::UnaryOp(s, o, v) => ResolvedExpr::UnaryOp(s, o, box_res(v)),
 			// TODO: better lambda span
 			Expr::Lambda(s, f) => {
 				// TODO: this is horrible
@@ -785,7 +799,7 @@ impl ResolvedScope {
 					.map(|x| self.resolve_expr(x.clone(), context.clone()))
 					.collect(),
 			),
-			Expr::Dot(..) => {todo!()}
+			Expr::Dot(s, l, r) => ResolvedExpr::Dot(s, box_res(l), box_res(r)),
 			Expr::Error(_) => panic!(),
 		}
 	}
@@ -982,6 +996,11 @@ impl ResolvedType {
 				Some(vec![ResolvedType::Inferred(span); len]),
 			)
 		}
+	}
+
+	// TODO: maybe pass in the scope or hoisted or whatever
+	pub fn fields(&self) -> HashMap<String, ResolvedType> {
+		todo!()
 	}
 }
 
