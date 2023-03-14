@@ -1,4 +1,4 @@
-use super::types::Privacy;
+use crate::common::Privacy;
 use crate::lexer::Keyword;
 use crate::span::Span;
 use chumsky::prelude::*;

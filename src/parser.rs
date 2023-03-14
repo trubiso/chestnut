@@ -1,4 +1,5 @@
 use crate::{
+	common::FuncAttribs,
 	lexer::{Keyword, Token},
 	span::{Span, Spanned},
 };
@@ -54,8 +55,8 @@ fn func_attribs() -> token_parser!(FuncAttribs) {
 	)
 }
 
-/// Parses `<ty ident>, ...` into Vec<TypedIdent>
-fn func_args() -> token_parser!(Vec<TypedIdent>) {
+/// Parses `<ty ident>, ...` into Vec<ParserTypedIdent>
+fn func_args() -> token_parser!(Vec<ParserTypedIdent>) {
 	parened!(ty_ident(None),)
 }
 
@@ -66,8 +67,8 @@ fn generics_declare() -> token_parser!(Vec<Ident>) {
 		.map(|x| x.unwrap_or_default())
 }
 
-/// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into Stmt::Func
-fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
+/// Parses `<ty ident>(<ty ident>, ...) { <scope> }` into ParserStmt::Func
+fn func_stmt(scope: ScopeRecursive) -> token_parser!(ParserStmt : '_) {
 	privacy_attribs()
 		.then(ty_ident_nodiscard(None))
 		.then(generics_declare())
@@ -78,19 +79,19 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 			jkeyword!(FatArrow)
 				.ignore_then(expr())
 				.then_ignore(jpunct!(Semicolon))
-				.map_with_span(|expr, span| Scope {
+				.map_with_span(|expr, span| ParserScope {
 					span: span.clone(),
-					stmts: vec![Stmt::Return(span, expr)],
+					stmts: vec![ParserStmt::Return(span, expr)],
 				}),
 			braced!(scope),
 		)))
 		.map_with_span(
 			|((((((privacy, ty_ident), generics), args), attribs), decl_span), body), span| {
-				Stmt::Func(
+				ParserStmt::Func(
 					span.clone(),
 					privacy,
 					ty_ident.ident,
-					Func {
+					ParserFunc {
 						span,
 						return_ty: ty_ident.ty,
 						args,
@@ -104,51 +105,51 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 		)
 }
 
-/// Parses `let <ident> = <expr>;` into Stmt::Create
-fn let_stmt() -> token_parser!(Stmt) {
+/// Parses `let <ident> = <expr>;` into ParserStmt::Create
+fn let_stmt() -> token_parser!(ParserStmt) {
 	privacy_attribs()
 		.then_ignore(jkeyword!(Let))
 		.then(assg!(ignore Set))
 		.map_with_span(|(privacy, (lhs, value)), span| {
-			Stmt::Create(span, privacy, lhs.infer_type(), false, value)
+			ParserStmt::Create(span, privacy, lhs.infer_type(), false, value)
 		})
 }
 
-/// Parses `<ty ident> = <expr>;` into Stmt::Create
-fn create_stmt() -> token_parser!(Stmt) {
+/// Parses `<ty ident> = <expr>;` into ParserStmt::Create
+fn create_stmt() -> token_parser!(ParserStmt) {
 	privacy_attribs()
 		.then(jkeyword!(Mut).map(|_| true).or_not())
 		.then(ty_ident(None))
 		.then(assg!(noident ignore Set))
 		.map_with_span(|(((privacy, mutness), lhs), value), span| {
-			Stmt::Create(span, privacy, lhs, mutness.is_some(), value)
+			ParserStmt::Create(span, privacy, lhs, mutness.is_some(), value)
 		})
 }
 
-/// Parses `<ty ident>;` into Stmt::Declare
-fn declare_stmt() -> token_parser!(Stmt) {
+/// Parses `<ty ident>;` into ParserStmt::Declare
+fn declare_stmt() -> token_parser!(ParserStmt) {
 	privacy_attribs()
 		.then(jkeyword!(Mut).map(|_| true).or_not())
 		.then(ty_ident_nodiscard(None))
 		.map_with_span(|((privacy, mutness), ty_ident), span| {
-			Stmt::Declare(span, privacy, ty_ident, mutness.is_some())
+			ParserStmt::Declare(span, privacy, ty_ident, mutness.is_some())
 		})
 }
 
-/// Parses `<expr>;` into Stmt::BareExpr
+/// Parses `<expr>;` into ParserStmt::BareExpr
 ///
 /// Useful, for example, for function calls where the return value is discarded
-fn bare_expr_stmt() -> token_parser!(Stmt) {
-	expr().map_with_span(|x, span| Stmt::BareExpr(span, x))
+fn bare_expr_stmt() -> token_parser!(ParserStmt) {
+	expr().map_with_span(|x, span| ParserStmt::BareExpr(span, x))
 }
 
-fn return_stmt() -> token_parser!(Stmt) {
+fn return_stmt() -> token_parser!(ParserStmt) {
 	jkeyword!(Return)
 		.ignore_then(expr())
-		.map_with_span(|x, span| Stmt::Return(span, x))
+		.map_with_span(|x, span| ParserStmt::Return(span, x))
 }
 
-fn class_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
+fn class_stmt(scope: ScopeRecursive) -> token_parser!(ParserStmt : '_) {
 	privacy_attribs()
 		.then_ignore(jkeyword!(Class))
 		.then(ident_nodiscard())
@@ -156,59 +157,59 @@ fn class_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
 		.map_with_span(|pre, span| (pre, span))
 		.then(braced!(scope))
 		.map_with_span(|((((privacy, ident), generics), decl_span), body), span| {
-			Stmt::Class(span, privacy, ident, generics, decl_span, body)
+			ParserStmt::Class(span, privacy, ident, generics, decl_span, body)
 		})
 }
 
-/// Parses `mut <ident> = <expr>;` into Stmt::Create
-fn mut_stmt() -> token_parser!(Stmt) {
+/// Parses `mut <ident> = <expr>;` into ParserStmt::Create
+fn mut_stmt() -> token_parser!(ParserStmt) {
 	privacy_attribs()
 		.then_ignore(jkeyword!(Mut))
 		.then(assg!(ignore Set))
 		.map_with_span(|(privacy, (lhs, value)), span| {
-			Stmt::Create(span, privacy, lhs.infer_type(), true, value)
+			ParserStmt::Create(span, privacy, lhs.infer_type(), true, value)
 		})
 }
 
 /// Parses `import <qualified_ident>::[{ident_nodiscard, ...}|*]` into
-/// Stmt::Import
-fn import_stmt() -> token_parser!(Stmt) {
+/// ParserStmt::Import
+fn import_stmt() -> token_parser!(ParserStmt) {
 	jkeyword!(Import)
 		.ignore_then(qualified_ident())
 		.then(jpunct!(ColonColon).then(jop!(Star)).map(|_| true).or_not())
-		.map_with_span(|(imported, glob), span| Stmt::Import(span, glob.is_some(), imported))
+		.map_with_span(|(imported, glob), span| ParserStmt::Import(span, glob.is_some(), imported))
 }
 
-/// Parses `unsafe <scope>` into Stmt::Unsafe
-fn unsafe_scope_stmt(scope: ScopeRecursive) -> token_parser!(Stmt : '_) {
+/// Parses `unsafe <scope>` into ParserStmt::Unsafe
+fn unsafe_scope_stmt(scope: ScopeRecursive) -> token_parser!(ParserStmt : '_) {
 	jkeyword!(Unsafe)
 		.ignore_then(braced!(scope))
-		.map_with_span(|scope, span| Stmt::Unsafe(span, scope))
+		.map_with_span(|scope, span| ParserStmt::Unsafe(span, scope))
 }
 
-/// Parses `cpp <string literal>` into Stmt::Cpp
-fn cpp_stmt() -> token_parser!(Stmt) {
+/// Parses `cpp <string literal>` into ParserStmt::Cpp
+fn cpp_stmt() -> token_parser!(ParserStmt) {
 	jkeyword!(Cpp)
 		.ignore_then(filter(|x| matches!(x, Token::StringLiteral(_))))
-		.map_with_span(|code, span| Stmt::Cpp(span, force_token!(code => StringLiteral)))
+		.map_with_span(|code, span| ParserStmt::Cpp(span, force_token!(code => StringLiteral)))
 }
 
-/// Parses a bare scope (not wrapped in curly braces) into Scope
-pub fn bare_scope() -> token_parser!(Scope) {
+/// Parses a bare scope (not wrapped in curly braces) into ParserScope
+pub fn bare_scope() -> token_parser!(ParserScope) {
 	recursive(|scope| {
 		stmt(scope, true)
 			.repeated()
-			.map_with_span(|x, span| Scope { span, stmts: x })
+			.map_with_span(|x, span| ParserScope { span, stmts: x })
 	})
 }
 
-pub fn parser() -> token_parser!(Scope) {
+pub fn parser() -> token_parser!(ParserScope) {
 	bare_scope().then_ignore(end())
 }
 
 pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
 
-pub fn parse(code_stream: CodeStream) -> Result<Scope, Vec<Diagnostic<usize>>> {
+pub fn parse(code_stream: CodeStream) -> Result<ParserScope, Vec<Diagnostic<usize>>> {
 	let (parsed, errors) = parser().parse_recovery(code_stream);
 	let mut diagnostics = vec![];
 	if errors.is_empty() {

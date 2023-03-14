@@ -1,11 +1,19 @@
 use crate::{
+	common::{BareType, Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypedIdent},
 	get_datum,
-	parser::types::{Expr, Func, FuncAttribs, Ident, Privacy, Scope, Stmt, Type, TypedIdent},
+	parser::types::{ParserExpr, ParserFunc, ParserScope, ParserType, ParserTypedIdent, ParserStmt},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use lazy_static::lazy_static;
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, fmt, sync::Mutex};
+
+// TODO: we are converting from parsed elements to hoisted elements. but we are
+// hoisting them in strange places and i feel like it defeats the entire purpose
+// of hoisting. unless, of course, you consider that the only "hoisting" in
+// types happens inside of arrays because they can take any expression, which we
+// can easily regulate in `resolve.rs`. this code is so messy it probably
+// requires a rewrite LOL
 
 lazy_static! {
 	static ref DIAGNOSTICS: Mutex<Vec<Diagnostic<usize>>> = Mutex::new(vec![]);
@@ -15,83 +23,25 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
-#[derive(Debug, Clone)]
-pub struct FuncSignature {
-	pub generics: Vec<Ident>,
-	pub arg_tys: Vec<Type>,
-	pub return_ty: Type,
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct MadeTypeSignature {
-	pub fields: HashMap<String, Type>,
-	pub funcs: HashMap<String, FuncSignature>,
+	pub fields: HashMap<String, HoistedType>,
+	pub funcs: HashMap<String, HoistedFuncSignature>,
 }
 
-#[derive(Debug, Clone)]
-pub struct HoistedFunc {
-	pub span: Span,
-	pub return_ty: Type,
-	pub args: Vec<TypedIdent>,
-	pub generics: Vec<Ident>,
-	pub body: HoistedScope,
-	pub attribs: FuncAttribs,
-	pub decl_span: Span,
-}
-
-impl HoistedFunc {
-	pub fn signature(&self) -> FuncSignature {
-		FuncSignature {
-			generics: self.generics.clone(),
-			arg_tys: self.args.iter().map(|x| x.ty.clone()).collect(),
-			return_ty: self.return_ty.clone(),
-		}
-	}
-}
-
-#[derive(Debug, Clone)]
-pub enum HoistedStmt {
-	Create(Span, Privacy, TypedIdent, bool, Expr),
-	Declare(Span, Privacy, TypedIdent, bool),
-	Set(Span, Ident, Expr),
-	Func(Span, Privacy, Ident, HoistedFunc),
-	Return(Span, Expr),
-	Class(
-		Span,
-		Privacy,
-		Ident,
-		Vec<Ident>, /* generics */
-		Span,
-		HoistedScope,
-	),
-	Import(Span, bool, Ident),
-	BareExpr(Span, Expr),
-	Unsafe(Span, HoistedScope),
-	Cpp(Span, String),
-}
-
-impl HoistedStmt {
-	pub fn span(&self) -> Span {
-		match self {
-			Self::Create(x, ..)
-			| Self::Declare(x, ..)
-			| Self::Set(x, ..)
-			| Self::Func(x, ..)
-			| Self::Return(x, ..)
-			| Self::Class(x, ..)
-			| Self::Import(x, ..)
-			| Self::BareExpr(x, ..)
-			| Self::Unsafe(x, ..)
-			| Self::Cpp(x, ..) => x.clone(),
-		}
-	}
-}
+pub type HoistedType = Type<HoistedExpr>;
+pub type HoistedTypedIdent = TypedIdent<HoistedType>;
+pub type HoistedBareType = BareType<HoistedType>;
+pub type HoistedFunc = Func<HoistedExpr, HoistedScope>;
+pub type HoistedFuncSignature = FuncSignature<HoistedType>;
+pub type HoistedExpr = Expr<HoistedScope>;
+pub type HoistedStmt = Stmt<HoistedExpr, HoistedFunc, HoistedScope>;
 
 #[derive(Debug, Default, Clone)]
 pub struct HoistedScopeData {
-	pub vars: HashMap<String, Type>,
+	pub vars: HashMap<String, HoistedType>,
 	pub var_spans: HashMap<String, Span>,
-	pub funcs: HashMap<String, FuncSignature>,
+	pub funcs: HashMap<String, HoistedFuncSignature>,
 	pub func_spans: HashMap<String, Span>,
 	pub types: HashMap<String, MadeTypeSignature>,
 	pub type_spans: HashMap<String, Span>,
@@ -121,6 +71,12 @@ pub struct HoistedScope {
 	pub span: Span,
 }
 
+impl fmt::Display for HoistedScope {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.scope_fmt(f)
+	}
+}
+
 impl HoistedScope {
 	pub fn new(span: Span) -> Self {
 		Self {
@@ -132,26 +88,67 @@ impl HoistedScope {
 
 	get_datum!(get_type get_type_mut has_type add_type => types (MadeTypeSignature));
 	get_datum!(get_type_span get_type_span_mut has_type_span add_type_span => type_spans (Span));
-	get_datum!(get_var get_var_mut has_var add_var => vars (Type));
+	get_datum!(get_var get_var_mut has_var add_var => vars (HoistedType));
 	get_datum!(get_var_span get_var_span_mut has_var_span add_var_span => var_spans (Span));
-	get_datum!(get_func get_func_mut has_func add_func => funcs (FuncSignature));
+	get_datum!(get_func get_func_mut has_func add_func => funcs (HoistedFuncSignature));
 	get_datum!(get_func_span get_func_span_mut has_func_span add_func_span => func_spans (Span));
-
-	pub fn stmts(&self) -> &Vec<HoistedStmt> {
-		&self.data.stmts
-	}
 
 	pub fn stmts_mut(&mut self) -> &mut Vec<HoistedStmt> {
 		&mut self.data.stmts
 	}
 }
 
-impl Func {
+impl Scope<HoistedExpr> for HoistedScope {
+	fn stmts(&self) -> &Vec<Stmt<HoistedExpr, crate::common::Func<HoistedExpr, Self>, Self>>
+	where
+		Self: Sized,
+	{
+		&self.data.stmts
+	}
+}
+
+impl ParserExpr {
+	pub fn hoist(self, inherit: Option<HoistedScope>) -> HoistedExpr {
+		todo!()
+	}
+}
+
+impl ParserTypedIdent {
+	pub fn hoist(self, inherit: Option<HoistedScope>) -> HoistedTypedIdent {
+		HoistedTypedIdent {
+			span: self.span,
+			ty: self.ty.hoist(inherit),
+			ident: self.ident,
+		}
+	}
+}
+
+impl ParserType {
+	pub fn hoist(self, inherit: Option<HoistedScope>) -> HoistedType {
+		match self {
+			Type::BareType(s, t) => Type::BareType(
+				s,
+				HoistedBareType {
+					ident: t.ident,
+					generics: t.generics.iter().map(|x| x.hoist(inherit)).collect(),
+				},
+			),
+			Type::Array(s, l, r) => Type::Array(
+				s,
+				Box::new(l.hoist(inherit)),
+				r.map(|x| Box::new(x.hoist(inherit))),
+			),
+			other => todo!(),
+		}
+	}
+}
+
+impl ParserFunc {
 	pub fn hoist(self, inherit: Option<HoistedScope>) -> HoistedFunc {
 		HoistedFunc {
 			span: self.span,
-			return_ty: self.return_ty,
-			args: self.args,
+			return_ty: self.return_ty.hoist(inherit),
+			args: self.args.iter().map(|x| x.hoist(inherit)).collect(),
 			generics: self.generics,
 			body: hoist(self.body, inherit)
 				.unwrap_or_else(|_| HoistedScope::new(self.decl_span.clone())),
@@ -182,24 +179,15 @@ fn redeclaration_error(name: &str, span: &Span, decl_span: &Span) {
 	)
 }
 
-impl Func {
-	pub fn signature(&self) -> FuncSignature {
-		FuncSignature {
-			generics: self.generics.clone(),
-			arg_tys: self.args.iter().map(|x| x.ty.clone()).collect(),
-			return_ty: self.return_ty.clone(),
-		}
-	}
-}
-
 pub fn hoist(
-	scope: Scope,
+	scope: ParserScope,
 	inherit: Option<HoistedScope>,
 ) -> Result<HoistedScope, Vec<Diagnostic<usize>>> {
 	let inherit_hoisted = inherit.unwrap_or_else(|| HoistedScope::new(scope.span.clone()));
 	let mut hoisted = HoistedScope::new(scope.span);
 	hoisted.inherit = inherit_hoisted.data + inherit_hoisted.inherit;
-	let mut for_later = Vec::new();
+	// rust is fed up with my types
+	let mut for_later: Vec<ParserStmt> = Vec::new();
 	for stmt in scope.stmts {
 		match stmt {
 			Stmt::Create(span, privacy, ty_ident, is_mut, expr) => {
@@ -207,22 +195,35 @@ pub fn hoist(
 					let decl_span = hoisted.get_var_span(&ty_ident.ident_str()).unwrap();
 					redeclaration_error("variable", &span, decl_span);
 				}
-				hoisted.add_var(&ty_ident.ident_str(), ty_ident.ty.clone());
+				hoisted.add_var(
+					&ty_ident.ident_str(),
+					ty_ident.ty.hoist(Some(hoisted.clone())),
+				);
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
-				hoisted
-					.stmts_mut()
-					.push(HoistedStmt::Create(span, privacy, ty_ident, is_mut, expr));
+				hoisted.stmts_mut().push(HoistedStmt::Create(
+					span,
+					privacy,
+					ty_ident.hoist(Some(hoisted.clone())),
+					is_mut,
+					expr.hoist(Some(hoisted.clone())),
+				));
 			}
 			Stmt::Declare(span, privacy, ty_ident, is_mut) => {
 				if hoisted.has_var(&ty_ident.ident_str()) {
 					let decl_span = hoisted.get_var_span(&ty_ident.ident_str()).unwrap();
 					redeclaration_error("variable", &span, decl_span);
 				}
-				hoisted.add_var(&ty_ident.ident_str(), ty_ident.ty.clone());
+				hoisted.add_var(
+					&ty_ident.ident_str(),
+					ty_ident.ty.hoist(Some(hoisted.clone())),
+				);
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
-				hoisted
-					.stmts_mut()
-					.push(HoistedStmt::Declare(span, privacy, ty_ident, is_mut));
+				hoisted.stmts_mut().push(HoistedStmt::Declare(
+					span,
+					privacy,
+					ty_ident.hoist(Some(hoisted.clone())),
+					is_mut,
+				));
 			}
 			Stmt::Set(span, ident, expr) => {
 				if !hoisted.has_var(&ident.to_string()) {
@@ -230,14 +231,14 @@ pub fn hoist(
 				}
 				hoisted
 					.stmts_mut()
-					.push(HoistedStmt::Set(span, ident, expr));
+					.push(HoistedStmt::Set(span, ident, expr.hoist(inherit)));
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				if hoisted.has_func(&ident.to_string()) {
 					let decl_span = hoisted.get_func_span(&ident.to_string()).unwrap();
 					redeclaration_error("function", &func.decl_span, decl_span);
 				}
-				hoisted.add_func(&ident.to_string(), func.signature());
+				hoisted.add_func(&ident.to_string(), func.hoist(None).signature());
 				hoisted.add_func_span(&ident.to_string(), span.clone());
 				for_later.push(Stmt::Func(span, privacy, ident, func));
 			}
@@ -263,17 +264,20 @@ pub fn hoist(
 				));
 			}
 			Stmt::Unsafe(span, scope) => {
+				// TODO: properly hoist, like funcs
 				let hoisted_scope = hoist(scope, Some(hoisted.clone()))
 					.unwrap_or_else(|_| HoistedScope::new(span.clone()));
 				hoisted
 					.stmts_mut()
 					.push(HoistedStmt::Unsafe(span, hoisted_scope));
 			}
+			// NOTE: do NOT hoist return. why would you return a value _after_ the return keyword???
+			Stmt::Return(span, value) => hoisted.stmts_mut().push(HoistedStmt::Return(span, value.hoist(inherit))),
+			// TODO: properly hoist bare exprs
+			Stmt::BareExpr(span, expr) => hoisted.stmts_mut().push(HoistedStmt::BareExpr(span, expr.hoist(inherit))),
 			stmt => {
 				ignore_hoist!(stmt, hoisted;
-					Return(span, value)
 					Import(span, glob, ident)
-					BareExpr(span, expr)
 					Cpp(span, code)
 				)
 			}

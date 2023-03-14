@@ -6,6 +6,8 @@ use crate::{
 	},
 };
 
+// TODO: fix this disaster
+
 pub fn comma<T>(args: Vec<T>, closure: fn(&T) -> String) -> String {
 	args.iter()
 		.map(closure)

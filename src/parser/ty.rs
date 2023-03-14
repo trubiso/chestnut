@@ -1,11 +1,11 @@
-use super::types::{BuiltinType, ExprRecursive, Type};
+use super::types::{ExprRecursive, ParserExpr, ParserType};
+use crate::common::{BareType, BuiltinType};
 use crate::lexer::Token;
 use crate::parser::expr;
-use crate::parser::types::{BareType, Expr};
 use chumsky::prelude::*;
 
 enum PostfixOp {
-	Array(Option<Expr>),
+	Array(Option<ParserExpr>),
 	Optional,
 	Ref,
 	RefRef,
@@ -13,21 +13,21 @@ enum PostfixOp {
 	MutRefRef,
 }
 
-/// Parses `<ident>[array][optional][ref][mut]` into Type
-pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
+/// Parses `<ident>[array][optional][ref][mut]` into ParserType
+pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
 			.then(angled!(ty,).or_not())
 			.map_with_span(|(ident, generics), span| {
 				if ident == keyword!(DontCare) {
-					Type::Inferred(span)
+					ParserType::Inferred(span)
 				} else {
 					// TODO: incorrect span
 					let ident = force_token!(ident => Identifier, span.clone());
 					if let Some(x) = BuiltinType::from_name(&ident.to_string()) {
-						Type::Builtin(span, x)
+						ParserType::Builtin(span, x)
 					} else {
-						Type::BareType(
+						ParserType::BareType(
 							span,
 							BareType {
 								ident,
@@ -54,18 +54,18 @@ pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
 				.repeated(),
 			)
 			.foldl(|ty, (new_info, span)| match new_info {
-				PostfixOp::Array(x) => Type::Array(span, Box::new(ty), x.map(Box::new)),
-				PostfixOp::Optional => Type::Optional(span, Box::new(ty)),
-				PostfixOp::MutRef => Type::Ref(span, Box::new(ty), true),
-				PostfixOp::MutRefRef => Type::Ref(
+				PostfixOp::Array(x) => ParserType::Array(span, Box::new(ty), x.map(Box::new)),
+				PostfixOp::Optional => ParserType::Optional(span, Box::new(ty)),
+				PostfixOp::MutRef => ParserType::Ref(span, Box::new(ty), true),
+				PostfixOp::MutRefRef => ParserType::Ref(
 					span.clone(),
-					Box::new(Type::Ref(span, Box::new(ty), true)),
+					Box::new(ParserType::Ref(span, Box::new(ty), true)),
 					false,
 				),
-				PostfixOp::Ref => Type::Ref(span, Box::new(ty), false),
-				PostfixOp::RefRef => Type::Ref(
+				PostfixOp::Ref => ParserType::Ref(span, Box::new(ty), false),
+				PostfixOp::RefRef => ParserType::Ref(
 					span.clone(),
-					Box::new(Type::Ref(span, Box::new(ty), false)),
+					Box::new(ParserType::Ref(span, Box::new(ty), false)),
 					false,
 				),
 			})

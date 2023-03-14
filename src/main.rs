@@ -9,6 +9,7 @@ use crate::parser::CodeStream;
 use crate::span::Span;
 
 pub mod codegen;
+pub mod common;
 pub mod hoister;
 pub mod lexer;
 pub mod parser;
