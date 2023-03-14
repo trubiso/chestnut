@@ -62,7 +62,7 @@ pub fn codegen_expr(expr: ResolvedExpr) -> String {
 				.unwrap_or("".to_string()),
 			comma(args, |x| codegen_expr(x.clone()))
 		),
-		ResolvedExpr::Dot(..) => todo!()
+		ResolvedExpr::Dot(..) => "".into(),
 	}
 }
 
@@ -194,6 +194,7 @@ pub fn codegen_func(func: &ResolvedFunc) -> String {
 
 pub fn codegen_scope(scope: ResolvedScope) -> String {
 	let mut code = "".to_string();
+	// TODO: codegen structs
 	let mut predecls = "".to_string();
 	let mut funcs = "".to_string();
 	for (_, func) in scope.data.funcs {

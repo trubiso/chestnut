@@ -74,10 +74,9 @@ pub fn expr() -> token_parser!(Expr) {
 					for (rhs, rhs_span) in stuff.1 {
 						match rhs {
 							Expr::Identifier(..) | Expr::Call(..) => {}
-							ref other => emit(Simple::custom(
-								other.span(),
-								r#"invalid property "name""#,
-							)),
+							ref other => {
+								emit(Simple::custom(other.span(), r#"invalid property "name""#))
+							}
 						}
 						lhs_span = lhs_span + rhs_span;
 						lhs = Expr::Dot(lhs_span.clone(), Box::new(lhs), Box::new(rhs));

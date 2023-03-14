@@ -673,17 +673,45 @@ impl ResolvedScope {
 				}
 			}
 			ResolvedExpr::Dot(span, lhs, rhs) => {
+				let lhs_span = lhs.span();
 				let lhs_ty = self.get_expr_ty(*lhs, context);
-				let fields = lhs_ty.fields();
-				let Some(field) = fields.get(&match *rhs {
-					ResolvedExpr::Identifier(_, x) => x.to_string(),
-					ResolvedExpr::Call(_, x, _, _) => match *x {
-						ResolvedExpr::Identifier(_, x) => x.to_string(),
-						_ => unreachable!() // TODO: disallow in expr parser
-					}
+				let Some((fields, funcs)) = lhs_ty.get_underlying(self) else { return builtin!(span, Error); };
+				let rhs_span = rhs.span();
+				let (name, func_stuff) = match *rhs {
+					ResolvedExpr::Identifier(_, x) => (x.to_string(), None),
+					ResolvedExpr::Call(_, x, generics, args) => match *x {
+						ResolvedExpr::Identifier(_, x) => (x.to_string(), Some((generics, args))),
+						_ => unreachable!(), // TODO: disallow in expr parser
+					},
 					_ => unreachable!(),
-				}) else { return builtin!(span, Error); };
-				field.clone() // TODO: generics
+				};
+				let non_existing_diag = |what: &str| {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message(format!("tried to access non-existing {what}"))
+							.with_labels(vec![
+								Label::primary(rhs_span.file_id, rhs_span.range())
+									.with_message("invalid access"),
+								Label::secondary(lhs_span.file_id, lhs_span.range())
+									.with_message(format!("accessing type {lhs_ty}")),
+							]),
+					);
+					builtin!(span.clone(), Error)
+				};
+				match func_stuff {
+					None => {
+						let Some(field) = fields.get(&name) else { return non_existing_diag("member"); };
+						field.clone()
+					}
+					Some((generics, _args)) => {
+						let Some(func) = funcs.get(&name) else { return non_existing_diag("method"); };
+						func.return_ty.clone().replace_generics(
+							span,
+							func.generics.clone(),
+							generics,
+						)
+					}
+				}
 			}
 		}
 	}
@@ -998,9 +1026,61 @@ impl ResolvedType {
 		}
 	}
 
-	// TODO: maybe pass in the scope or hoisted or whatever
-	pub fn fields(&self) -> HashMap<String, ResolvedType> {
-		todo!()
+	pub fn get_underlying(
+		&self,
+		scope: &ResolvedScope,
+	) -> Option<(
+		HashMap<String, ResolvedType>,
+		HashMap<String, ResolvedFuncSignature>,
+	)> {
+		match self {
+			Self::BareType(span, ty) => {
+				if scope.has_type(&ty.ident.to_string()) {
+					let ty = scope.get_type(&ty.ident.to_string()).unwrap();
+					Some((
+						ty.fields.clone(),
+						ty.funcs
+							.iter()
+							.map(|(s, x)| (s.clone(), x.signature()))
+							.collect(),
+					))
+				} else {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("unknown type")
+							.with_labels(vec![Label::primary(span.file_id, span.range())
+								.with_message("couldn't find type in scope")]),
+					);
+					None
+				}
+			}
+			Self::Builtin(..) => todo!(),  // does anyone know a good solution?
+			Self::Array(..) => todo!(),    // access Array
+			Self::Ref(..) => todo!(),      // access Ref
+			Self::Optional(..) => todo!(), // access Optional
+			Self::Inferred(span) => {
+				add_diagnostic(
+					Diagnostic::error()
+						.with_message("cannot access fields of non-inferred type")
+						.with_labels(vec![Label::primary(span.file_id, span.range())]),
+				);
+				None
+			}
+		}
+	}
+
+	pub fn fields(&self, scope: &ResolvedScope) -> HashMap<String, ResolvedType> {
+		match self.get_underlying(scope) {
+			None => HashMap::new(),
+			Some((fields, _)) => fields,
+		}
+	}
+
+	pub fn funcs(&self, scope: &ResolvedScope) -> HashMap<String, ResolvedFuncSignature> {
+		match self.get_underlying(scope) {
+			None => HashMap::new(),
+			Some((_, funcs)) => funcs,
+		}
 	}
 }
 
@@ -1037,7 +1117,7 @@ pub struct ResolvedVar {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ResolvedMadeTypeSignature {
-	pub fields: HashMap<String, ResolvedMadeType>,
+	pub fields: HashMap<String, ResolvedType>,
 	pub funcs: HashMap<String, ResolvedFuncSignature>,
 }
 
@@ -1045,7 +1125,7 @@ pub struct ResolvedMadeTypeSignature {
 pub struct ResolvedMadeType {
 	pub name: String,
 	pub generic_count: usize, // TODO: ResolvedGeneric
-	pub fields: HashMap<String, ResolvedMadeType>,
+	pub fields: HashMap<String, ResolvedType>,
 	pub funcs: HashMap<String, ResolvedFunc>,
 	pub body: Option<ResolvedScope>, // if it's a generic no body defines it
 	pub is_generic: bool,
@@ -1288,7 +1368,6 @@ pub fn resolve(
 				// TODO: add error if the type is ~
 				check_privacy(privacy.clone(), context.clone());
 				if context != Context::Class {
-					println!("context: {context}");
 					if !is_mut {
 						add_diagnostic(Diagnostic::warning().with_message("non-class immutable declaration").with_labels(vec![Label::primary(span.file_id, span.range())]).with_notes(vec!["you will not be able to use or assign this variable, which is probably not intended".into()]));
 					}

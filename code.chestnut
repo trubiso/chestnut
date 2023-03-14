@@ -4,6 +4,10 @@ void print<T>(T thing) {
 	}
 }
 
+void calculate<MyGeneric>(i32 whatever) {
+
+}
+
 class Node<T> {
 	T value;
 	Node<T>& next;
@@ -13,13 +17,10 @@ class Node<T> {
 	}
 }
 
-void calculate<MyGeneric>(i32 whatever) {
-
-}
-
 void main() {
 	/* yo */
-	let my_variable = 5.e().r(5+4);
+	mut Node<i32> d;
+	let my_variable = d.get_next();
 	mut x = 10;
 	x += 2;
 	x += 3;
