@@ -23,10 +23,10 @@ pub mod case;
 // TODO: FuncSignature (only types)
 // TODO: ClassSignature (only types)
 
-type ResolvedTypedIdent = TypedIdent<ResolvedType>;
-type ResolvedExpr = Expr<ResolvedScope>;
-type ResolvedFunc = Func<ResolvedExpr, ResolvedScope>;
-type ResolvedStmt = Stmt<ResolvedExpr, ResolvedFunc, ResolvedScope>;
+pub type ResolvedTypedIdent = TypedIdent<ResolvedType>;
+pub type ResolvedExpr = Expr<ResolvedScope>;
+pub type ResolvedFunc = Func<ResolvedExpr, ResolvedScope>;
+pub type ResolvedStmt = Stmt<ResolvedExpr, ResolvedFunc, ResolvedScope>;
 
 macro_rules! builtin {
 	($s:expr, $v:ident) => {
@@ -606,7 +606,6 @@ impl ResolvedScope {
 
 	pub fn resolve_func(
 		&self,
-		name: String,
 		func_span: Span,
 		func: HoistedFunc,
 		context: Context,
@@ -659,7 +658,7 @@ impl ResolvedScope {
 				func.body.clone(),
 				Context::Func,
 				Some(frs),
-				Some((func_span, return_ty.span(), return_ty.clone())),
+				Some((func_span.clone(), return_ty.span(), return_ty.clone())),
 			) {
 				Ok((scope, _)) => scope,
 				Err(_) => ResolvedScope::new(func.body.span),
@@ -695,7 +694,7 @@ impl ResolvedScope {
 			Expr::BinaryOp(s, l, o, r) => ResolvedExpr::BinaryOp(s, box_res(l), o, box_res(r)),
 			Expr::UnaryOp(s, o, v) => ResolvedExpr::UnaryOp(s, o, box_res(v)),
 			// TODO: better lambda span
-			Expr::Lambda(s, f) => {
+			Expr::Lambda(s, _f) => {
 				// TODO: this is horrible
 				// TODO: make HoistedExpr with the new cool system :D
 				#[allow(unreachable_code)]
@@ -777,8 +776,8 @@ impl ResolvedScope {
 	}
 }
 
-type ResolvedType = Type<ResolvedExpr>;
-type ResolvedBareType = BareType<ResolvedType>;
+pub type ResolvedType = Type<ResolvedExpr>;
+pub type ResolvedBareType = BareType<ResolvedType>;
 
 impl ResolvedType {
 	pub fn replace_generic(self, name: Ident, ty: ResolvedType) -> Self {
@@ -1130,7 +1129,6 @@ pub fn resolve(
 				check_privacy(privacy, context.clone());
 				check_case(ident.span(), ident.to_string(), Case::SnakeCase);
 				let resolved = resolved_scope.resolve_func(
-					ident.to_string(),
 					ident.span(),
 					func,
 					context.clone(),

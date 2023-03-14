@@ -1,7 +1,9 @@
 use crate::{
 	common::{BareType, Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypedIdent},
 	get_datum,
-	parser::types::{ParserExpr, ParserFunc, ParserScope, ParserType, ParserTypedIdent, ParserStmt},
+	parser::types::{
+		ParserExpr, ParserFunc, ParserScope, ParserStmt, ParserType, ParserTypedIdent,
+	},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -108,7 +110,10 @@ impl Scope<HoistedExpr> for HoistedScope {
 }
 
 impl ParserExpr {
-	pub fn hoist(self, inherit: Option<HoistedScope>) -> HoistedExpr {
+	// NOTE: what should we do here? maybe just move the values to the "hoisted"
+	// ones, i don't think we need to do anything. we could even get rid of inherit
+	// and save like 100% of this code's .clone()s
+	pub fn hoist(self, _inherit: Option<HoistedScope>) -> HoistedExpr {
 		todo!()
 	}
 }
@@ -130,15 +135,19 @@ impl ParserType {
 				s,
 				HoistedBareType {
 					ident: t.ident,
-					generics: t.generics.iter().map(|x| x.hoist(inherit)).collect(),
+					generics: t
+						.generics
+						.iter()
+						.map(|x| x.clone().hoist(inherit.clone()))
+						.collect(),
 				},
 			),
 			Type::Array(s, l, r) => Type::Array(
 				s,
-				Box::new(l.hoist(inherit)),
-				r.map(|x| Box::new(x.hoist(inherit))),
+				Box::new(l.hoist(inherit.clone())),
+				r.map(|x| Box::new(x.hoist(inherit.clone()))),
 			),
-			other => todo!(),
+			_other => todo!(),
 		}
 	}
 }
@@ -147,8 +156,12 @@ impl ParserFunc {
 	pub fn hoist(self, inherit: Option<HoistedScope>) -> HoistedFunc {
 		HoistedFunc {
 			span: self.span,
-			return_ty: self.return_ty.hoist(inherit),
-			args: self.args.iter().map(|x| x.hoist(inherit)).collect(),
+			return_ty: self.return_ty.hoist(inherit.clone()),
+			args: self
+				.args
+				.iter()
+				.map(|x| x.clone().hoist(inherit.clone()))
+				.collect(),
 			generics: self.generics,
 			body: hoist(self.body, inherit)
 				.unwrap_or_else(|_| HoistedScope::new(self.decl_span.clone())),
@@ -197,15 +210,18 @@ pub fn hoist(
 				}
 				hoisted.add_var(
 					&ty_ident.ident_str(),
-					ty_ident.ty.hoist(Some(hoisted.clone())),
+					ty_ident.ty.clone().hoist(Some(hoisted.clone())),
 				);
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
+				let hoisted_ty_ident = ty_ident.hoist(Some(hoisted.clone()));
+				// NOTE: ???????
+				let hoisted_expr = expr.hoist(Some(hoisted.clone()));
 				hoisted.stmts_mut().push(HoistedStmt::Create(
 					span,
 					privacy,
-					ty_ident.hoist(Some(hoisted.clone())),
+					hoisted_ty_ident,
 					is_mut,
-					expr.hoist(Some(hoisted.clone())),
+					hoisted_expr,
 				));
 			}
 			Stmt::Declare(span, privacy, ty_ident, is_mut) => {
@@ -215,13 +231,14 @@ pub fn hoist(
 				}
 				hoisted.add_var(
 					&ty_ident.ident_str(),
-					ty_ident.ty.hoist(Some(hoisted.clone())),
+					ty_ident.ty.clone().hoist(Some(hoisted.clone())),
 				);
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
+				let hoisted_ty_ident = ty_ident.hoist(Some(hoisted.clone()));
 				hoisted.stmts_mut().push(HoistedStmt::Declare(
 					span,
 					privacy,
-					ty_ident.hoist(Some(hoisted.clone())),
+					hoisted_ty_ident,
 					is_mut,
 				));
 			}
@@ -229,16 +246,18 @@ pub fn hoist(
 				if !hoisted.has_var(&ident.to_string()) {
 					// TODO: add diagnostic (non-existing variable)
 				}
+				let hoisted_expr = expr.hoist(Some(hoisted.clone()));
 				hoisted
 					.stmts_mut()
-					.push(HoistedStmt::Set(span, ident, expr.hoist(inherit)));
+					.push(HoistedStmt::Set(span, ident, hoisted_expr));
 			}
 			Stmt::Func(span, privacy, ident, func) => {
 				if hoisted.has_func(&ident.to_string()) {
 					let decl_span = hoisted.get_func_span(&ident.to_string()).unwrap();
 					redeclaration_error("function", &func.decl_span, decl_span);
 				}
-				hoisted.add_func(&ident.to_string(), func.hoist(None).signature());
+				// TODO: ouch this .clone() is expensive
+				hoisted.add_func(&ident.to_string(), func.clone().hoist(None).signature());
 				hoisted.add_func_span(&ident.to_string(), span.clone());
 				for_later.push(Stmt::Func(span, privacy, ident, func));
 			}
@@ -272,9 +291,19 @@ pub fn hoist(
 					.push(HoistedStmt::Unsafe(span, hoisted_scope));
 			}
 			// NOTE: do NOT hoist return. why would you return a value _after_ the return keyword???
-			Stmt::Return(span, value) => hoisted.stmts_mut().push(HoistedStmt::Return(span, value.hoist(inherit))),
+			Stmt::Return(span, value) => {
+				let hoisted_value = value.hoist(Some(hoisted.clone()));
+				hoisted
+					.stmts_mut()
+					.push(HoistedStmt::Return(span, hoisted_value));
+			}
 			// TODO: properly hoist bare exprs
-			Stmt::BareExpr(span, expr) => hoisted.stmts_mut().push(HoistedStmt::BareExpr(span, expr.hoist(inherit))),
+			Stmt::BareExpr(span, expr) => {
+				let hoisted_expr = expr.hoist(Some(hoisted.clone()));
+				hoisted
+					.stmts_mut()
+					.push(HoistedStmt::BareExpr(span, hoisted_expr));
+			}
 			stmt => {
 				ignore_hoist!(stmt, hoisted;
 					Import(span, glob, ident)

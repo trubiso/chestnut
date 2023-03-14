@@ -1,6 +1,7 @@
 use crate::{
+	common::Privacy,
 	lexer::{NumberLiteralKind, NumberLiteralRepr},
-	parser::types::{Ident, Privacy},
+	parser::types::Ident,
 	resolve::{
 		ResolvedExpr, ResolvedFunc, ResolvedScope, ResolvedStmt, ResolvedType, ResolvedTypedIdent,
 	},
@@ -50,7 +51,7 @@ pub fn codegen_expr(expr: ResolvedExpr) -> String {
 		ResolvedExpr::Lambda(_, func) => {
 			format!(
 				"([&]({}){{{}}})",
-				comma(func.args, |x| codegen_ty_ident(x.clone().as_ty_ident())),
+				comma(func.args, |x| codegen_ty_ident(x.clone())),
 				codegen_scope(func.body),
 			)
 		}
@@ -112,7 +113,7 @@ pub fn codegen_privacy(privacy: Privacy) -> String {
 
 pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 	match stmt {
-		ResolvedStmt::Create(_, privacy, ty_ident, expr) => {
+		ResolvedStmt::Create(_, privacy, ty_ident, _is_mut, expr) => {
 			format!(
 				"{}{} = {};",
 				codegen_privacy(privacy),
@@ -120,7 +121,7 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 				codegen_expr(expr)
 			)
 		}
-		ResolvedStmt::Declare(_, privacy, ty_ident) => {
+		ResolvedStmt::Declare(_, privacy, ty_ident, _is_mut) => {
 			format!(
 				"{}{};",
 				codegen_privacy(privacy),
@@ -140,10 +141,11 @@ pub fn codegen_stmt(stmt: ResolvedStmt) -> String {
 			format!("{{{}}}", codegen_scope(scope))
 		}
 		ResolvedStmt::Cpp(_, code) => code[..code.len() - 1][1..].to_string(),
+		_ => unreachable!(),
 	}
 }
 
-pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
+pub fn codegen_func_noscope(name: &str, func: &ResolvedFunc, semi: bool) -> String {
 	let mut code = "".to_string();
 	if !func.generics.is_empty() {
 		code += "template <";
@@ -161,13 +163,13 @@ pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	code += &format!(
 		"{} {}(",
 		codegen_ty(func.return_ty.clone()),
-		codegen_mangle(&func.name)
+		codegen_mangle(name)
 	);
 	for (i, arg) in func.args.iter().enumerate() {
 		code += &format!(
 			"{} {}",
 			codegen_ty(arg.ty.clone()),
-			codegen_mangle(&arg.name)
+			codegen_mangle(&arg.to_string())
 		);
 		if i < func.args.len() - 1 {
 			code += ", ";
@@ -181,13 +183,13 @@ pub fn codegen_func_noscope(func: &ResolvedFunc, semi: bool) -> String {
 	code
 }
 
-pub fn codegen_func_predecl(func: &ResolvedFunc) -> String {
-	codegen_func_noscope(func, true)
+pub fn codegen_func_predecl(name: &str, func: &ResolvedFunc) -> String {
+	codegen_func_noscope(name, func, true)
 }
 
-pub fn codegen_func(func: &ResolvedFunc) -> String {
+pub fn codegen_func(name: &str, func: &ResolvedFunc) -> String {
 	let body = func.body.clone();
-	let mut code = codegen_func_noscope(func, false);
+	let mut code = codegen_func_noscope(name, func, false);
 	code += "{";
 	code += &codegen_scope(body);
 	code += "}";
@@ -199,9 +201,9 @@ pub fn codegen_scope(scope: ResolvedScope) -> String {
 	// TODO: codegen structs
 	let mut predecls = "".to_string();
 	let mut funcs = "".to_string();
-	for (_, func) in scope.data.funcs {
-		predecls += &codegen_func_predecl(&func);
-		funcs += &codegen_func(&func);
+	for (name, func) in scope.data.funcs {
+		predecls += &codegen_func_predecl(&name, &func);
+		funcs += &codegen_func(&name, &func);
 	}
 	code += &predecls;
 	code += &funcs;
