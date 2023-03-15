@@ -235,7 +235,7 @@ def_token!(
 	}
 );
 
-pub fn lex(code: &str, file_id: usize) -> Result<Vec<Spanned<Token>>, Vec<Diagnostic<usize>>> {
+pub fn lex(code: &str, file_id: usize) -> Result<Vec<Spanned<Token>>, (Vec<Spanned<Token>>, Vec<Diagnostic<usize>>)> {
 	let lex = Token::lexer(code).spanned();
 	let tokens = lex
 		.map(|(token, range)| (token, Span::new(file_id, range)))
@@ -252,7 +252,7 @@ pub fn lex(code: &str, file_id: usize) -> Result<Vec<Spanned<Token>>, Vec<Diagno
 		}
 	}
 	if !diagnostics.is_empty() {
-		Err(diagnostics)
+		Err((tokens, diagnostics))
 	} else {
 		Ok(tokens)
 	}

@@ -209,7 +209,9 @@ pub fn parser() -> token_parser!(ParserScope) {
 
 pub type CodeStream<'a> = Stream<'a, Token, Span, IntoIter<Spanned<Token>>>;
 
-pub fn parse(code_stream: CodeStream) -> Result<ParserScope, Vec<Diagnostic<usize>>> {
+pub fn parse(
+	code_stream: CodeStream,
+) -> Result<ParserScope, (ParserScope, Vec<Diagnostic<usize>>)> {
 	let (parsed, errors) = parser().parse_recovery(code_stream);
 	let mut diagnostics = vec![];
 	if errors.is_empty() {
@@ -253,5 +255,11 @@ pub fn parse(code_stream: CodeStream) -> Result<ParserScope, Vec<Diagnostic<usiz
 			),
 		}
 	}
-	Err(diagnostics)
+	Err((
+		parsed.unwrap_or_else(|| ParserScope {
+			span: Span::new(0, 0..0),
+			stmts: Vec::new(),
+		}),
+		diagnostics,
+	))
 }

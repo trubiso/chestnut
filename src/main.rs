@@ -69,6 +69,7 @@ fn main() {
 	args.next();
 	let mut cpp_sources = Vec::new();
 	let mut should_format = false;
+	let mut all_diagnostics = Vec::new();
 	for arg in args {
 		if arg == "--pretty" {
 			should_format = true;
@@ -80,7 +81,12 @@ fn main() {
 
 		let lexed = match lexer::lex(files.get(file_id).unwrap().source(), file_id) {
 			Ok(x) => x,
-			Err(x) => return emit_errors(&files, x),
+			Err((x, diagnostics)) => {
+				for diagnostic in diagnostics {
+					all_diagnostics.push(diagnostic);
+				}
+				x
+			}
 		};
 
 		let code_len = files.get(file_id).unwrap().source().len();
@@ -89,18 +95,29 @@ fn main() {
 			Stream::from_iter(Span::new(file_id, code_len..code_len), lexed.into_iter());
 		let parsed = match parser::parse(lexed_iter) {
 			Ok(x) => x,
-			Err(x) => return emit_errors(&files, x),
+			Err((x, diagnostics)) => {
+				for diagnostic in diagnostics {
+					all_diagnostics.push(diagnostic);
+				}
+				x
+			}
 		};
 
+		// TODO: recover from errors. this will avoid having to make random default empty scopes
 		let hoisted = match hoister::hoist(parsed, None) {
 			Ok(x) => x,
 			Err(x) => return emit_errors(&files, x),
 		};
 
+		// TODO: recover from errors. this will avoid having to make random default empty scopes
 		let resolved = match resolve::resolve(hoisted, resolve::Context::TopLevel, None, None) {
 			Ok((x, _)) => x,
 			Err(x) => return emit_errors(&files, x),
 		};
+
+		if all_diagnostics.len() > 0 {
+			return emit_errors(&files, all_diagnostics);
+		}
 
 		let code = codegen::codegen(resolved);
 
