@@ -112,9 +112,33 @@ impl Scope<HoistedExpr> for HoistedScope {
 impl ParserExpr {
 	// NOTE: what should we do here? maybe just move the values to the "hoisted"
 	// ones, i don't think we need to do anything. we could even get rid of inherit
-	// and save like 100% of this code's .clone()s
-	pub fn hoist(self, _inherit: Option<HoistedScope>) -> HoistedExpr {
-		todo!()
+	// and save like 100% of this code's .clone()s (or not, lambdas)
+	pub fn hoist(self, inherit: Option<HoistedScope>) -> HoistedExpr {
+		match self {
+			Expr::CharLiteral(a, b) => Expr::CharLiteral(a, b),
+			Expr::StringLiteral(a, b) => Expr::StringLiteral(a, b),
+			Expr::NumberLiteral(a, b) => Expr::NumberLiteral(a, b),
+			Expr::Identifier(a, b) => Expr::Identifier(a, b),
+			Expr::BinaryOp(a, b, c, d) => Expr::BinaryOp(
+				a,
+				Box::new(b.hoist(inherit.clone())),
+				c,
+				Box::new(d.hoist(inherit)),
+			),
+			Expr::UnaryOp(a, b, c) => Expr::UnaryOp(a, b, Box::new(c.hoist(inherit))),
+			Expr::Lambda(a, b) => Expr::Lambda(a, b.hoist(inherit)),
+			Expr::Call(a, b, c, d) => Expr::Call(
+				a,
+				Box::new(b.hoist(inherit.clone())),
+				c.map(|x| x.iter().map(|y| y.clone().hoist(inherit.clone())).collect()),
+				d.iter().map(|x| x.clone().hoist(inherit.clone())).collect(),
+			),
+			Expr::Dot(a, b, c) => Expr::Dot(
+				a,
+				Box::new(b.hoist(inherit.clone())),
+				Box::new(c.hoist(inherit)),
+			),
+		}
 	}
 }
 
@@ -142,12 +166,15 @@ impl ParserType {
 						.collect(),
 				},
 			),
+			Type::Builtin(s, t) => Type::Builtin(s, t),
 			Type::Array(s, l, r) => Type::Array(
 				s,
 				Box::new(l.hoist(inherit.clone())),
 				r.map(|x| Box::new(x.hoist(inherit.clone()))),
 			),
-			_other => todo!(),
+			Type::Ref(s, t, m) => Type::Ref(s, Box::new(t.hoist(inherit)), m),
+			Type::Optional(s, t) => Type::Optional(s, Box::new(t.hoist(inherit))),
+			Type::Inferred(s) => Type::Inferred(s),
 		}
 	}
 }
