@@ -964,23 +964,6 @@ fn check_privacy(privacy: Privacy, context: Context) {
 	}
 }
 
-impl HoistedStmt {
-	pub fn variant(&self) -> String {
-		match self {
-			Self::Create(..) => "creation".into(),
-			Self::Declare(..) => "declaration".into(),
-			Self::Set(..) => "set".into(),
-			Self::Func(..) => "function".into(),
-			Self::Return(..) => "return".into(),
-			Self::Class(..) => "class".into(),
-			Self::Import(..) => "import".into(),
-			Self::BareExpr(..) => "bare expression".into(),
-			Self::Unsafe(..) => "unsafe scope".into(),
-			Self::Cpp(..) => "inline c++".into(),
-		}
-	}
-}
-
 macro_rules! check_stmt {
 	($($v:ident => $($ctx:ident)*;)*) => {
 		fn check_stmt(stmt: &HoistedStmt, context: &Context) {

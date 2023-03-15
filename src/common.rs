@@ -218,6 +218,21 @@ impl<E: fmt::Display, F, S: Scope<E>> Stmt<E, F, S> {
 			| Self::Cpp(x, ..) => x.clone(),
 		}
 	}
+
+	pub fn variant(&self) -> String {
+		match self {
+			Self::Create(..) => "creation".into(),
+			Self::Declare(..) => "declaration".into(),
+			Self::Set(..) => "set".into(),
+			Self::Func(..) => "function".into(),
+			Self::Return(..) => "return".into(),
+			Self::Class(..) => "class".into(),
+			Self::Import(..) => "import".into(),
+			Self::BareExpr(..) => "bare expression".into(),
+			Self::Unsafe(..) => "unsafe scope".into(),
+			Self::Cpp(..) => "inline c++".into(),
+		}
+	}
 }
 
 impl<E: fmt::Display, F: fmt::Display, S: Scope<E> + fmt::Display> fmt::Display for Stmt<E, F, S> {
@@ -249,7 +264,7 @@ impl<E: fmt::Display, F: fmt::Display, S: Scope<E> + fmt::Display> fmt::Display 
 			)),
 			Stmt::BareExpr(_span, expr) => f.write_fmt(format_args!("{expr};")),
 			Stmt::Unsafe(_span, scope) => f.write_fmt(format_args!("unsafe {}", scope.braced())),
-			Stmt::Cpp(_span, code) => f.write_fmt(format_args!(r#"cpp "{code}""#)),
+			Stmt::Cpp(_span, code) => f.write_fmt(format_args!("cpp {code}")),
 		}
 	}
 }

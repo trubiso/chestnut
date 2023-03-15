@@ -16,6 +16,7 @@ pub fn comma<T>(args: Vec<T>, closure: fn(&T) -> String) -> String {
 		.unwrap_or_default()
 }
 
+// TODO: less aggressive mangle: only mangle c++ keywords
 pub fn codegen_mangle(str: &str) -> String {
 	let mangle_prefix = "Chn_".to_owned();
 	mangle_prefix + str

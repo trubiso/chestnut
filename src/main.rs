@@ -91,6 +91,7 @@ fn main() {
 
 		let code_len = files.get(file_id).unwrap().source().len();
 
+		// TODO: figure out chumsky error recovery strategies
 		let lexed_iter: CodeStream =
 			Stream::from_iter(Span::new(file_id, code_len..code_len), lexed.into_iter());
 		let parsed = match parser::parse(lexed_iter) {

@@ -19,7 +19,7 @@ class Node<T> {
 
 void main() {
 	/* yo */
-	Node<i32> d;$
+	Node<i32> d;
 	Node<i64> d;
 	let my_variable = d.get_next();
 	mut x = 10;
