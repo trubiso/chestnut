@@ -170,7 +170,7 @@ pub fn codegen_func_noscope(name: &str, func: &ResolvedFunc, semi: bool) -> Stri
 		code += &format!(
 			"{} {}",
 			codegen_ty(arg.ty.clone()),
-			codegen_mangle(&arg.to_string())
+			codegen_mangle(&arg.ident_str())
 		);
 		if i < func.args.len() - 1 {
 			code += ", ";
