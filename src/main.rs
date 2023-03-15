@@ -19,6 +19,21 @@ pub mod span;
 // TODO: store all lex, ast, parse and resolve in hashmaps that can be accessed
 // by the next passes. also do hashmap between source name & file id
 
+fn time<F, T>(should_time: bool, name: &str, x: F) -> T
+where
+	F: FnOnce() -> T,
+{
+	if !should_time {
+		return x();
+	}
+	let begin = std::time::Instant::now();
+	let ret = x();
+	let end = std::time::Instant::now();
+	let duration = end - begin;
+	println!("{name}: {}ms", duration.as_millis());
+	ret
+}
+
 fn emit_errors(files: &SimpleFiles<String, String>, diagnostics: Vec<Diagnostic<usize>>) {
 	let writer = StandardStream::stderr(ColorChoice::Always);
 	let config = term::Config::default();
@@ -71,16 +86,25 @@ fn main() {
 	let mut should_format = false;
 	let mut all_diagnostics = Vec::new();
 	let mut have_errors = false;
+	let mut should_time = false;
 	for arg in args {
 		if arg == "--pretty" {
 			should_format = true;
 			continue;
 		}
 
+		// TODO: this breaks if you don't put it before your files
+		if arg == "-t" {
+			should_time = true;
+			continue;
+		}
+
 		let code = fs::read_to_string(arg.clone()).unwrap();
 		let file_id = files.add(arg.clone(), code);
 
-		let lexed = match lexer::lex(files.get(file_id).unwrap().source(), file_id) {
+		let lexed = match time(should_time, "lexer", || {
+			lexer::lex(files.get(file_id).unwrap().source(), file_id)
+		}) {
 			Ok(x) => x,
 			Err((x, diagnostics)) => {
 				for diagnostic in diagnostics {
@@ -95,7 +119,7 @@ fn main() {
 		// TODO: figure out chumsky error recovery strategies
 		let lexed_iter: CodeStream =
 			Stream::from_iter(Span::new(file_id, code_len..code_len), lexed.into_iter());
-		let parsed = match parser::parse(lexed_iter) {
+		let parsed = match time(should_time, "parser", || parser::parse(lexed_iter)) {
 			Ok(x) => x,
 			Err((x, diagnostics)) => {
 				for diagnostic in diagnostics {
@@ -105,13 +129,15 @@ fn main() {
 			}
 		};
 
-		let (hoisted, hoisted_diagnostics) = hoister::hoist(parsed, None);
+		let (hoisted, hoisted_diagnostics) =
+			time(should_time, "hoister", || hoister::hoist(parsed, None));
 		for diagnostic in hoisted_diagnostics {
 			all_diagnostics.push(diagnostic);
 		}
 
-		let ((resolved, _), resolved_diagnostics) =
-			resolve::resolve(hoisted, resolve::Context::TopLevel, None, None);
+		let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", || {
+			resolve::resolve(hoisted, resolve::Context::TopLevel, None, None)
+		});
 		for diagnostic in resolved_diagnostics {
 			{
 				all_diagnostics.push(diagnostic);
@@ -123,7 +149,7 @@ fn main() {
 			.any(|x| x.severity == Severity::Error);
 		have_errors = have_errors || current_has_errors;
 		if !current_has_errors {
-			let code = codegen::codegen(resolved);
+			let code = time(should_time, "codegen", || codegen::codegen(resolved));
 
 			std::fs::write(format!("{arg}.cpp"), code).unwrap();
 			cpp_sources.push(format!("{arg}.cpp"));
@@ -141,7 +167,11 @@ fn main() {
 	}
 
 	if should_format {
-		execute_cmd_on_all("clang-format", vec!["-i"], cpp_sources.clone());
+		time(should_time, "clang-format", || {
+			execute_cmd_on_all("clang-format", vec!["-i"], cpp_sources.clone())
+		});
 	}
-	execute_cmd_on_all("g++", vec![], cpp_sources);
+	time(should_time, "g++", || {
+		execute_cmd_on_all("g++", vec![], cpp_sources)
+	});
 }
