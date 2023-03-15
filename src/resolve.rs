@@ -699,7 +699,7 @@ impl ResolvedScope {
 				// TODO: make HoistedExpr with the new cool system :D
 				#[allow(unreachable_code)]
 				ResolvedExpr::Lambda(
-					s.clone(),
+					s,
 					todo!(), // self.resolve_func("~".into(), s, f.hoist(None), context),
 				)
 			}
@@ -1081,10 +1081,8 @@ pub fn resolve(
 			HoistedStmt::Declare(span, privacy, ty_ident, is_mut) => {
 				// TODO: add error if the type is ~
 				check_privacy(privacy.clone(), context.clone());
-				if context != Context::Class {
-					if !is_mut {
-						add_diagnostic(Diagnostic::warning().with_message("non-class immutable declaration").with_labels(vec![Label::primary(span.file_id, span.range())]).with_notes(vec!["you will not be able to use or assign this variable, which is probably not intended".into()]));
-					}
+				if context != Context::Class && !is_mut {
+					add_diagnostic(Diagnostic::warning().with_message("non-class immutable declaration").with_labels(vec![Label::primary(span.file_id, span.range())]).with_notes(vec!["you will not be able to use or assign this variable, which is probably not intended".into()]));
 				}
 				let ty_ident = resolved_scope.resolve_ty_ident(ty_ident, context.clone());
 				check_case(
@@ -1128,11 +1126,7 @@ pub fn resolve(
 			HoistedStmt::Func(_span, privacy, ident, func) => {
 				check_privacy(privacy, context.clone());
 				check_case(ident.span(), ident.to_string(), Case::SnakeCase);
-				let resolved = resolved_scope.resolve_func(
-					ident.span(),
-					func,
-					context.clone(),
-				);
+				let resolved = resolved_scope.resolve_func(ident.span(), func, context.clone());
 				// TODO: use another, better span
 				resolved_scope.add_func(ident.to_string(), resolved);
 			}

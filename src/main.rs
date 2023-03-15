@@ -115,7 +115,7 @@ fn main() {
 			Err(x) => return emit_errors(&files, x),
 		};
 
-		if all_diagnostics.len() > 0 {
+		if !all_diagnostics.is_empty() {
 			return emit_errors(&files, all_diagnostics);
 		}
 
