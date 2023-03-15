@@ -190,8 +190,7 @@ impl ParserFunc {
 				.map(|x| x.clone().hoist(inherit.clone()))
 				.collect(),
 			generics: self.generics,
-			body: hoist(self.body, inherit)
-				.unwrap_or_else(|_| HoistedScope::new(self.decl_span.clone())),
+			body: hoist(self.body, inherit).0,
 			attribs: self.attribs,
 			decl_span: self.decl_span,
 		}
@@ -222,7 +221,7 @@ fn redeclaration_error(name: &str, span: &Span, decl_span: &Span) {
 pub fn hoist(
 	scope: ParserScope,
 	inherit: Option<HoistedScope>,
-) -> Result<HoistedScope, Vec<Diagnostic<usize>>> {
+) -> (HoistedScope, Vec<Diagnostic<usize>>) {
 	let inherit_hoisted = inherit.unwrap_or_else(|| HoistedScope::new(scope.span.clone()));
 	let mut hoisted = HoistedScope::new(scope.span);
 	hoisted.inherit = inherit_hoisted.data + inherit_hoisted.inherit;
@@ -294,8 +293,7 @@ pub fn hoist(
 					redeclaration_error("type", &decl_span, old_decl_span);
 				}
 				// TODO: this is stupid, as it will not hoist fully in the top level
-				let hoisted_scope = hoist(body, Some(hoisted.clone()))
-					.unwrap_or_else(|_| HoistedScope::new(span.clone()));
+				let hoisted_scope = hoist(body, Some(hoisted.clone())).0;
 				// TODO: get the actual made type signature
 				hoisted.add_type(&ident.to_string(), MadeTypeSignature::default());
 				hoisted.add_type_span(&ident.to_string(), decl_span.clone());
@@ -311,8 +309,7 @@ pub fn hoist(
 			}
 			Stmt::Unsafe(span, scope) => {
 				// TODO: properly hoist, like funcs
-				let hoisted_scope = hoist(scope, Some(hoisted.clone()))
-					.unwrap_or_else(|_| HoistedScope::new(span.clone()));
+				let hoisted_scope = hoist(scope, Some(hoisted.clone())).0;
 				hoisted
 					.stmts_mut()
 					.push(HoistedStmt::Unsafe(span, hoisted_scope));
@@ -352,8 +349,8 @@ pub fn hoist(
 	}
 	if !DIAGNOSTICS.lock().unwrap().is_empty() {
 		let diagnostics = DIAGNOSTICS.lock().unwrap();
-		Err(diagnostics.clone())
+		(hoisted, diagnostics.clone())
 	} else {
-		Ok(hoisted)
+		(hoisted, vec![])
 	}
 }

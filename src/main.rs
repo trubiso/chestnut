@@ -70,6 +70,7 @@ fn main() {
 	let mut cpp_sources = Vec::new();
 	let mut should_format = false;
 	let mut all_diagnostics = Vec::new();
+	let mut have_errors = false;
 	for arg in args {
 		if arg == "--pretty" {
 			should_format = true;
@@ -104,26 +105,39 @@ fn main() {
 			}
 		};
 
-		// TODO: recover from errors. this will avoid having to make random default empty scopes
-		let hoisted = match hoister::hoist(parsed, None) {
-			Ok(x) => x,
-			Err(x) => return emit_errors(&files, x),
-		};
-
-		// TODO: recover from errors. this will avoid having to make random default empty scopes
-		let resolved = match resolve::resolve(hoisted, resolve::Context::TopLevel, None, None) {
-			Ok((x, _)) => x,
-			Err(x) => return emit_errors(&files, x),
-		};
-
-		if !all_diagnostics.is_empty() {
-			return emit_errors(&files, all_diagnostics);
+		let (hoisted, hoisted_diagnostics) = hoister::hoist(parsed, None);
+		for diagnostic in hoisted_diagnostics {
+			all_diagnostics.push(diagnostic);
 		}
 
-		let code = codegen::codegen(resolved);
+		let ((resolved, _), resolved_diagnostics) =
+			resolve::resolve(hoisted, resolve::Context::TopLevel, None, None);
+		for diagnostic in resolved_diagnostics {
+			{
+				all_diagnostics.push(diagnostic);
+			}
+		}
 
-		std::fs::write(format!("{arg}.cpp"), code).unwrap();
-		cpp_sources.push(format!("{arg}.cpp"));
+		let current_has_errors = all_diagnostics
+			.iter()
+			.any(|x| x.severity == Severity::Error);
+		have_errors = have_errors || current_has_errors;
+		if !current_has_errors {
+			let code = codegen::codegen(resolved);
+
+			std::fs::write(format!("{arg}.cpp"), code).unwrap();
+			cpp_sources.push(format!("{arg}.cpp"));
+		}
+	}
+
+	if !all_diagnostics.is_empty() {
+		if have_errors {
+			emit_errors(&files, all_diagnostics);
+			println!("errors present, cannot compile :(");
+			return;
+		} else {
+			emit_errors(&files, all_diagnostics);
+		}
 	}
 
 	if should_format {

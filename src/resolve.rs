@@ -646,23 +646,18 @@ impl ResolvedScope {
 		// TODO: use resolved scope
 		let mut return_ty = resolved_return_ty;
 		let body = if return_ty.is_inferred() {
-			match resolve(func.body.clone(), Context::Func, Some(frs), None) {
-				Ok((scope, ty)) => {
-					return_ty = ty;
-					scope
-				}
-				Err(_) => ResolvedScope::new(func.body.span),
-			}
+			let ((scope, ty), _) = resolve(func.body.clone(), Context::Func, Some(frs), None);
+			return_ty = ty;
+			scope
 		} else {
-			match resolve(
+			resolve(
 				func.body.clone(),
 				Context::Func,
 				Some(frs),
 				Some((func_span.clone(), return_ty.span(), return_ty.clone())),
-			) {
-				Ok((scope, _)) => scope,
-				Err(_) => ResolvedScope::new(func.body.span),
-			}
+			)
+			.0
+			 .0
 		};
 		let attribs = func.attribs.clone();
 		let mut args = vec![];
@@ -1002,7 +997,7 @@ pub fn resolve(
 	context: Context,
 	inherit_scope: Option<ResolvedScope>,
 	expected_func_ty: Option<(Span, Span, ResolvedType)>,
-) -> Result<(ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>> {
+) -> ((ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>) {
 	let mut resolved_scope = ResolvedScope::new(scope.span.clone());
 	if let Some(scope) = inherit_scope {
 		resolved_scope.inherit = scope.data + scope.inherit;
@@ -1152,10 +1147,7 @@ pub fn resolve(
 						},
 					)
 				}
-				let scope = match resolve(body.clone(), Context::Class, Some(crs), None) {
-					Ok((scope, _)) => scope,
-					Err(_) => ResolvedScope::new(body.span),
-				};
+				let scope = resolve(body.clone(), Context::Class, Some(crs), None).0 .0;
 				ty.body = Some(scope);
 				resolved_scope.add_type(decl_span, name, ty);
 			}
@@ -1167,12 +1159,9 @@ pub fn resolve(
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));
 			}
 			HoistedStmt::Unsafe(span, scope) => {
-				let scope_span = scope.span.clone();
-				let resolved =
-					match resolve(scope, Context::Unsafe, Some(resolved_scope.clone()), None) {
-						Ok((scope, _)) => scope,
-						Err(_) => ResolvedScope::new(scope_span),
-					};
+				let resolved = resolve(scope, Context::Unsafe, Some(resolved_scope.clone()), None)
+					.0
+					 .0;
 				resolved_scope
 					.stmts
 					.push(ResolvedStmt::Unsafe(span, resolved));
@@ -1207,8 +1196,8 @@ pub fn resolve(
 	}
 	if !DIAGNOSTICS.lock().unwrap().is_empty() {
 		let diagnostics = DIAGNOSTICS.lock().unwrap();
-		Err(diagnostics.clone())
+		((resolved_scope, return_ty), diagnostics.clone())
 	} else {
-		Ok((resolved_scope, return_ty))
+		((resolved_scope, return_ty), vec![])
 	}
 }
