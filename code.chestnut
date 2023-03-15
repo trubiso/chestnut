@@ -1,39 +1,89 @@
-void print<T>(T thing) {
-	unsafe {
-		cpp "std::cout << Chn_thing << std::endl;";
-	}
+class Tuple<A, B> {}
+class GridPiece {}
+class Array<T> {}
+
+void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
+
+void print_grid(GridPiece&[3][4]?[] pieces) {}
+
+export i32 do_thing(Array<~> arr) {
+	return 0;
 }
 
-void calculate<MyGeneric>(i32 whatever) {
+export i32 do_thing(Array<~> arr) {
+	return 0;
+}
+
+void print(string arg) {
+
+}
+
+void silly() {
+
+}
+
+void set_error_callback() {
+
+}
+
+export void set_element() mut {
 
 }
 
 class Node<T> {
-	T value;
 	Node<T>& next;
+	public T value;
 
-	void get_next() {
-		unsafe {}
+	public void traverse() {
+		let x = 9;
+	}
+
+	public void set() mut {
+
 	}
 }
 
-void main() {
-	/* yo */
-	// e();
-	// Node<i32> d;
-	// Node<i64> d;
-	// let my_variable = d.get_next();
-	mut x = 10;
-	x += 2;
-	x += 3;
-	let true = 1;
-	let false = -1;
-	x *= true - false;
-	x = double<i32>(x);
-	print<i32>(x);
-	print<string>("Hello World!");
-	// (() => print<string>("bye"))();
-	// hey
+T add<T>(T a, T b) pure {
+	return a + b;
 }
 
-T double<T>(T x) => x + x;
+i32 do_thing(i32 only_arg) {
+	let a = only_arg;
+	let b = 10;
+	let c = a + b;
+	let d = a * c;
+	let e = a + b + c + d;
+	return e;
+}
+
+void main() {
+	// print_position(3);
+	// let ~ = do_thing();
+	i32 x = 2 + (3 - 4);
+	mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
+	a += 10;
+	a *= 9 + 10;
+	// print("Hello World!", 9+3-4);
+	4+2+4;
+	// .3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
+
+	mut r = 10;
+
+	let c = do_thing(3); // TODO: lex /***/ properly
+
+	let aa = 'a';
+	3 + a();
+
+	void goofy_void() {
+
+	}
+
+	let b = 'b';
+	let cc = 'c';
+
+	a + b();
+
+	// (string err) => print(err);
+}
+
+i32 divided_by_two(i32 x) => x / 2;

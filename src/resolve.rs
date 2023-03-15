@@ -14,7 +14,7 @@ use crate::{
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
-use std::{cmp::Ordering, collections::HashMap, fmt, sync::Mutex};
+use std::{cmp::Ordering, collections::HashMap, fmt, sync::Mutex, borrow::{BorrowMut, Borrow}, cell::{Ref, RefCell, RefMut}};
 
 use self::case::{check_case, Case};
 
@@ -23,10 +23,13 @@ pub mod case;
 // TODO: FuncSignature (only types)
 // TODO: ClassSignature (only types)
 
-pub type ResolvedTypedIdent = TypedIdent<ResolvedType>;
-pub type ResolvedExpr = Expr<ResolvedScope>;
-pub type ResolvedFunc = Func<ResolvedExpr, ResolvedScope>;
-pub type ResolvedStmt = Stmt<ResolvedExpr, ResolvedFunc, ResolvedScope>;
+pub type ResolvedType<'a> = Type<ResolvedExpr<'a>>;
+pub type ResolvedTypedIdent<'a> = TypedIdent<ResolvedType<'a>>;
+pub type ResolvedBareType<'a> = BareType<ResolvedType<'a>>;
+pub type ResolvedFunc<'a> = Func<ResolvedExpr<'a>, ResolvedScope<'a>>;
+pub type ResolvedFuncSignature<'a> = FuncSignature<ResolvedType<'a>>;
+pub type ResolvedExpr<'a> = Expr<ResolvedScope<'a>>;
+pub type ResolvedStmt<'a> = Stmt<ResolvedExpr<'a>, ResolvedFunc<'a>, ResolvedScope<'a>>;
 
 macro_rules! builtin {
 	($s:expr, $v:ident) => {
@@ -50,7 +53,7 @@ macro_rules! i_hate_partial_eq {
 	};
 }
 
-impl PartialEq for ResolvedExpr {
+impl PartialEq for ResolvedExpr<'_> {
 	fn eq(&self, other: &Self) -> bool {
 		i_hate_partial_eq!(
 			self, other =>
@@ -67,65 +70,39 @@ impl PartialEq for ResolvedExpr {
 	}
 }
 
-impl Eq for ResolvedExpr {}
+impl Eq for ResolvedExpr<'_> {}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct InheritableData {
-	pub vars: HashMap<String, ResolvedVar>,
+pub struct InheritableData<'a> {
+	pub vars: HashMap<String, ResolvedVar<'a>>,
 	pub var_spans: HashMap<String, Span>,
-	// TODO: top level analyzer
 	// TODO: function overloads
-	pub funcs: HashMap<String, ResolvedFunc>,
+	pub funcs: HashMap<String, ResolvedFunc<'a>>,
 	pub func_spans: HashMap<String, Span>,
-	pub types: HashMap<String, ResolvedMadeType>,
+	pub types: HashMap<String, ResolvedMadeType<'a>>,
 	pub type_spans: HashMap<String, Span>,
 	// TODO: remove scopes from type & func spans
 }
 
-impl std::ops::Add for InheritableData {
-	type Output = InheritableData;
-
-	fn add(self, rhs: Self) -> Self::Output {
-		Self {
-			vars: rhs.vars.into_iter().chain(self.vars).collect(),
-			var_spans: rhs.var_spans.into_iter().chain(self.var_spans).collect(),
-			funcs: rhs.funcs.into_iter().chain(self.funcs).collect(),
-			func_spans: rhs.func_spans.into_iter().chain(self.func_spans).collect(),
-			types: rhs.types.into_iter().chain(self.types).collect(),
-			type_spans: rhs.type_spans.into_iter().chain(self.type_spans).collect(),
-		}
-	}
-}
-
 #[derive(Debug, Clone)]
-pub struct ResolvedScope {
+pub struct ResolvedScope<'a> {
+	pub data: InheritableData<'a>,
+	pub stmts: Vec<ResolvedStmt<'a>>,
+	pub inherit: Option<&'a ResolvedScope<'a>>,
+	pub old_hoisted: &'a HoistedScope<'a>,
 	pub span: Span,
-	pub data: InheritableData,
-	pub inherit: InheritableData,
-	pub old_hoisted: HoistedScope,
-	pub stmts: Vec<ResolvedStmt>,
 }
 
-impl ResolvedScope {
-	pub fn new(span: Span) -> Self {
-		Self {
-			span: span.clone(),
-			data: InheritableData::default(),
-			inherit: InheritableData::default(),
-			old_hoisted: HoistedScope::new(span),
-			stmts: Vec::new(),
-		}
-	}
-}
-
-impl fmt::Display for ResolvedScope {
+impl fmt::Display for ResolvedScope<'_> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.scope_fmt(f)
 	}
 }
 
-impl Scope<ResolvedExpr> for ResolvedScope {
-	fn stmts(&self) -> &Vec<Stmt<ResolvedExpr, crate::common::Func<ResolvedExpr, Self>, Self>>
+impl<'a> Scope<ResolvedExpr<'a>> for ResolvedScope<'a> {
+	fn stmts(
+		&self,
+	) -> &Vec<Stmt<ResolvedExpr<'a>, crate::common::Func<ResolvedExpr<'a>, Self>, Self>>
 	where
 		Self: Sized,
 	{
@@ -145,30 +122,33 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 macro_rules! get_datum {
 	($nget:ident $nmut:ident $nhas:ident $nadd:ident => $ident:ident ($ty:ty)) => {
 		pub fn $nget(&self, name: &str) -> Option<&$ty> {
-			match self.data.$ident.get(name) {
+			use ::std::borrow::Borrow;
+			match self.data.borrow().$ident.get(name) {
 				Some(x) => Some(x),
-				None => self.inherit.$ident.get(name),
+				None => self.inherit.as_ref()?.$nget(name),
 			}
 		}
 
-		pub fn $nmut(&mut self, name: &str) -> Option<&mut $ty> {
-			match self.data.$ident.get_mut(name) {
+		pub fn $nmut(&self, name: &str) -> Option<&mut $ty> {
+			use ::std::borrow::BorrowMut;
+			match self.data.borrow_mut().$ident.get_mut(name) {
 				Some(x) => Some(x),
-				None => self.inherit.$ident.get_mut(name),
+				None => self.inherit.as_mut()?.$nmut(name),
 			}
 		}
 
 		pub fn $nhas(&self, name: &str) -> bool {
-			self.data.$ident.contains_key(name) || self.inherit.$ident.contains_key(name)
+			self.data.$ident.contains_key(name)
+				|| self.inherit.map(|x| x.$nhas(name)).unwrap_or(false)
 		}
 
-		pub fn $nadd(&mut self, name: &str, thing: $ty) {
+		pub fn $nadd(&self, name: &str, thing: $ty) {
 			self.data.$ident.insert(name.to_string(), thing);
 		}
 	};
 }
 
-impl ResolvedScope {
+impl ResolvedScope<'_> {
 	get_datum!(get_type get_type_mut has_type _add_type => types (ResolvedMadeType));
 	get_datum!(get_type_span get_type_span_mut has_type_span _add_type_span => type_spans (Span));
 	get_datum!(get_var get_var_mut has_var _add_var => vars (ResolvedVar));
@@ -646,14 +626,14 @@ impl ResolvedScope {
 		// TODO: use resolved scope
 		let mut return_ty = resolved_return_ty;
 		let body = if return_ty.is_inferred() {
-			let ((scope, ty), _) = resolve(func.body.clone(), Context::Func, Some(frs), None);
+			let ((scope, ty), _) = resolve(func.body.clone(), Context::Func, Some(&frs), None);
 			return_ty = ty;
 			scope
 		} else {
 			resolve(
 				func.body.clone(),
 				Context::Func,
-				Some(frs),
+				Some(&frs),
 				Some((func_span.clone(), return_ty.span(), return_ty.clone())),
 			)
 			.0
@@ -771,10 +751,7 @@ impl ResolvedScope {
 	}
 }
 
-pub type ResolvedType = Type<ResolvedExpr>;
-pub type ResolvedBareType = BareType<ResolvedType>;
-
-impl ResolvedType {
+impl ResolvedType<'_> {
 	pub fn replace_generic(self, name: Ident, ty: ResolvedType) -> Self {
 		match self {
 			Self::BareType(span, x) => {
@@ -880,31 +857,31 @@ impl ResolvedType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolvedVar {
+pub struct ResolvedVar<'a> {
 	pub name: String,
-	pub ty: ResolvedType,
+	pub ty: ResolvedType<'a>,
 	pub is_mut: bool,
 	// outer option = is initialized, inner option = is arg
-	pub value: Option<Option<ResolvedExpr>>,
+	pub value: Option<Option<ResolvedExpr<'a>>>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct ResolvedMadeTypeSignature {
-	pub fields: HashMap<String, ResolvedType>,
-	pub funcs: HashMap<String, ResolvedFuncSignature>,
+pub struct ResolvedMadeTypeSignature<'a> {
+	pub fields: HashMap<String, ResolvedType<'a>>,
+	pub funcs: HashMap<String, ResolvedFuncSignature<'a>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct ResolvedMadeType {
+pub struct ResolvedMadeType<'a> {
 	pub name: String,
 	pub generic_count: usize, // TODO: ResolvedGeneric
-	pub fields: HashMap<String, ResolvedType>,
-	pub funcs: HashMap<String, ResolvedFunc>,
-	pub body: Option<ResolvedScope>, // if it's a generic no body defines it
+	pub fields: HashMap<String, ResolvedType<'a>>,
+	pub funcs: HashMap<String, ResolvedFunc<'a>>,
+	pub body: Option<ResolvedScope<'a>>, // if it's a generic no body defines it
 	pub is_generic: bool,
 }
 
-impl ResolvedMadeType {
+impl ResolvedMadeType<'_> {
 	pub fn signature(&self) -> ResolvedMadeTypeSignature {
 		ResolvedMadeTypeSignature {
 			fields: self.fields.clone(),
@@ -917,15 +894,13 @@ impl ResolvedMadeType {
 	}
 }
 
-impl PartialEq for ResolvedMadeType {
+impl PartialEq for ResolvedMadeType<'_> {
 	fn eq(&self, other: &Self) -> bool {
 		self.signature() == other.signature()
 	}
 }
 
-impl Eq for ResolvedMadeType {}
-
-pub type ResolvedFuncSignature = FuncSignature<ResolvedType>;
+impl Eq for ResolvedMadeType<'_> {}
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
 pub enum Context {
@@ -992,21 +967,22 @@ check_stmt!(
 	Cpp => Unsafe;
 );
 
-pub fn resolve(
+pub fn resolve<'a>(
 	scope: HoistedScope,
 	context: Context,
-	inherit_scope: Option<ResolvedScope>,
+	inherit: Option<&'a ResolvedScope<'a>>,
 	expected_func_ty: Option<(Span, Span, ResolvedType)>,
-) -> ((ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>) {
-	let mut resolved_scope = ResolvedScope::new(scope.span.clone());
-	if let Some(scope) = inherit_scope {
-		resolved_scope.inherit = scope.data + scope.inherit;
-	}
+) -> ((ResolvedScope<'a>, ResolvedType<'a>), Vec<Diagnostic<usize>>) {
+	let mut resolved_scope = ResolvedScope {
+		data: InheritableData::default(),
+		stmts: vec![],
+		inherit,
+		old_hoisted: &scope,
+		span: scope.span,
+	};
 	let mut return_ty = builtin!(scope.span.clone(), Void);
-	let stmts = scope.data.stmts.clone();
-	resolved_scope.old_hoisted = scope;
 	let mut return_span = None;
-	for stmt in stmts {
+	for stmt in *scope.stmts.borrow() {
 		check_stmt(&stmt, &context);
 		match stmt {
 			HoistedStmt::Create(span, privacy, ty_ident, is_mut, expr) => {
@@ -1147,7 +1123,7 @@ pub fn resolve(
 						},
 					)
 				}
-				let scope = resolve(body.clone(), Context::Class, Some(crs), None).0 .0;
+				let scope = resolve(body.clone(), Context::Class, Some(&crs), None).0 .0;
 				ty.body = Some(scope);
 				resolved_scope.add_type(decl_span, name, ty);
 			}
@@ -1159,7 +1135,7 @@ pub fn resolve(
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));
 			}
 			HoistedStmt::Unsafe(span, scope) => {
-				let resolved = resolve(scope, Context::Unsafe, Some(resolved_scope.clone()), None)
+				let resolved = resolve(scope, Context::Unsafe, Some(&resolved_scope), None)
 					.0
 					 .0;
 				resolved_scope
