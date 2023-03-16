@@ -14,7 +14,7 @@ use crate::{
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, sync::Mutex};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, sync::Mutex, rc::Rc};
 
 use self::case::{check_case, Case};
 
@@ -88,7 +88,8 @@ pub struct InheritableData {
 pub struct ResolvedScope {
 	pub data: RefCell<InheritableData>,
 	pub stmts: Vec<ResolvedStmt>,
-	pub inherit: Option<Box<ResolvedScope>>,
+	pub inherit: Option<Rc<ResolvedScope>>,
+	// TODO: we don't care about the stmts, only inherit and data
 	pub old_hoisted: HoistedScope,
 	pub span: Span,
 }
@@ -598,9 +599,19 @@ impl ResolvedScope {
 		func: HoistedFunc,
 		context: Context,
 	) -> ResolvedFunc {
-		let frs = self.clone();
+		println!("begin func");
+		println!("[func] cloning inherit");
+		let frs = ResolvedScope {
+			data: RefCell::new(InheritableData::default()),
+			stmts: vec![],
+			// TODO: get rid of this clone
+			inherit: Some(Rc::new(self.clone())),
+			old_hoisted: func.body.clone(),
+			span: func.decl_span.clone(),
+		};
 		let mut generics = Vec::new();
 		for generic in &func.generics {
+			println!("[func] adding generic");
 			// TODO: deal with discarded generics
 			generics.push(generic.clone());
 			let name = generic.to_string();
@@ -618,9 +629,11 @@ impl ResolvedScope {
 				},
 			);
 		}
+		println!("resolving return ty");
 		let resolved_return_ty = self.resolve_ty(func.return_ty, context.clone());
 		frs.check_type(resolved_return_ty.clone());
 		for arg in &func.args {
+			println!("adding arg");
 			// TODO: deal with discarded args
 			frs.check_type(self.resolve_ty(arg.ty.clone(), context.clone()));
 			check_case(arg.ident.span(), arg.ident.to_string(), Case::SnakeCase);
@@ -633,8 +646,9 @@ impl ResolvedScope {
 		}
 		// TODO: use resolved scope
 		let mut return_ty = resolved_return_ty;
+		println!("resolving inner scope");
 		let body = if return_ty.is_inferred() {
-			let ((scope, ty), _) = resolve(func.body.clone(), Context::Func, Some(&frs), None);
+			let ((scope, ty), _) = resolve(func.body, Context::Func, Some(&frs), None);
 			return_ty = ty;
 			scope
 		} else {
@@ -647,6 +661,7 @@ impl ResolvedScope {
 			.0
 			 .0
 		};
+		println!("final steps");
 		let attribs = func.attribs.clone();
 		let mut args = vec![];
 		for arg in func.args {
@@ -656,6 +671,7 @@ impl ResolvedScope {
 				ident: arg.ident,
 			});
 		}
+		println!("end func");
 		ResolvedFunc {
 			span: func_span,
 			generics,
@@ -981,6 +997,7 @@ pub fn resolve(
 	inherit: Option<&ResolvedScope>,
 	expected_func_ty: Option<(Span, Span, ResolvedType)>,
 ) -> ((ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>) {
+	println!("new resolve call just dropped");
 	let span = scope.span.clone();
 	let stmts = scope.stmts.borrow().clone();
 	let old_hoisted = scope;
@@ -991,7 +1008,7 @@ pub fn resolve(
 		// TODO: also prob get rid of this box lol
 		inherit: inherit.map(|x| {
 			println!("cloning inherit");
-			Box::new(x.clone())
+			Rc::new(x.clone())
 		}),
 		old_hoisted,
 		span: span.clone(),
@@ -1111,8 +1128,18 @@ pub fn resolve(
 			HoistedStmt::Class(_span, privacy, ident, generics, decl_span, body) => {
 				check_privacy(privacy, context.clone());
 				check_case(ident.span(), ident.to_string(), Case::PascalCase);
+				println!("begin class");
 				let name = ident.to_string();
-				let crs = resolved_scope.clone();
+				println!("clone begin");
+				let crs = ResolvedScope {
+					data: RefCell::new(InheritableData::default()),
+					stmts: vec![],
+					// TODO: get rid of this clone
+					inherit: Some(Rc::new(resolved_scope.clone())),
+					old_hoisted: body.clone(),
+					span: decl_span.clone(),
+				};
+				println!("clone end");
 				let mut ty = ResolvedMadeType {
 					name: name.clone(),
 					generic_count: generics.len(),
@@ -1123,6 +1150,7 @@ pub fn resolve(
 				};
 				crs.add_type(decl_span.clone(), name.clone(), ty.clone());
 				for generic in generics {
+					println!("adding generic");
 					check_case(generic.span(), generic.to_string(), Case::PascalCase);
 					let name = generic.to_string();
 					crs.add_type(
@@ -1139,8 +1167,10 @@ pub fn resolve(
 						},
 					)
 				}
-				let scope = resolve(body.clone(), Context::Class, Some(&crs), None).0 .0;
+				println!("resolving class");
+				let scope = resolve(body, Context::Class, Some(&crs), None).0 .0;
 				ty.body = Some(scope);
+				println!("end class");
 				resolved_scope.add_type(decl_span, name, ty);
 			}
 			HoistedStmt::Import(_span, _glob, _imported) => {}
