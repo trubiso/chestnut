@@ -56,9 +56,9 @@ pub struct HoistedScopeData<'a> {
 
 #[derive(Debug, Clone)]
 pub struct HoistedScope<'a> {
-	pub data: HoistedScopeData<'a>,
+	pub data: RefCell<HoistedScopeData<'a>>,
 	pub stmts: RefCell<Vec<HoistedStmt<'a>>>,
-	pub inherit: Option<&'a HoistedScope<'a>>,
+	pub inherit: Option<Box<HoistedScope<'a>>>,
 	pub span: Span,
 }
 
@@ -69,14 +69,14 @@ impl fmt::Display for HoistedScope<'_> {
 }
 
 impl<'a> HoistedScope<'a> {
-	get_datum!(get_type get_type_mut has_type add_type => types (MadeTypeSignature));
+	get_datum!(get_type get_type_mut has_type add_type => types (MadeTypeSignature<'a>));
 	get_datum!(get_type_span get_type_span_mut has_type_span add_type_span => type_spans (Span));
-	get_datum!(get_var get_var_mut has_var add_var => vars (HoistedType));
+	get_datum!(get_var get_var_mut has_var add_var => vars (HoistedType<'a>));
 	get_datum!(get_var_span get_var_span_mut has_var_span add_var_span => var_spans (Span));
-	get_datum!(get_func get_func_mut has_func add_func => funcs (HoistedFuncSignature));
+	get_datum!(get_func get_func_mut has_func add_func => funcs (HoistedFuncSignature<'a>));
 	get_datum!(get_func_span get_func_span_mut has_func_span add_func_span => func_spans (Span));
 
-	pub fn stmts_mut(&self) -> RefMut<'a, Vec<HoistedStmt>> {
+	pub fn stmts_mut(&self) -> RefMut<Vec<HoistedStmt<'a>>> {
 		self.stmts.borrow_mut()
 	}
 }
@@ -96,7 +96,7 @@ impl ParserExpr {
 	// NOTE: what should we do here? maybe just move the values to the "hoisted"
 	// ones, i don't think we need to do anything. we could even get rid of inherit
 	// and save like 100% of this code's .clone()s (or not, lambdas)
-	pub fn hoist<'a>(self, inherit: Option<&HoistedScope>) -> HoistedExpr<'a> {
+	pub fn hoist<'a>(self, inherit: Option<&HoistedScope<'a>>) -> HoistedExpr<'a> {
 		match self {
 			Expr::CharLiteral(a, b) => Expr::CharLiteral(a, b),
 			Expr::StringLiteral(a, b) => Expr::StringLiteral(a, b),
@@ -126,7 +126,7 @@ impl ParserExpr {
 }
 
 impl ParserTypedIdent {
-	pub fn hoist<'a>(self, inherit: Option<&HoistedScope>) -> HoistedTypedIdent<'a> {
+	pub fn hoist<'a>(self, inherit: Option<&HoistedScope<'a>>) -> HoistedTypedIdent<'a> {
 		HoistedTypedIdent {
 			span: self.span,
 			ty: self.ty.hoist(inherit),
@@ -136,7 +136,7 @@ impl ParserTypedIdent {
 }
 
 impl ParserType {
-	pub fn hoist<'a>(self, inherit: Option<&HoistedScope>) -> HoistedType<'a> {
+	pub fn hoist<'a>(self, inherit: Option<&HoistedScope<'a>>) -> HoistedType<'a> {
 		match self {
 			Type::BareType(s, t) => Type::BareType(
 				s,
@@ -163,7 +163,7 @@ impl ParserType {
 }
 
 impl ParserFunc {
-	pub fn hoist<'a>(self, inherit: Option<&'a HoistedScope<'a>>) -> HoistedFunc<'a> {
+	pub fn hoist<'a>(self, inherit: Option<&HoistedScope<'a>>) -> HoistedFunc<'a> {
 		HoistedFunc {
 			span: self.span,
 			return_ty: self.return_ty.hoist(inherit),
@@ -185,7 +185,7 @@ macro_rules! ignore_hoist {
 	};
 }
 
-fn redeclaration_error(name: &str, span: &Span, decl_span: &Span) {
+fn redeclaration_error(name: &str, span: &Span, decl_span: Ref<Span>) {
 	add_diagnostic(
 		Diagnostic::error()
 			.with_message(format!("{name} redeclaration"))
@@ -199,12 +199,14 @@ fn redeclaration_error(name: &str, span: &Span, decl_span: &Span) {
 
 pub fn hoist<'a>(
 	scope: ParserScope,
-	inherit: Option<&'a HoistedScope<'a>>,
-) -> (HoistedScope<'_>, Vec<Diagnostic<usize>>) {
-	let mut hoisted = HoistedScope {
-		data: HoistedScopeData::default(),
+	inherit: Option<&HoistedScope<'a>>,
+) -> (HoistedScope<'a>, Vec<Diagnostic<usize>>) {
+	let hoisted = HoistedScope {
+		data: RefCell::new(HoistedScopeData::default()),
 		stmts: RefCell::new(vec![]),
-		inherit: inherit,
+		// TODO: get rid of this .clone(); i don't know the rust magic to do it
+		// TODO: also prob get rid of this box lol
+		inherit: inherit.map(|x| Box::new(x.clone())),
 		span: scope.span,
 	};
 	// rust is fed up with my types

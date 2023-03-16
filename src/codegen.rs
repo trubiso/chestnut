@@ -202,7 +202,7 @@ pub fn codegen_scope(scope: ResolvedScope) -> String {
 	// TODO: codegen structs
 	let mut predecls = "".to_string();
 	let mut funcs = "".to_string();
-	for (name, func) in scope.data.funcs {
+	for (name, func) in &scope.data.borrow().funcs {
 		predecls += &codegen_func_predecl(&name, &func);
 		funcs += &codegen_func(&name, &func);
 	}
