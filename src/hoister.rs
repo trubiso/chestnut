@@ -31,58 +31,58 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct MadeTypeSignature<'a> {
-	pub fields: HashMap<String, HoistedType<'a>>,
-	pub funcs: HashMap<String, HoistedFuncSignature<'a>>,
+pub struct MadeTypeSignature {
+	pub fields: HashMap<String, HoistedType>,
+	pub funcs: HashMap<String, HoistedFuncSignature>,
 }
 
-pub type HoistedType<'a> = Type<HoistedExpr<'a>>;
-pub type HoistedTypedIdent<'a> = TypedIdent<HoistedType<'a>>;
-pub type HoistedBareType<'a> = BareType<HoistedType<'a>>;
-pub type HoistedFunc<'a> = Func<HoistedExpr<'a>, HoistedScope<'a>>;
-pub type HoistedFuncSignature<'a> = FuncSignature<HoistedType<'a>>;
-pub type HoistedExpr<'a> = Expr<HoistedScope<'a>>;
-pub type HoistedStmt<'a> = Stmt<HoistedExpr<'a>, HoistedFunc<'a>, HoistedScope<'a>>;
+pub type HoistedType = Type<HoistedExpr>;
+pub type HoistedTypedIdent = TypedIdent<HoistedType>;
+pub type HoistedBareType = BareType<HoistedType>;
+pub type HoistedFunc = Func<HoistedExpr, HoistedScope>;
+pub type HoistedFuncSignature = FuncSignature<HoistedType>;
+pub type HoistedExpr = Expr<HoistedScope>;
+pub type HoistedStmt = Stmt<HoistedExpr, HoistedFunc, HoistedScope>;
 
 #[derive(Debug, Default, Clone)]
-pub struct HoistedScopeData<'a> {
-	pub vars: HashMap<String, HoistedType<'a>>,
+pub struct HoistedScopeData {
+	pub vars: HashMap<String, HoistedType>,
 	pub var_spans: HashMap<String, Span>,
-	pub funcs: HashMap<String, HoistedFuncSignature<'a>>,
+	pub funcs: HashMap<String, HoistedFuncSignature>,
 	pub func_spans: HashMap<String, Span>,
-	pub types: HashMap<String, MadeTypeSignature<'a>>,
+	pub types: HashMap<String, MadeTypeSignature>,
 	pub type_spans: HashMap<String, Span>,
 }
 
 #[derive(Debug, Clone)]
-pub struct HoistedScope<'a> {
-	pub data: RefCell<HoistedScopeData<'a>>,
-	pub stmts: RefCell<Vec<HoistedStmt<'a>>>,
-	pub inherit: Option<Box<HoistedScope<'a>>>,
+pub struct HoistedScope {
+	pub data: RefCell<HoistedScopeData>,
+	pub stmts: RefCell<Vec<HoistedStmt>>,
+	pub inherit: Option<Box<HoistedScope>>,
 	pub span: Span,
 }
 
-impl fmt::Display for HoistedScope<'_> {
+impl fmt::Display for HoistedScope {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		self.scope_fmt(f)
 	}
 }
 
-impl<'a> HoistedScope<'a> {
-	get_datum!(get_type get_type_mut has_type add_type => types (MadeTypeSignature<'a>));
+impl HoistedScope {
+	get_datum!(get_type get_type_mut has_type add_type => types (MadeTypeSignature));
 	get_datum!(get_type_span get_type_span_mut has_type_span add_type_span => type_spans (Span));
-	get_datum!(get_var get_var_mut has_var add_var => vars (HoistedType<'a>));
+	get_datum!(get_var get_var_mut has_var add_var => vars (HoistedType));
 	get_datum!(get_var_span get_var_span_mut has_var_span add_var_span => var_spans (Span));
-	get_datum!(get_func get_func_mut has_func add_func => funcs (HoistedFuncSignature<'a>));
+	get_datum!(get_func get_func_mut has_func add_func => funcs (HoistedFuncSignature));
 	get_datum!(get_func_span get_func_span_mut has_func_span add_func_span => func_spans (Span));
 
-	pub fn stmts_mut(&self) -> RefMut<Vec<HoistedStmt<'a>>> {
+	pub fn stmts_mut(&self) -> RefMut<Vec<HoistedStmt>> {
 		self.stmts.borrow_mut()
 	}
 }
 
-impl<'a> Scope<HoistedExpr<'a>> for HoistedScope<'a> {
-	fn stmts(&self) -> &Vec<Stmt<HoistedExpr<'a>, crate::common::Func<HoistedExpr<'a>, Self>, Self>>
+impl Scope<HoistedExpr> for HoistedScope {
+	fn stmts(&self) -> &Vec<Stmt<HoistedExpr, crate::common::Func<HoistedExpr, Self>, Self>>
 	where
 		Self: Sized,
 	{
@@ -96,7 +96,7 @@ impl ParserExpr {
 	// NOTE: what should we do here? maybe just move the values to the "hoisted"
 	// ones, i don't think we need to do anything. we could even get rid of inherit
 	// and save like 100% of this code's .clone()s (or not, lambdas)
-	pub fn hoist<'a>(self, inherit: Option<&HoistedScope<'a>>) -> HoistedExpr<'a> {
+	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedExpr {
 		match self {
 			Expr::CharLiteral(a, b) => Expr::CharLiteral(a, b),
 			Expr::StringLiteral(a, b) => Expr::StringLiteral(a, b),
@@ -126,7 +126,7 @@ impl ParserExpr {
 }
 
 impl ParserTypedIdent {
-	pub fn hoist<'a>(self, inherit: Option<&HoistedScope<'a>>) -> HoistedTypedIdent<'a> {
+	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedTypedIdent {
 		HoistedTypedIdent {
 			span: self.span,
 			ty: self.ty.hoist(inherit),
@@ -136,7 +136,7 @@ impl ParserTypedIdent {
 }
 
 impl ParserType {
-	pub fn hoist<'a>(self, inherit: Option<&HoistedScope<'a>>) -> HoistedType<'a> {
+	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedType {
 		match self {
 			Type::BareType(s, t) => Type::BareType(
 				s,
@@ -163,7 +163,7 @@ impl ParserType {
 }
 
 impl ParserFunc {
-	pub fn hoist<'a>(self, inherit: Option<&HoistedScope<'a>>) -> HoistedFunc<'a> {
+	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedFunc {
 		HoistedFunc {
 			span: self.span,
 			return_ty: self.return_ty.hoist(inherit),
@@ -197,10 +197,10 @@ fn redeclaration_error(name: &str, span: &Span, decl_span: Ref<Span>) {
 	)
 }
 
-pub fn hoist<'a>(
+pub fn hoist(
 	scope: ParserScope,
-	inherit: Option<&HoistedScope<'a>>,
-) -> (HoistedScope<'a>, Vec<Diagnostic<usize>>) {
+	inherit: Option<&HoistedScope>,
+) -> (HoistedScope, Vec<Diagnostic<usize>>) {
 	let hoisted = HoistedScope {
 		data: RefCell::new(HoistedScopeData::default()),
 		stmts: RefCell::new(vec![]),

@@ -1,0 +1,54 @@
+class Node<T> {
+	T value;
+	Node<T>? next;
+
+	public Node new(T value) => Node {
+		value,
+		next: {} // TODO: figure out which way we want to do optionals
+	}
+
+	public void add_element(T value) mut {
+		mut current = &mut this.next;
+		while (current*.next.has_value()) {
+			current = &current.next!;
+		}
+		current*.next = Node(value);
+	}
+
+	public usize size() {
+		mut current = &this.next;
+		usize mut size = 1;
+		while (current*.next.has_value()) {
+			current = &current.next!;
+			size++;
+		}
+		return size;
+	}
+}
+
+extend<T> Node<T> <- IntoIterator<NodeIterator<T>> {
+	NodeIterator<T> iterator() => NodeIterator { current: this };
+}
+
+class NodeIterator<T> {
+	Node<T>? current;
+}
+
+extend<T> NodeIterator<T> <- Iterator<T> {
+	T? next() mut {
+		if (!this.current.has_value()) {
+			return {}; // optionals again
+		}
+		let old_current = this.current;
+		this.current = this.current!.next;
+		return old_current;
+	}
+}
+
+export void main() {
+	mut my_list = Node::new("apple");
+	my_list.add_element("banana");
+	my_list.add_element("orange");
+	println("my list is {} elements long!", my_list.size());
+	my_list.iterator().map((x) => "hello, " + x).for_each((x) => print("{}. ", x));
+}
