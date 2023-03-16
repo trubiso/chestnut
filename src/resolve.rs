@@ -14,14 +14,7 @@ use crate::{
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
-use std::{
-	borrow::{Borrow, BorrowMut},
-	cell::{Ref, RefCell, RefMut},
-	cmp::Ordering,
-	collections::HashMap,
-	fmt,
-	sync::Mutex,
-};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, sync::Mutex};
 
 use self::case::{check_case, Case};
 
@@ -107,9 +100,7 @@ impl fmt::Display for ResolvedScope {
 }
 
 impl Scope<ResolvedExpr> for ResolvedScope {
-	fn stmts(
-		&self,
-	) -> &Vec<Stmt<ResolvedExpr, crate::common::Func<ResolvedExpr, Self>, Self>>
+	fn stmts(&self) -> &Vec<Stmt<ResolvedExpr, crate::common::Func<ResolvedExpr, Self>, Self>>
 	where
 		Self: Sized,
 	{
@@ -129,9 +120,7 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 macro_rules! get_datum {
 	($nget:ident $nmut:ident $nhas:ident $nadd:ident => $ident:ident ($ty:ty)) => {
 		pub fn $nget(&self, name: &str) -> Option<::std::cell::Ref<$ty>> {
-			match ::std::cell::Ref::filter_map(self.data.borrow(), |x| {
-				x.$ident.get(name)
-			}) {
+			match ::std::cell::Ref::filter_map(self.data.borrow(), |x| x.$ident.get(name)) {
 				Ok(x) => Some(x),
 				Err(_) => self.inherit.as_ref()?.$nget(name),
 			}
@@ -312,6 +301,7 @@ impl ResolvedScope {
 		}
 	}
 
+	// TODO: don't own the expr, just ref it!!!
 	pub fn check_expr(&self, expr: ResolvedExpr, context: Context) {
 		match expr {
 			ResolvedExpr::CharLiteral(_, _) => {}
@@ -608,7 +598,7 @@ impl ResolvedScope {
 		func: HoistedFunc,
 		context: Context,
 	) -> ResolvedFunc {
-		let mut frs = self.clone();
+		let frs = self.clone();
 		let mut generics = Vec::new();
 		for generic in &func.generics {
 			// TODO: deal with discarded generics
@@ -649,7 +639,7 @@ impl ResolvedScope {
 			scope
 		} else {
 			resolve(
-				func.body.clone(),
+				func.body,
 				Context::Func,
 				Some(&frs),
 				Some((func_span.clone(), return_ty.span(), return_ty.clone())),
@@ -990,24 +980,25 @@ pub fn resolve(
 	context: Context,
 	inherit: Option<&ResolvedScope>,
 	expected_func_ty: Option<(Span, Span, ResolvedType)>,
-) -> (
-	(ResolvedScope, ResolvedType),
-	Vec<Diagnostic<usize>>,
-) {
-	// TODO: this is SO bad
-	let old_hoisted = scope.clone();
+) -> ((ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>) {
+	let span = scope.span.clone();
+	let stmts = scope.stmts.borrow().clone();
+	let old_hoisted = scope;
 	let mut resolved_scope = ResolvedScope {
 		data: RefCell::new(InheritableData::default()),
 		stmts: vec![],
 		// TODO: get rid of this .clone(); i don't know the rust magic to do it
 		// TODO: also prob get rid of this box lol
-		inherit: inherit.map(|x| Box::new(x.clone())),
+		inherit: inherit.map(|x| {
+			println!("cloning inherit");
+			Box::new(x.clone())
+		}),
 		old_hoisted,
-		span: scope.span.clone(),
+		span: span.clone(),
 	};
-	let mut return_ty = builtin!(scope.span.clone(), Void);
+	let mut return_ty = builtin!(span, Void);
 	let mut return_span = None;
-	for stmt in scope.stmts.borrow().clone() {
+	for stmt in stmts {
 		check_stmt(&stmt, &context);
 		match stmt {
 			HoistedStmt::Create(span, privacy, ty_ident, is_mut, expr) => {
@@ -1121,7 +1112,7 @@ pub fn resolve(
 				check_privacy(privacy, context.clone());
 				check_case(ident.span(), ident.to_string(), Case::PascalCase);
 				let name = ident.to_string();
-				let mut crs = resolved_scope.clone();
+				let crs = resolved_scope.clone();
 				let mut ty = ResolvedMadeType {
 					name: name.clone(),
 					generic_count: generics.len(),
