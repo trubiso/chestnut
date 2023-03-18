@@ -221,7 +221,7 @@ impl ResolvedScope {
 						decl_span = self.get_type_span(&x.ident.to_string()).unwrap().clone();
 					} else if let Some(ty) = self.old_hoisted.get_type(&x.ident.to_string()) {
 						let signature = self.resolve_ty_signature(ty.clone(), context.clone());
-						generics = signature.generics.clone();
+						generics = signature.generics;
 						decl_span = self
 							.old_hoisted
 							.get_type_span(&x.ident.to_string())
@@ -258,10 +258,10 @@ impl ResolvedScope {
 				}
 			}
 			ResolvedType::Ref(_, x, _) | ResolvedType::Optional(_, x) => {
-				self.check_type(*x, context.clone())
+				self.check_type(*x, context)
 			}
 			ResolvedType::Array(_, x, _size) => {
-				self.check_type(*x, context.clone());
+				self.check_type(*x, context);
 			}
 			ResolvedType::Inferred(_) => {}
 			// we might have to remove inferred in some cases because type inference hehehe
@@ -283,7 +283,7 @@ impl ResolvedScope {
 		let name = ty_ident.ident_str();
 		let ty = ty_ident.ty;
 		self.insert_var(
-			&name.clone(),
+			&name,
 			ResolvedVar {
 				name: name.clone(),
 				ty,
@@ -295,7 +295,7 @@ impl ResolvedScope {
 	}
 
 	pub fn add_type(&self, span: Span, name: String, ty: ResolvedMadeType) {
-		self.insert_type(&name.clone(), ty);
+		self.insert_type(&name, ty);
 		self.insert_type_span(&name, span);
 	}
 
@@ -321,7 +321,8 @@ impl ResolvedScope {
 			// TODO: check whether this even works
 			x.value = Some(Some(resolved_expr));
 		} else if let Some(x) = self.old_hoisted.get_var_mutability(&ident.to_string()) {
-			// TODO: our scopes can't modify outer scopes atm, we should probably fix this somehow
+			// TODO: our scopes can't modify outer scopes atm, we should probably fix this
+			// somehow
 			if !*x {
 				let span = ident.span() + resolved_expr.span();
 				let var_span = self.old_hoisted.get_var_span(&ident.to_string()).unwrap();
@@ -348,7 +349,7 @@ impl ResolvedScope {
 
 	pub fn add_func(&self, name: String, func: ResolvedFunc) {
 		let decl_span = func.decl_span.clone();
-		self.insert_func(&name.clone(), func);
+		self.insert_func(&name, func);
 		self.insert_func_span(&name, decl_span);
 	}
 
@@ -867,6 +868,10 @@ impl ResolvedScope {
 	}
 }
 
+// clippy
+type Fields = HashMap<String, ResolvedType>;
+type Funcs = HashMap<String, ResolvedFuncSignature>;
+
 impl ResolvedType {
 	pub fn find_top_generics(self) -> Option<Vec<ResolvedType>> {
 		match self {
@@ -929,11 +934,7 @@ impl ResolvedType {
 		&self,
 		scope: &ResolvedScope,
 		context: Context,
-	) -> Option<(
-		Vec<Ident>,
-		HashMap<String, ResolvedType>,
-		HashMap<String, ResolvedFuncSignature>,
-	)> {
+	) -> Option<(Vec<Ident>, Fields, Funcs)> {
 		match self {
 			Self::BareType(span, ty) => {
 				if scope.has_type(&ty.ident.to_string()) {

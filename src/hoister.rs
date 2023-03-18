@@ -145,7 +145,7 @@ impl ParserExpr {
 			Expr::Identifier(a, b) => Expr::Identifier(a, b),
 			Expr::BinaryOp(a, b, c, d) => Expr::BinaryOp(
 				a,
-				Box::new(b.hoist(inherit.clone())),
+				Box::new(b.hoist(inherit)),
 				c,
 				Box::new(d.hoist(inherit)),
 			),
@@ -153,13 +153,13 @@ impl ParserExpr {
 			Expr::Lambda(a, b) => Expr::Lambda(a, b.hoist(inherit)),
 			Expr::Call(a, b, c, d) => Expr::Call(
 				a,
-				Box::new(b.hoist(inherit.clone())),
-				c.map(|x| x.iter().map(|y| y.clone().hoist(inherit.clone())).collect()),
-				d.iter().map(|x| x.clone().hoist(inherit.clone())).collect(),
+				Box::new(b.hoist(inherit)),
+				c.map(|x| x.iter().map(|y| y.clone().hoist(inherit)).collect()),
+				d.iter().map(|x| x.clone().hoist(inherit)).collect(),
 			),
 			Expr::Dot(a, b, c) => Expr::Dot(
 				a,
-				Box::new(b.hoist(inherit.clone())),
+				Box::new(b.hoist(inherit)),
 				Box::new(c.hoist(inherit)),
 			),
 		}
@@ -437,8 +437,8 @@ pub fn hoist(
 	}
 	if !DIAGNOSTICS.lock().unwrap().is_empty() {
 		let diagnostics = DIAGNOSTICS.lock().unwrap();
-		(hoisted.clone(), diagnostics.clone())
+		(hoisted, diagnostics.clone())
 	} else {
-		(hoisted.clone(), vec![])
+		(hoisted, vec![])
 	}
 }
