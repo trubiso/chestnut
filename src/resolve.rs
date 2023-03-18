@@ -613,7 +613,7 @@ impl ResolvedScope {
 			ResolvedExpr::Dot(span, lhs, rhs) => {
 				let lhs_span = lhs.span();
 				let lhs_ty = self.get_expr_ty(*lhs, context.clone());
-				let Some((fields, funcs)) = lhs_ty.get_underlying(self, context) else { return builtin!(span, Error); };
+				let Some((generic_names, fields, funcs)) = lhs_ty.get_underlying(self, context) else { return builtin!(span, Error); };
 				let rhs_span = rhs.span();
 				let (name, func_stuff) = match *rhs {
 					ResolvedExpr::Identifier(_, x) => (x.to_string(), None),
@@ -623,6 +623,7 @@ impl ResolvedScope {
 					},
 					_ => unreachable!(),
 				};
+				let generic_values = lhs_ty.clone().find_top_generics();
 				let non_existing_diag = |what: &str| {
 					add_diagnostic(
 						Diagnostic::error()
@@ -639,15 +640,16 @@ impl ResolvedScope {
 				match func_stuff {
 					None => {
 						let Some(field) = fields.get(&name) else { return non_existing_diag("member"); };
-						field.clone()
+						field
+							.clone()
+							.replace_generics(span, generic_names, generic_values)
 					}
 					Some((generics, _args)) => {
 						let Some(func) = funcs.get(&name) else { return non_existing_diag("method"); };
-						func.return_ty.clone().replace_generics(
-							span,
-							func.generics.clone(),
-							generics,
-						)
+						func.return_ty
+							.clone()
+							.replace_generics(span.clone(), generic_names, generic_values)
+							.replace_generics(span, func.generics.clone(), generics)
 					}
 				}
 			}
@@ -829,6 +831,17 @@ impl ResolvedScope {
 }
 
 impl ResolvedType {
+	pub fn find_top_generics(self) -> Option<Vec<ResolvedType>> {
+		match self {
+			Self::BareType(_, x) => Some(x.generics),
+			Self::Builtin(..) => None,
+			Self::Array(_, x, _) => x.find_top_generics(),
+			Self::Ref(_, x, _) => x.find_top_generics(),
+			Self::Optional(_, x) => x.find_top_generics(),
+			Self::Inferred(..) => None,
+		}
+	}
+
 	pub fn replace_generic(self, name: Ident, ty: Self) -> Self {
 		match self {
 			Self::BareType(span, x) => {
@@ -880,6 +893,7 @@ impl ResolvedType {
 		scope: &ResolvedScope,
 		context: Context,
 	) -> Option<(
+		Vec<Ident>,
 		HashMap<String, ResolvedType>,
 		HashMap<String, ResolvedFuncSignature>,
 	)> {
@@ -888,6 +902,7 @@ impl ResolvedType {
 				if scope.has_type(&ty.ident.to_string()) {
 					let ty = scope.get_type(&ty.ident.to_string()).unwrap();
 					Some((
+						ty.generics.clone(),
 						ty.fields.clone(),
 						ty.funcs
 							.iter()
@@ -897,8 +912,20 @@ impl ResolvedType {
 				} else if scope.old_hoisted.has_type(&ty.ident.to_string()) {
 					let ty = scope.old_hoisted.get_type(&ty.ident.to_string()).unwrap();
 					Some((
-						ty.fields.iter().map(|(s, x)| (s.clone(), scope.resolve_ty(x.clone(), context.clone()))).collect(),
-						ty.funcs.iter().map(|(s, x)| (s.clone(), scope.resolve_func_signature(x.clone(), context.clone()))).collect(),
+						ty.generics.clone(),
+						ty.fields
+							.iter()
+							.map(|(s, x)| (s.clone(), scope.resolve_ty(x.clone(), context.clone())))
+							.collect(),
+						ty.funcs
+							.iter()
+							.map(|(s, x)| {
+								(
+									s.clone(),
+									scope.resolve_func_signature(x.clone(), context.clone()),
+								)
+							})
+							.collect(),
 					))
 				} else {
 					add_diagnostic(
@@ -928,14 +955,18 @@ impl ResolvedType {
 	pub fn fields(&self, scope: &ResolvedScope, context: Context) -> HashMap<String, ResolvedType> {
 		match self.get_underlying(scope, context) {
 			None => HashMap::new(),
-			Some((fields, _)) => fields,
+			Some((_, fields, _)) => fields,
 		}
 	}
 
-	pub fn funcs(&self, scope: &ResolvedScope, context: Context) -> HashMap<String, ResolvedFuncSignature> {
+	pub fn funcs(
+		&self,
+		scope: &ResolvedScope,
+		context: Context,
+	) -> HashMap<String, ResolvedFuncSignature> {
 		match self.get_underlying(scope, context) {
 			None => HashMap::new(),
-			Some((_, funcs)) => funcs,
+			Some((_, _, funcs)) => funcs,
 		}
 	}
 }
