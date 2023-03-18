@@ -501,7 +501,6 @@ impl ResolvedScope {
 				}
 			}
 			// we check this in the get type function
-			// TODO: still maybe check here
 			ResolvedExpr::Dot(..) => {}
 		}
 	}
@@ -588,7 +587,7 @@ impl ResolvedScope {
 			}
 			ResolvedExpr::Call(span, callee, generics, _args) => {
 				match *callee {
-					ResolvedExpr::Identifier(_, i) => match self.get_func(&i.to_string()) {
+					ResolvedExpr::Identifier(_, ref i) => match self.get_func(&i.to_string()) {
 						Some(x) => {
 							x.return_ty
 								.clone()
@@ -598,7 +597,19 @@ impl ResolvedScope {
 							Some(x) => self
 								.resolve_ty(x.return_ty.clone(), context)
 								.replace_generics(span, x.generics.clone(), generics),
-							None => builtin!(span, Error),
+							None => {
+								let ty = self.get_expr_ty(*callee, context);
+								add_diagnostic(
+									Diagnostic::error()
+										.with_message("tried to call non-function")
+										.with_labels(vec![Label::primary(
+											span.file_id,
+											span.range(),
+										)
+										.with_message(format!("expected function, found {ty}"))]),
+								);
+								builtin!(span, Error)
+							}
 						},
 					},
 					ResolvedExpr::Lambda(_, f) => {
@@ -1228,7 +1239,7 @@ pub fn resolve(
 			}
 			HoistedStmt::Import(_span, _glob, _imported) => {}
 			HoistedStmt::BareExpr(span, expr) => {
-				let resolved_expr = resolved_scope.resolve_and_check_expr(expr, context.clone());
+				let (resolved_expr, _) = resolved_scope.examine_expr(expr, context.clone());
 				resolved_scope
 					.stmts
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));

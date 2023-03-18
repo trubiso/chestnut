@@ -50,7 +50,7 @@ void main() {
 	// print_position(3);
 	// let ~ = do_thing();
 	mut Node<i32> d;
-	let y = d.value;
+	d.value;
 	i32 x = 2 + (3 - 4);
 	mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a += 10;
@@ -64,7 +64,7 @@ void main() {
 	let c = do_thing(3); // TODO: lex /***/ properly
 
 	let aa = 'a';
-	3 + a();
+	// 3 + a(); -> error
 
 	void goofy_void() {
 
@@ -73,7 +73,7 @@ void main() {
 	let b = 'b';
 	let cc = 'c';
 
-	a + b();
+	// a + b(); -> error
 
 	// (string err) => print(err);
 }
