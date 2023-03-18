@@ -66,7 +66,9 @@ pub fn codegen_expr(expr: ResolvedExpr) -> String {
 				.unwrap_or("".to_string()),
 			comma(args, |x| codegen_expr(x.clone()))
 		),
-		ResolvedExpr::Dot(..) => "".into(),
+		ResolvedExpr::Dot(_, lhs, rhs) => {
+			format!("{}.{}", codegen_expr(*lhs), codegen_expr(*rhs))
+		}
 	}
 }
 
