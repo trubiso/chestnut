@@ -30,7 +30,7 @@ where
 	let ret = x();
 	let end = std::time::Instant::now();
 	let duration = end - begin;
-	println!("{name}: {}ms", duration.as_millis());
+	println!("{name}: {}µs", duration.as_micros());
 	ret
 }
 
@@ -136,7 +136,7 @@ fn main() {
 		}
 
 		let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", || {
-			resolve::resolve(hoisted, resolve::Context::TopLevel, None, None)
+			resolve::resolve(hoisted, resolve::Context::TopLevel, None)
 		});
 		for diagnostic in resolved_diagnostics {
 			{

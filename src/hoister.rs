@@ -66,6 +66,8 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
+// TODO: genericize for hoister and resolver to share common type sig class
+// TODO: add field & func decl_spans for better error reporting
 #[derive(Debug, Default, Clone)]
 pub struct MadeTypeSignature {
 	pub generics: Vec<Ident>,
@@ -317,21 +319,17 @@ pub fn hoist(
 				}
 				// TODO: this is stupid, as it will not hoist fully in the top level
 				// TODO: inherit the hoistation
-				let hoisted_scope = hoist(body, Some(&hoisted)).0;
-				// TODO: get the actual made type signature
-				let mut sig = MadeTypeSignature::default();
-				sig.generics = generics.clone();
+				let hoisted_scope = hoist(body.clone(), Some(&hoisted)).0;
+				let vars = hoisted_scope.data.borrow().vars.clone();
+				let funcs = hoisted_scope.data.borrow().funcs.clone();
+				let sig = MadeTypeSignature {
+					generics: generics.clone(),
+					fields: vars,
+					funcs,
+				};
 				hoisted.add_type(&ident.to_string(), sig);
 				hoisted.add_type_span(&ident.to_string(), decl_span.clone());
-				// TODO: hoist the type in for_later
-				hoisted.stmts_mut().push(HoistedStmt::Class(
-					span,
-					privacy,
-					ident,
-					generics,
-					decl_span,
-					hoisted_scope,
-				));
+				for_later.push(Stmt::Class(span, privacy, ident, generics, decl_span, body));
 			}
 			Stmt::Unsafe(span, scope) => {
 				// TODO: properly hoist, like funcs
@@ -397,6 +395,38 @@ pub fn hoist(
 				hoisted
 					.stmts_mut()
 					.push(HoistedStmt::Func(span, privacy, ident, hoisted_func));
+			}
+			Stmt::Class(span, privacy, ident, generics, decl_span, body) => {
+				let crs = HoistedScope {
+					data: RefCell::new(HoistedScopeData::default()),
+					stmts: RefCell::new(vec![]),
+					// TODO: ouchies this clone hurts
+					inherit: Some(Rc::new(hoisted.clone())),
+					span: decl_span.clone(),
+				};
+				for generic in generics.iter() {
+					// TODO: deal with discarded generics
+					let name = generic.to_string();
+					crs.add_type(
+						&name,
+						MadeTypeSignature {
+							generics: vec![],
+							// NOTE: maybe change this
+							fields: HashMap::new(),
+							funcs: HashMap::new(),
+						},
+					);
+					crs.add_type_span(&name, generic.span());
+				}
+				let hoisted_scope = hoist(body, Some(&crs)).0;
+				hoisted.stmts_mut().push(HoistedStmt::Class(
+					span,
+					privacy,
+					ident,
+					generics,
+					decl_span,
+					hoisted_scope,
+				));
 			}
 			_ => unreachable!(),
 		}

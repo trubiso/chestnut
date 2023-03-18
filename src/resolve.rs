@@ -14,7 +14,7 @@ use crate::{
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, rc::Rc, sync::Mutex};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, sync::Mutex};
 
 use self::case::{check_case, Case};
 
@@ -612,8 +612,8 @@ impl ResolvedScope {
 			}
 			ResolvedExpr::Dot(span, lhs, rhs) => {
 				let lhs_span = lhs.span();
-				let lhs_ty = self.get_expr_ty(*lhs, context);
-				let Some((fields, funcs)) = lhs_ty.get_underlying(self) else { return builtin!(span, Error); };
+				let lhs_ty = self.get_expr_ty(*lhs, context.clone());
+				let Some((fields, funcs)) = lhs_ty.get_underlying(self, context) else { return builtin!(span, Error); };
 				let rhs_span = rhs.span();
 				let (name, func_stuff) = match *rhs {
 					ResolvedExpr::Identifier(_, x) => (x.to_string(), None),
@@ -704,14 +704,13 @@ impl ResolvedScope {
 		// TODO: use resolved scope
 		let mut return_ty = resolved_return_ty;
 		let body = if return_ty.is_inferred() {
-			let ((scope, ty), _) = resolve(func.body, Context::Func, Some(&frs), None);
+			let ((scope, ty), _) = resolve(func.body, Context::Func, None);
 			return_ty = ty;
 			scope
 		} else {
 			resolve(
 				func.body,
 				Context::Func,
-				Some(&frs),
 				Some((func_span.clone(), return_ty.span(), return_ty.clone())),
 			)
 			.0
@@ -879,6 +878,7 @@ impl ResolvedType {
 	pub fn get_underlying(
 		&self,
 		scope: &ResolvedScope,
+		context: Context,
 	) -> Option<(
 		HashMap<String, ResolvedType>,
 		HashMap<String, ResolvedFuncSignature>,
@@ -893,6 +893,12 @@ impl ResolvedType {
 							.iter()
 							.map(|(s, x)| (s.clone(), x.signature()))
 							.collect(),
+					))
+				} else if scope.old_hoisted.has_type(&ty.ident.to_string()) {
+					let ty = scope.old_hoisted.get_type(&ty.ident.to_string()).unwrap();
+					Some((
+						ty.fields.iter().map(|(s, x)| (s.clone(), scope.resolve_ty(x.clone(), context.clone()))).collect(),
+						ty.funcs.iter().map(|(s, x)| (s.clone(), scope.resolve_func_signature(x.clone(), context.clone()))).collect(),
 					))
 				} else {
 					add_diagnostic(
@@ -919,15 +925,15 @@ impl ResolvedType {
 		}
 	}
 
-	pub fn fields(&self, scope: &ResolvedScope) -> HashMap<String, ResolvedType> {
-		match self.get_underlying(scope) {
+	pub fn fields(&self, scope: &ResolvedScope, context: Context) -> HashMap<String, ResolvedType> {
+		match self.get_underlying(scope, context) {
 			None => HashMap::new(),
 			Some((fields, _)) => fields,
 		}
 	}
 
-	pub fn funcs(&self, scope: &ResolvedScope) -> HashMap<String, ResolvedFuncSignature> {
-		match self.get_underlying(scope) {
+	pub fn funcs(&self, scope: &ResolvedScope, context: Context) -> HashMap<String, ResolvedFuncSignature> {
+		match self.get_underlying(scope, context) {
 			None => HashMap::new(),
 			Some((_, funcs)) => funcs,
 		}
@@ -1050,7 +1056,6 @@ check_stmt!(
 pub fn resolve(
 	scope: HoistedScope,
 	context: Context,
-	inherit: Option<&ResolvedScope>,
 	expected_func_ty: Option<(Span, Span, ResolvedType)>,
 ) -> ((ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>) {
 	let span = scope.span.clone();
@@ -1178,12 +1183,6 @@ pub fn resolve(
 				check_privacy(privacy, context.clone());
 				check_case(ident.span(), ident.to_string(), Case::PascalCase);
 				let name = ident.to_string();
-				let crs = ResolvedScope {
-					data: RefCell::new(InheritableData::default()),
-					stmts: vec![],
-					old_hoisted: body.clone(),
-					span: decl_span.clone(),
-				};
 				let mut ty = ResolvedMadeType {
 					name: name.clone(),
 					generics: generics.clone(),
@@ -1192,25 +1191,7 @@ pub fn resolve(
 					body: None,
 					is_generic: false,
 				};
-				crs.add_type(decl_span.clone(), name.clone(), ty.clone());
-				for generic in generics {
-					check_case(generic.span(), generic.to_string(), Case::PascalCase);
-					let name = generic.to_string();
-					crs.add_type(
-						generic.span(),
-						name.clone(),
-						ResolvedMadeType {
-							name,
-							generics: vec![],
-							// NOTE: potentially in the future we will change this
-							fields: HashMap::new(),
-							funcs: HashMap::new(),
-							body: None,
-							is_generic: true,
-						},
-					)
-				}
-				let scope = resolve(body, Context::Class, Some(&crs), None).0 .0;
+				let scope = resolve(body, Context::Class, None).0 .0;
 				ty.body = Some(scope);
 				resolved_scope.add_type(decl_span, name, ty);
 			}
@@ -1222,9 +1203,7 @@ pub fn resolve(
 					.push(ResolvedStmt::BareExpr(span, resolved_expr));
 			}
 			HoistedStmt::Unsafe(span, scope) => {
-				let resolved = resolve(scope, Context::Unsafe, Some(&resolved_scope), None)
-					.0
-					 .0;
+				let resolved = resolve(scope, Context::Unsafe, None).0 .0;
 				resolved_scope
 					.stmts
 					.push(ResolvedStmt::Unsafe(span, resolved));
