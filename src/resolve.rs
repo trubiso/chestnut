@@ -320,6 +320,22 @@ impl ResolvedScope {
 			}
 			// TODO: check whether this even works
 			x.value = Some(Some(resolved_expr));
+		} else if let Some(x) = self.old_hoisted.get_var_mutability(&ident.to_string()) {
+			// TODO: our scopes can't modify outer scopes atm, we should probably fix this somehow
+			if !*x {
+				let span = ident.span() + resolved_expr.span();
+				let var_span = self.old_hoisted.get_var_span(&ident.to_string()).unwrap();
+				add_diagnostic(
+					Diagnostic::error()
+						.with_message("tried to set non-mut symbol")
+						.with_labels(vec![
+							Label::primary(span.file_id, span.range()),
+							Label::secondary(var_span.file_id, var_span.range())
+								.with_message("original declaration here"),
+						]),
+				);
+				return;
+			}
 		} else {
 			let span = ident.span() + resolved_expr.span();
 			add_diagnostic(
@@ -585,7 +601,11 @@ impl ResolvedScope {
 				// TODO: resolve lambda
 				builtin!(span, Error)
 			}
-			ResolvedExpr::Call(span, callee, generics, _args) => {
+			ResolvedExpr::Call(span, callee, generics, args) => {
+				// we need this!
+				for arg in args {
+					self.check_and_get_expr_ty(arg, context.clone());
+				}
 				match *callee {
 					ResolvedExpr::Identifier(_, ref i) => match self.get_func(&i.to_string()) {
 						Some(x) => {

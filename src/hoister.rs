@@ -86,6 +86,7 @@ pub type HoistedStmt = Stmt<HoistedExpr, HoistedFunc, HoistedScope>;
 #[derive(Debug, Default, Clone)]
 pub struct HoistedScopeData {
 	pub vars: HashMap<String, HoistedType>,
+	pub var_mutabilities: HashMap<String, bool>,
 	pub var_spans: HashMap<String, Span>,
 	pub funcs: HashMap<String, HoistedFuncSignature>,
 	pub func_spans: HashMap<String, Span>,
@@ -111,6 +112,7 @@ impl HoistedScope {
 	get_datum!(get_type get_type_mut has_type add_type => types (MadeTypeSignature));
 	get_datum!(get_type_span get_type_span_mut has_type_span add_type_span => type_spans (Span));
 	get_datum!(get_var get_var_mut has_var add_var => vars (HoistedType));
+	get_datum!(get_var_mutability get_var_mutability_mut has_var_mutability add_var_mutability => var_mutabilities (bool));
 	get_datum!(get_var_span get_var_span_mut has_var_span add_var_span => var_spans (Span));
 	get_datum!(get_func get_func_mut has_func add_func => funcs (HoistedFuncSignature));
 	get_datum!(get_func_span get_func_span_mut has_func_span add_func_span => func_spans (Span));
@@ -263,6 +265,7 @@ pub fn hoist(
 					&ty_ident.ident_str(),
 					ty_ident.ty.clone().hoist(Some(&hoisted)),
 				);
+				hoisted.add_var_mutability(&ty_ident.ident_str(), is_mut);
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
 				let hoisted_ty_ident = ty_ident.hoist(Some(&hoisted));
 				// NOTE: ???????
@@ -284,6 +287,7 @@ pub fn hoist(
 					&ty_ident.ident_str(),
 					ty_ident.ty.clone().hoist(Some(&hoisted)),
 				);
+				hoisted.add_var_mutability(&ty_ident.ident_str(), is_mut);
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
 				let hoisted_ty_ident = ty_ident.hoist(Some(&hoisted));
 				hoisted.stmts_mut().push(HoistedStmt::Declare(

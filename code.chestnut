@@ -49,6 +49,12 @@ i32 do_thing(i32 only_arg) {
 void main() {
 	// print_position(3);
 	// let ~ = do_thing();
+	mut i32 t;
+	unsafe {
+		t = 10;
+	}
+	t = t;
+	print<i32>(t);
 	mut Node<i32> d;
 	d.value;
 	i32 x = 2 + (3 - 4);
