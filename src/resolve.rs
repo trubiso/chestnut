@@ -371,9 +371,9 @@ impl ResolvedScope {
 						let mut diagnostic = Diagnostic::error()
 							.with_message("accessed variable's value before giving it one")
 							.with_labels(vec![Label::primary(span.file_id, span.range())]);
-						if let Some(declspan) = self.get_var_span(&ident.to_string()) {
+						if let Some(decl_span) = self.get_var_span(&ident.to_string()) {
 							diagnostic.labels.push(
-								Label::secondary(declspan.file_id, declspan.range())
+								Label::secondary(decl_span.file_id, decl_span.range())
 									.with_message("original declaration here"),
 							)
 						}
@@ -622,8 +622,9 @@ impl ResolvedScope {
 				}
 			}
 			ResolvedExpr::Dot(span, lhs, rhs) => {
+				// TODO: check for field privacy
 				let lhs_span = lhs.span();
-				let lhs_ty = self.get_expr_ty(*lhs, context.clone());
+				let lhs_ty = self.check_and_get_expr_ty(*lhs, context.clone());
 				let Some((generic_names, fields, funcs)) = lhs_ty.get_underlying(self, context) else { return builtin!(span, Error); };
 				let rhs_span = rhs.span();
 				let (name, func_stuff) = match *rhs {
@@ -788,6 +789,11 @@ impl ResolvedScope {
 		let resolved_expr = self.resolve_expr(expr, context.clone());
 		self.check_expr(resolved_expr.clone(), context);
 		resolved_expr
+	}
+
+	pub fn check_and_get_expr_ty(&self, expr: ResolvedExpr, context: Context) -> ResolvedType {
+		self.check_expr(expr.clone(), context.clone());
+		self.get_expr_ty(expr, context)
 	}
 
 	pub fn examine_expr(
