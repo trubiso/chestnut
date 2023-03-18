@@ -4,8 +4,8 @@ use crate::{
 		TypedIdent,
 	},
 	hoister::{
-		HoistedBareType, HoistedExpr, HoistedFunc, HoistedScope, HoistedStmt, HoistedType,
-		HoistedTypedIdent,
+		HoistedBareType, HoistedExpr, HoistedFunc, HoistedFuncSignature, HoistedScope, HoistedStmt,
+		HoistedType, HoistedTypedIdent, MadeTypeSignature,
 	},
 	lexer::Operator,
 	parser::types::Ident,
@@ -14,7 +14,7 @@ use crate::{
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, sync::Mutex, rc::Rc};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, rc::Rc, sync::Mutex};
 
 use self::case::{check_case, Case};
 
@@ -88,7 +88,6 @@ pub struct InheritableData {
 pub struct ResolvedScope {
 	pub data: RefCell<InheritableData>,
 	pub stmts: Vec<ResolvedStmt>,
-	pub inherit: Option<Rc<ResolvedScope>>,
 	// TODO: we don't care about the stmts, only inherit and data
 	pub old_hoisted: HoistedScope,
 	pub span: Span,
@@ -117,13 +116,12 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
-#[macro_export]
 macro_rules! get_datum {
 	($nget:ident $nmut:ident $nhas:ident $nadd:ident => $ident:ident ($ty:ty)) => {
 		pub fn $nget(&self, name: &str) -> Option<::std::cell::Ref<$ty>> {
 			match ::std::cell::Ref::filter_map(self.data.borrow(), |x| x.$ident.get(name)) {
 				Ok(x) => Some(x),
-				Err(_) => self.inherit.as_ref()?.$nget(name),
+				Err(_) => None,
 			}
 		}
 
@@ -132,17 +130,12 @@ macro_rules! get_datum {
 				x.$ident.get_mut(name)
 			}) {
 				Ok(x) => Some(x),
-				Err(_) => self.inherit.as_ref()?.$nmut(name),
+				Err(_) => None,
 			}
 		}
 
 		pub fn $nhas(&self, name: &str) -> bool {
 			self.data.borrow().$ident.contains_key(name)
-				|| self
-					.inherit
-					.as_ref()
-					.map(|x| x.$nhas(name))
-					.unwrap_or(false)
 		}
 
 		pub fn $nadd(&self, name: &str, thing: $ty) {
@@ -162,7 +155,48 @@ impl ResolvedScope {
 	get_datum!(get_func get_func_mut has_func insert_func => funcs (ResolvedFunc));
 	get_datum!(get_func_span get_func_span_mut has_func_span insert_func_span => func_spans (Span));
 
-	pub fn check_type(&self, ty: ResolvedType) {
+	pub fn resolve_func_signature(
+		&self,
+		func: HoistedFuncSignature,
+		context: Context,
+	) -> ResolvedFuncSignature {
+		ResolvedFuncSignature {
+			generics: func.generics,
+			arg_tys: func
+				.arg_tys
+				.iter()
+				.map(|x| self.resolve_ty(x.clone(), context.clone()))
+				.collect(),
+			return_ty: self.resolve_ty(func.return_ty, context),
+		}
+	}
+
+	pub fn resolve_ty_signature(
+		&self,
+		ty: MadeTypeSignature,
+		context: Context,
+	) -> ResolvedMadeTypeSignature {
+		ResolvedMadeTypeSignature {
+			generics: ty.generics,
+			fields: ty
+				.fields
+				.iter()
+				.map(|(name, x)| (name.clone(), self.resolve_ty(x.clone(), context.clone())))
+				.collect(),
+			funcs: ty
+				.funcs
+				.iter()
+				.map(|(name, x)| {
+					(
+						name.clone(),
+						self.resolve_func_signature(x.clone(), context.clone()),
+					)
+				})
+				.collect(),
+		}
+	}
+
+	pub fn check_type(&self, ty: ResolvedType, context: Context) {
 		match ty {
 			ResolvedType::BareType(span, x) => {
 				if [
@@ -178,12 +212,35 @@ impl ResolvedScope {
 								.with_labels(vec![Label::primary(span.file_id, span.range())]),
 						)
 					}
-				} else if let Some(ty) = self.get_type(&x.ident.to_string()) {
-					if ty.generic_count != x.generics.len() {
-						let decl_span = self.get_type_span(&x.ident.to_string()).unwrap();
+				} else {
+					let generics;
+					let decl_span;
+					let mut found = true;
+					if let Some(ty) = self.get_type(&x.ident.to_string()) {
+						generics = ty.generics.clone();
+						decl_span = self.get_type_span(&x.ident.to_string()).unwrap().clone();
+					} else if let Some(ty) = self.old_hoisted.get_type(&x.ident.to_string()) {
+						let signature = self.resolve_ty_signature(ty.clone(), context.clone());
+						generics = signature.generics.clone();
+						decl_span = self
+							.old_hoisted
+							.get_type_span(&x.ident.to_string())
+							.unwrap()
+							.clone();
+					} else {
+						generics = vec![];
+						decl_span = x.ident.span();
+						found = false;
 						add_diagnostic(
 							Diagnostic::error()
-								.with_message(match x.generics.len().cmp(&ty.generic_count) {
+								.with_message("tried to use undeclared type")
+								.with_labels(vec![Label::primary(span.file_id, span.range())]),
+						);
+					}
+					if generics.len() != x.generics.len() && found {
+						add_diagnostic(
+							Diagnostic::error()
+								.with_message(match x.generics.len().cmp(&generics.len()) {
 									Ordering::Less => "not enough generics in type",
 									Ordering::Greater => "too many generics in type",
 									_ => unreachable!(),
@@ -195,20 +252,16 @@ impl ResolvedScope {
 								]),
 						);
 					}
-				} else {
-					add_diagnostic(
-						Diagnostic::error()
-							.with_message("tried to use undeclared type")
-							.with_labels(vec![Label::primary(span.file_id, span.range())]),
-					);
 				}
 				for generic in x.generics {
-					self.check_type(generic);
+					self.check_type(generic, context.clone());
 				}
 			}
-			ResolvedType::Ref(_, x, _) | ResolvedType::Optional(_, x) => self.check_type(*x),
+			ResolvedType::Ref(_, x, _) | ResolvedType::Optional(_, x) => {
+				self.check_type(*x, context.clone())
+			}
 			ResolvedType::Array(_, x, _size) => {
-				self.check_type(*x);
+				self.check_type(*x, context.clone());
 			}
 			ResolvedType::Inferred(_) => {}
 			// we might have to remove inferred in some cases because type inference hehehe
@@ -286,7 +339,10 @@ impl ResolvedScope {
 	pub fn check_ident_exists(&self, ident: Ident) {
 		let vars_has = self.has_var(&ident.to_string());
 		let funcs_has = self.has_func(&ident.to_string());
-		if !vars_has && !funcs_has {
+		let hoisted_vars_has = self.old_hoisted.has_var(&ident.to_string());
+		let hoisted_funcs_has = self.old_hoisted.has_func(&ident.to_string());
+		let hoisted_has = hoisted_vars_has || hoisted_funcs_has;
+		if !vars_has && !funcs_has && !hoisted_has {
 			if self.old_hoisted.has_func(&ident.to_string())
 				|| self.old_hoisted.has_var(&ident.to_string())
 			{
@@ -461,7 +517,12 @@ impl ResolvedScope {
 			ResolvedExpr::Identifier(span, ident) => self
 				.get_var(&ident.to_string())
 				.map(|x| x.ty.clone())
-				.unwrap_or_else(|| builtin!(span, Error)),
+				.unwrap_or_else(|| {
+					self.old_hoisted
+						.get_var(&ident.to_string())
+						.map(|x| self.resolve_ty(x.clone(), context))
+						.unwrap_or_else(|| builtin!(span, Error))
+				}),
 			ResolvedExpr::BinaryOp(span, lhs, op, rhs) => {
 				let lhs_span = lhs.span();
 				let rhs_span = rhs.span();
@@ -599,19 +660,14 @@ impl ResolvedScope {
 		func: HoistedFunc,
 		context: Context,
 	) -> ResolvedFunc {
-		println!("begin func");
-		println!("[func] cloning inherit");
 		let frs = ResolvedScope {
 			data: RefCell::new(InheritableData::default()),
 			stmts: vec![],
-			// TODO: get rid of this clone
-			inherit: Some(Rc::new(self.clone())),
 			old_hoisted: func.body.clone(),
 			span: func.decl_span.clone(),
 		};
 		let mut generics = Vec::new();
 		for generic in &func.generics {
-			println!("[func] adding generic");
 			// TODO: deal with discarded generics
 			generics.push(generic.clone());
 			let name = generic.to_string();
@@ -621,7 +677,7 @@ impl ResolvedScope {
 				name.clone(),
 				ResolvedMadeType {
 					name,
-					generic_count: 0,
+					generics: vec![],
 					fields: HashMap::new(), // NOTE: potentially in the future we will change this
 					funcs: HashMap::new(),
 					body: None,
@@ -629,13 +685,14 @@ impl ResolvedScope {
 				},
 			);
 		}
-		println!("resolving return ty");
 		let resolved_return_ty = self.resolve_ty(func.return_ty, context.clone());
-		frs.check_type(resolved_return_ty.clone());
+		frs.check_type(resolved_return_ty.clone(), context.clone());
 		for arg in &func.args {
-			println!("adding arg");
 			// TODO: deal with discarded args
-			frs.check_type(self.resolve_ty(arg.ty.clone(), context.clone()));
+			frs.check_type(
+				self.resolve_ty(arg.ty.clone(), context.clone()),
+				context.clone(),
+			);
 			check_case(arg.ident.span(), arg.ident.to_string(), Case::SnakeCase);
 			frs.add_var(
 				arg.span.clone(),
@@ -646,7 +703,6 @@ impl ResolvedScope {
 		}
 		// TODO: use resolved scope
 		let mut return_ty = resolved_return_ty;
-		println!("resolving inner scope");
 		let body = if return_ty.is_inferred() {
 			let ((scope, ty), _) = resolve(func.body, Context::Func, Some(&frs), None);
 			return_ty = ty;
@@ -661,7 +717,6 @@ impl ResolvedScope {
 			.0
 			 .0
 		};
-		println!("final steps");
 		let attribs = func.attribs.clone();
 		let mut args = vec![];
 		for arg in func.args {
@@ -671,7 +726,6 @@ impl ResolvedScope {
 				ident: arg.ident,
 			});
 		}
-		println!("end func");
 		ResolvedFunc {
 			span: func_span,
 			generics,
@@ -891,6 +945,7 @@ pub struct ResolvedVar {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ResolvedMadeTypeSignature {
+	pub generics: Vec<Ident>,
 	pub fields: HashMap<String, ResolvedType>,
 	pub funcs: HashMap<String, ResolvedFuncSignature>,
 }
@@ -898,7 +953,7 @@ pub struct ResolvedMadeTypeSignature {
 #[derive(Debug, Clone)]
 pub struct ResolvedMadeType {
 	pub name: String,
-	pub generic_count: usize, // TODO: ResolvedGeneric
+	pub generics: Vec<Ident>, // TODO: ResolvedGeneric
 	pub fields: HashMap<String, ResolvedType>,
 	pub funcs: HashMap<String, ResolvedFunc>,
 	pub body: Option<ResolvedScope>, // if it's a generic no body defines it
@@ -908,6 +963,7 @@ pub struct ResolvedMadeType {
 impl ResolvedMadeType {
 	pub fn signature(&self) -> ResolvedMadeTypeSignature {
 		ResolvedMadeTypeSignature {
+			generics: self.generics.clone(),
 			fields: self.fields.clone(),
 			funcs: self
 				.funcs
@@ -997,19 +1053,12 @@ pub fn resolve(
 	inherit: Option<&ResolvedScope>,
 	expected_func_ty: Option<(Span, Span, ResolvedType)>,
 ) -> ((ResolvedScope, ResolvedType), Vec<Diagnostic<usize>>) {
-	println!("new resolve call just dropped");
 	let span = scope.span.clone();
 	let stmts = scope.stmts.borrow().clone();
 	let old_hoisted = scope;
 	let mut resolved_scope = ResolvedScope {
 		data: RefCell::new(InheritableData::default()),
 		stmts: vec![],
-		// TODO: get rid of this .clone(); i don't know the rust magic to do it
-		// TODO: also prob get rid of this box lol
-		inherit: inherit.map(|x| {
-			println!("cloning inherit");
-			Rc::new(x.clone())
-		}),
 		old_hoisted,
 		span: span.clone(),
 	};
@@ -1026,7 +1075,7 @@ pub fn resolve(
 					ty_ident.ident.to_string(),
 					Case::SnakeCase,
 				);
-				resolved_scope.check_type(ty_ident.ty.clone());
+				resolved_scope.check_type(ty_ident.ty.clone(), context.clone());
 				let rhs_span = expr.span();
 				let (resolved_expr, rhs) = resolved_scope.examine_expr(expr, context.clone());
 				let lhs = ty_ident.ty.clone();
@@ -1077,7 +1126,7 @@ pub fn resolve(
 					ty_ident.ident.to_string(),
 					Case::SnakeCase,
 				);
-				resolved_scope.check_type(ty_ident.ty.clone());
+				resolved_scope.check_type(ty_ident.ty.clone(), context.clone());
 				resolved_scope.add_var(span.clone(), ty_ident.clone(), is_mut, None);
 				resolved_scope
 					.stmts
@@ -1128,21 +1177,16 @@ pub fn resolve(
 			HoistedStmt::Class(_span, privacy, ident, generics, decl_span, body) => {
 				check_privacy(privacy, context.clone());
 				check_case(ident.span(), ident.to_string(), Case::PascalCase);
-				println!("begin class");
 				let name = ident.to_string();
-				println!("clone begin");
 				let crs = ResolvedScope {
 					data: RefCell::new(InheritableData::default()),
 					stmts: vec![],
-					// TODO: get rid of this clone
-					inherit: Some(Rc::new(resolved_scope.clone())),
 					old_hoisted: body.clone(),
 					span: decl_span.clone(),
 				};
-				println!("clone end");
 				let mut ty = ResolvedMadeType {
 					name: name.clone(),
-					generic_count: generics.len(),
+					generics: generics.clone(),
 					fields: HashMap::new(), // TODO
 					funcs: HashMap::new(),  // TODO
 					body: None,
@@ -1150,7 +1194,6 @@ pub fn resolve(
 				};
 				crs.add_type(decl_span.clone(), name.clone(), ty.clone());
 				for generic in generics {
-					println!("adding generic");
 					check_case(generic.span(), generic.to_string(), Case::PascalCase);
 					let name = generic.to_string();
 					crs.add_type(
@@ -1158,7 +1201,7 @@ pub fn resolve(
 						name.clone(),
 						ResolvedMadeType {
 							name,
-							generic_count: 0,
+							generics: vec![],
 							// NOTE: potentially in the future we will change this
 							fields: HashMap::new(),
 							funcs: HashMap::new(),
@@ -1167,10 +1210,8 @@ pub fn resolve(
 						},
 					)
 				}
-				println!("resolving class");
 				let scope = resolve(body, Context::Class, Some(&crs), None).0 .0;
 				ty.body = Some(scope);
-				println!("end class");
 				resolved_scope.add_type(decl_span, name, ty);
 			}
 			HoistedStmt::Import(_span, _glob, _imported) => {}

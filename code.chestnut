@@ -6,14 +6,6 @@ void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
 
 void print_grid(GridPiece&[3][4]?[] pieces) {}
 
-export i32 do_thing(Array<~> arr) {
-	return 0;
-}
-
-export i32 do_thing(Array<~> arr) {
-	return 0;
-}
-
 void print(string arg) {
 
 }

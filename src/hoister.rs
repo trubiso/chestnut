@@ -1,19 +1,55 @@
 use crate::{
 	common::{BareType, Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypedIdent},
-	get_datum,
 	parser::types::{
-		ParserExpr, ParserFunc, ParserScope, ParserStmt, ParserType, ParserTypedIdent,
+		Ident, ParserExpr, ParserFunc, ParserScope, ParserStmt, ParserType, ParserTypedIdent,
 	},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use lazy_static::lazy_static;
 use std::{
-	cell::{RefCell, RefMut, Ref},
+	cell::{Ref, RefCell, RefMut},
 	collections::HashMap,
 	fmt,
+	rc::Rc,
 	sync::Mutex,
 };
+
+macro_rules! get_datum {
+	($nget:ident $nmut:ident $nhas:ident $nadd:ident => $ident:ident ($ty:ty)) => {
+		pub fn $nget(&self, name: &str) -> Option<::std::cell::Ref<$ty>> {
+			match ::std::cell::Ref::filter_map(self.data.borrow(), |x| x.$ident.get(name)) {
+				Ok(x) => Some(x),
+				Err(_) => self.inherit.as_ref()?.$nget(name),
+			}
+		}
+
+		pub fn $nmut(&self, name: &str) -> Option<::std::cell::RefMut<$ty>> {
+			match ::std::cell::RefMut::filter_map(self.data.borrow_mut(), |x| {
+				x.$ident.get_mut(name)
+			}) {
+				Ok(x) => Some(x),
+				Err(_) => self.inherit.as_ref()?.$nmut(name),
+			}
+		}
+
+		pub fn $nhas(&self, name: &str) -> bool {
+			self.data.borrow().$ident.contains_key(name)
+				|| self
+					.inherit
+					.as_ref()
+					.map(|x| x.$nhas(name))
+					.unwrap_or(false)
+		}
+
+		pub fn $nadd(&self, name: &str, thing: $ty) {
+			self.data
+				.borrow_mut()
+				.$ident
+				.insert(name.to_string(), thing);
+		}
+	};
+}
 
 // TODO: we are converting from parsed elements to hoisted elements. but we are
 // hoisting them in strange places and i feel like it defeats the entire purpose
@@ -32,6 +68,7 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 
 #[derive(Debug, Default, Clone)]
 pub struct MadeTypeSignature {
+	pub generics: Vec<Ident>,
 	pub fields: HashMap<String, HoistedType>,
 	pub funcs: HashMap<String, HoistedFuncSignature>,
 }
@@ -58,7 +95,7 @@ pub struct HoistedScopeData {
 pub struct HoistedScope {
 	pub data: RefCell<HoistedScopeData>,
 	pub stmts: RefCell<Vec<HoistedStmt>>,
-	pub inherit: Option<Box<HoistedScope>>,
+	pub inherit: Option<Rc<HoistedScope>>,
 	pub span: Span,
 }
 
@@ -201,12 +238,14 @@ pub fn hoist(
 	scope: ParserScope,
 	inherit: Option<&HoistedScope>,
 ) -> (HoistedScope, Vec<Diagnostic<usize>>) {
+	// FIXME: make the current hoisted scope into an rc at the beginning and return
+	// rcs to hoisted scopes maybe to stop cloning scopes!!
 	let hoisted = HoistedScope {
 		data: RefCell::new(HoistedScopeData::default()),
 		stmts: RefCell::new(vec![]),
 		// TODO: get rid of this .clone(); i don't know the rust magic to do it
 		// TODO: also prob get rid of this box lol
-		inherit: inherit.map(|x| Box::new(x.clone())),
+		inherit: inherit.map(|x| Rc::new(x.clone())),
 		span: scope.span,
 	};
 	// rust is fed up with my types
@@ -277,9 +316,12 @@ pub fn hoist(
 					redeclaration_error("type", &decl_span, old_decl_span);
 				}
 				// TODO: this is stupid, as it will not hoist fully in the top level
+				// TODO: inherit the hoistation
 				let hoisted_scope = hoist(body, Some(&hoisted)).0;
 				// TODO: get the actual made type signature
-				hoisted.add_type(&ident.to_string(), MadeTypeSignature::default());
+				let mut sig = MadeTypeSignature::default();
+				sig.generics = generics.clone();
+				hoisted.add_type(&ident.to_string(), sig);
 				hoisted.add_type_span(&ident.to_string(), decl_span.clone());
 				// TODO: hoist the type in for_later
 				hoisted.stmts_mut().push(HoistedStmt::Class(
@@ -323,7 +365,35 @@ pub fn hoist(
 	for stmt in for_later {
 		match stmt {
 			Stmt::Func(span, privacy, ident, func) => {
-				let hoisted_func = func.hoist(Some(&hoisted));
+				let frs = HoistedScope {
+					data: RefCell::new(HoistedScopeData::default()),
+					stmts: RefCell::new(vec![]),
+					// TODO: ouchies this clone hurts
+					inherit: Some(Rc::new(hoisted.clone())),
+					span: func.decl_span.clone(),
+				};
+				let mut generics = Vec::new();
+				for generic in &func.generics {
+					// TODO: deal with discarded generics
+					generics.push(generic.clone());
+					let name = generic.to_string();
+					frs.add_type(
+						&name,
+						MadeTypeSignature {
+							generics: vec![],
+							// NOTE: maybe change this
+							fields: HashMap::new(),
+							funcs: HashMap::new(),
+						},
+					);
+					frs.add_type_span(&name, generic.span());
+				}
+				for arg in &func.args {
+					// TODO: deal with discarded args
+					frs.add_var(&arg.ident_str(), arg.ty.clone().hoist(Some(&frs)));
+					frs.add_var_span(&arg.ident_str(), arg.span.clone());
+				}
+				let hoisted_func = func.hoist(Some(&frs));
 				hoisted
 					.stmts_mut()
 					.push(HoistedStmt::Func(span, privacy, ident, hoisted_func));
