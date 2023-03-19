@@ -137,7 +137,7 @@ fn main() {
 		}
 
 		let infer_diagnostics = time(should_time, "infer", || {
-			infer::infer(hoisted.clone(), None, None)
+			infer::infer(hoisted.clone())
 		});
 		for diagnostic in infer_diagnostics {
 			all_diagnostics.push(diagnostic);

@@ -289,7 +289,7 @@ impl HoistedExpr {
 }
 
 // TODO: return useful info
-pub fn infer(
+fn infer_inner(
 	scope: HoistedScope,
 	inherit_idents: Option<&HashMap<String, InferTypeId>>,
 	inherit_named_tys: Option<&HashMap<String, InferTypeId>>,
@@ -336,7 +336,7 @@ pub fn infer(
 					let arg_ty = engine().add_ty(arg_infer_info);
 					func_idents.insert(arg.ident_str(), arg_ty);
 				}
-				infer(func.body, Some(&func_idents), Some(&func_named_tys));
+				infer_inner(func.body, Some(&func_idents), Some(&func_named_tys));
 			}
 			_ => {}
 		}
@@ -353,4 +353,8 @@ pub fn infer(
 	} else {
 		vec![]
 	}
+}
+
+pub fn infer(scope: HoistedScope) -> Vec<Diagnostic<usize>> {
+	infer_inner(scope, None, None)
 }
