@@ -58,7 +58,7 @@ fn emit_errors(files: &SimpleFiles<String, String>, diagnostics: Vec<Diagnostic<
 	);
 }
 
-fn execute_cmd_on_all(name: &str, args: Vec<&str>, cpp_sources: Vec<String>) {
+pub fn execute_cmd_on_all(name: &str, args: Vec<&str>, cpp_sources: Vec<String>) {
 	let mut cmd = std::process::Command::new(name);
 	for arg in args {
 		cmd.arg(arg);
@@ -86,14 +86,14 @@ fn main() {
 	let mut files = SimpleFiles::new();
 	let mut args = std::env::args();
 	args.next();
-	let mut cpp_sources = Vec::new();
-	let mut should_format = false;
+	// let mut cpp_sources = Vec::new();
+	let mut _should_format = false;
 	let mut all_diagnostics = Vec::new();
 	let mut have_errors = false;
 	let mut should_time = false;
 	for arg in args {
 		if arg == "--pretty" {
-			should_format = true;
+			_should_format = true;
 			continue;
 		}
 
@@ -145,40 +145,40 @@ fn main() {
 		}
 
 		// TODO: replace the resolver
-		/*let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", || {
-			resolve::resolve(hoisted, resolve::Context::TopLevel, None)
-		});
-		for diagnostic in resolved_diagnostics {
-			all_diagnostics.push(diagnostic);
-		}
+		// let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", || {
+		// 	resolve::resolve(hoisted, resolve::Context::TopLevel, None)
+		// });
+		// for diagnostic in resolved_diagnostics {
+		// 	all_diagnostics.push(diagnostic);
+		// }
 
 		let current_has_errors = all_diagnostics
 			.iter()
 			.any(|x| x.severity == Severity::Error);
 		have_errors = have_errors || current_has_errors;
-		if !current_has_errors {
-			let code = time(should_time, "codegen", || codegen::codegen(resolved));
+		// if !current_has_errors {
+		// 	let code = time(should_time, "codegen", || codegen::codegen(resolved));
 
-			std::fs::write(format!("{arg}.cpp"), code).unwrap();
-			cpp_sources.push(format!("{arg}.cpp"));
-		}*/
+		// 	std::fs::write(format!("{arg}.cpp"), code).unwrap();
+		// 	cpp_sources.push(format!("{arg}.cpp"));
+		// }
 	}
 
 	if !all_diagnostics.is_empty() {
 		if have_errors {
 			emit_errors(&files, all_diagnostics);
 			println!("errors present, cannot compile :(");
-			return;
+			// return;
 		} else {
 			emit_errors(&files, all_diagnostics);
 		}
 	}
 
-	if should_format {
-		time(should_time, "clang-format", || {
-			execute_cmd_on_all("clang-format", vec!["-i"], cpp_sources.clone())
-		});
-	}
+	// if should_format {
+	// 	time(should_time, "clang-format", || {
+	// 		execute_cmd_on_all("clang-format", vec!["-i"], cpp_sources.clone())
+	// 	});
+	// }
 	// time(should_time, "g++", || {
 	// 	execute_cmd_on_all("g++", vec![], cpp_sources)
 	// });

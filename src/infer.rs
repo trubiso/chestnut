@@ -192,7 +192,7 @@ impl InferEngine {
 			(_, Bottom) => Ok(Bottom),
 
 			(Generics(a, x), Generics(b, y)) if a == b && x.len() == y.len() => {
-				let (a, x, y) = (a.clone(), x.clone(), y.clone());
+				let (a, x, y) = (*a, x.clone(), y.clone());
 				for (a, b) in x.iter().zip(y.iter()) {
 					self.unify(*a, *b, exact)?;
 				}
