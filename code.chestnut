@@ -1,4 +1,4 @@
-class Tuple<A, B> {}
+/*class Tuple<A, B> {}
 class GridPiece {}
 class Array<T> {}
 
@@ -44,7 +44,7 @@ i32 do_thing(i32 only_arg) {
 	let d = a * c;
 	let e = a + b + c + d;
 	return e;
-}
+}*/
 
 void main() {
 	// print_position(3);
@@ -54,9 +54,8 @@ void main() {
 		t = 10;
 	}
 	t = t;
-	print<i32>(t);
-	mut Node<i32> d;
-	d.value;
+	mut i32 d;
+	// d.value;
 	i32 x = 2 + (3 - 4);
 	mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a += 10;
@@ -67,7 +66,7 @@ void main() {
 
 	mut r = 10;
 
-	let c = do_thing(3); // TODO: lex /***/ properly
+
 
 	let aa = 'a';
 	// 3 + a(); -> error
@@ -84,4 +83,4 @@ void main() {
 	// (string err) => print(err);
 }
 
-i32 divided_by_two(i32 x) => x / 2;
+// i32 divided_by_two(i32 x) => x / 2;

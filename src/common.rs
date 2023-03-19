@@ -344,9 +344,16 @@ impl BuiltinType {
 	}
 }
 
-impl NumberLiteral {
+pub enum NumberLiteralKindKind {
+	None,
+	Signed,
+	Unsigned,
+	Float,
+}
+
+impl NumberLiteralKind {
 	pub fn as_ty(&self) -> BuiltinType {
-		match self.kind {
+		match self {
 			NumberLiteralKind::I8 => BuiltinType::I8,
 			NumberLiteralKind::I16 => BuiltinType::I16,
 			NumberLiteralKind::I32 => BuiltinType::I32,
@@ -368,6 +375,37 @@ impl NumberLiteral {
 			NumberLiteralKind::F => BuiltinType::F32,
 			NumberLiteralKind::None => BuiltinType::I32,
 		}
+	}
+
+	pub fn as_useful_infer_info(&self) -> (Option<u8>, NumberLiteralKindKind) {
+		match self {
+			NumberLiteralKind::I8 => (Some(8), NumberLiteralKindKind::Signed),
+			NumberLiteralKind::I16 => (Some(16), NumberLiteralKindKind::Signed),
+			NumberLiteralKind::I32 => (Some(32), NumberLiteralKindKind::Signed),
+			NumberLiteralKind::I64 => (Some(64), NumberLiteralKindKind::Signed),
+			NumberLiteralKind::I128 => (Some(128), NumberLiteralKindKind::Signed),
+			NumberLiteralKind::IZ => (None, NumberLiteralKindKind::Signed),
+			NumberLiteralKind::U8 => (Some(8), NumberLiteralKindKind::Unsigned),
+			NumberLiteralKind::U16 => (Some(16), NumberLiteralKindKind::Unsigned),
+			NumberLiteralKind::U32 => (Some(32), NumberLiteralKindKind::Unsigned),
+			NumberLiteralKind::U64 => (Some(64), NumberLiteralKindKind::Unsigned),
+			NumberLiteralKind::U128 => (Some(128), NumberLiteralKindKind::Unsigned),
+			NumberLiteralKind::UZ => (None, NumberLiteralKindKind::Unsigned),
+			NumberLiteralKind::F16 => (Some(16), NumberLiteralKindKind::Float),
+			NumberLiteralKind::F32 => (Some(32), NumberLiteralKindKind::Float),
+			NumberLiteralKind::F64 => (Some(64), NumberLiteralKindKind::Float),
+			NumberLiteralKind::F128 => (Some(128), NumberLiteralKindKind::Float),
+
+			NumberLiteralKind::U => (Some(0), NumberLiteralKindKind::Unsigned),
+			NumberLiteralKind::F => (Some(0), NumberLiteralKindKind::Float),
+			NumberLiteralKind::None => (Some(0), NumberLiteralKindKind::None),
+		}
+	}
+}
+
+impl NumberLiteral {
+	pub fn as_ty(&self) -> BuiltinType {
+		self.kind.as_ty()
 	}
 }
 

@@ -11,6 +11,7 @@ use crate::span::Span;
 pub mod codegen;
 pub mod common;
 pub mod hoister;
+pub mod infer;
 pub mod lexer;
 pub mod parser;
 pub mod resolve;
@@ -135,6 +136,12 @@ fn main() {
 			all_diagnostics.push(diagnostic);
 		}
 
+		let infer_diagnostics = time(should_time, "infer", || infer::infer(hoisted.clone(), None));
+		for diagnostic in infer_diagnostics {
+			all_diagnostics.push(diagnostic);
+		}
+
+		// TODO: replace the resolver
 		let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", || {
 			resolve::resolve(hoisted, resolve::Context::TopLevel, None)
 		});
