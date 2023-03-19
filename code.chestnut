@@ -7,10 +7,6 @@ void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
 void print_grid(GridPiece&[3][4]?[] pieces) {}
 */
 
-void print(string arg) {
-
-}
-
 void silly() {
 
 }
@@ -50,12 +46,18 @@ i32 do_thing(i32 only_arg) {
 void test() {
 	~& x;
 	u32& y = x;
-	u64& z = y;
 }
 
 i128 lets_return_a_reference() {
 	~x;
 	return x;
+}
+
+T dbg<T>(T item) {
+	unsafe {
+		cpp "std::cout << Chn_item << std::endl;";
+	}
+	return item;
 }
 
 void main() {
@@ -69,10 +71,12 @@ void main() {
 	mut i32 d;
 	// d.value;
 	i32 x = 2 + (3 - 4);
+	i32 iw;
+	iw = add(x, x);
 	mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a += 10;
 	a *= 9 + 10;
-	// print("Hello World!", 9+3-4);
+	let cvxjnk = dbg(-10);
 	4+2+4;
 	// .3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
 

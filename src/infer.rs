@@ -1,5 +1,5 @@
 use crate::{
-	common::{BuiltinType, NumberLiteralKindKind, Stmt, Type},
+	common::{BuiltinType, Expr, NumberLiteralKindKind, Stmt, Type},
 	hoister::{HoistedExpr, HoistedScope, HoistedType},
 	lexer::NumberLiteralKind,
 	span::Span,
@@ -16,7 +16,7 @@ use std::{
 
 type InferTypeId = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InferTypeInfo {
 	/// This type is completely unknown.
 	Unknown,
@@ -43,7 +43,15 @@ pub enum InferTypeInfo {
 	/// This type is passed as a generic to a function or a class. It does not
 	/// unify with anything (in the future it will be able to have trait
 	/// constraints which will let it unify with more types)
+	// TODO: add a name lol
 	Generic,
+	/// This type is an unknown generic that we're trying to resolve in a
+	/// function call, or perhaps the instantiation of a struct.
+	UnknownGeneric(String),
+	/// This type is an unknown generic that has been resolved to another type.
+	/// Practically, it acts like SameAs, except it lets us track what was
+	/// resolved.
+	ResolvedGeneric(String, InferTypeId),
 	/// This type succeeds unification with everything, it is used to avoid
 	/// throwing more errors than necessary.
 	Bottom,
@@ -84,29 +92,47 @@ impl InferTypeInfo {
 			Self::KnownString => "string".into(),
 			Self::KnownChar => "char".into(),
 			Self::Generic => "GENERIC".into(),
+			Self::UnknownGeneric(x) => format!("GENERIC {x}?"),
+			Self::ResolvedGeneric(x, y) => {
+				let reversed_idents = idents.reverse();
+				let name = reversed_idents.get(y).cloned().unwrap_or("anon".into());
+				format!(
+					"GENERIC {x}! = {name} ({})",
+					engine.tys[y].display(engine, idents)
+				)
+			}
 			Self::Bottom => "BOTTOM".into(),
 		}
 	}
 
-	pub fn display_follow_ref(
-		&self,
-		engine: &InferEngine,
-		idents: &HashMap<String, InferTypeId>,
-	) -> String {
+	pub fn display_follow_ref(&self, engine: &InferEngine) -> String {
 		match self {
 			Self::Unknown => "unknown type".into(),
-			Self::SameAs(x) => engine.tys[x].display_follow_ref(engine, idents),
+			Self::SameAs(x) => engine.tys[x].display_follow_ref(engine),
 			Self::AnySigned => "int".into(),
 			Self::AnyUnsigned => "unsigned int".into(),
 			Self::AnyFloat => "float".into(),
 			Self::KnownNumber(x) => format!("numeric type {}", x.as_ty()),
-			Self::Ref(x) => engine.tys[x].display_follow_ref(engine, idents),
+			Self::Ref(x) => engine.tys[x].display_follow_ref(engine),
 			Self::KnownVoid => "void".into(),
 			Self::KnownBool => "bool".into(),
 			Self::KnownString => "string".into(),
 			Self::KnownChar => "char".into(),
 			Self::Generic => "generic type".into(),
+			Self::UnknownGeneric(x) => format!("unknown generic type {x}"),
+			Self::ResolvedGeneric(x, y) => format!(
+				"generic type {x} resolved to {}",
+				engine.tys[y].display_follow_ref(engine)
+			),
 			Self::Bottom => "bottom type".into(),
+		}
+	}
+
+	pub fn follow_ref(&self, engine: &InferEngine) -> InferTypeInfo {
+		match self {
+			Self::SameAs(x) => engine.tys[x].follow_ref(engine),
+			Self::ResolvedGeneric(_, x) => engine.tys[x].follow_ref(engine),
+			other => other.clone(),
 		}
 	}
 }
@@ -130,24 +156,23 @@ impl InferEngine {
 		a: InferTypeId,
 		b: InferTypeId,
 		exact: bool,
-		idents: &HashMap<String, usize>,
-	) -> Result<(), String> {
+	) -> Result<InferTypeInfo, String> {
 		use InferTypeInfo::*;
 		match (&self.tys[&a], &self.tys[&b]) {
-			(SameAs(a), _) => self.unify(*a, b, exact, idents),
-			(_, SameAs(b)) => self.unify(a, *b, exact, idents),
+			(SameAs(a), _) => self.unify(*a, b, exact),
+			(_, SameAs(b)) => self.unify(a, *b, exact),
 
-			(Bottom, _) => Ok(()),
-			(_, Bottom) => Ok(()),
+			(Bottom, _) => Ok(Bottom),
+			(_, Bottom) => Ok(Bottom),
 
-			(Generic, Generic) => Ok(()),
+			(Generic, Generic) => Ok(Generic),
 
-			(KnownVoid, KnownVoid) => Ok(()),
-			(KnownBool, KnownBool) => Ok(()),
-			(KnownString, KnownString) => Ok(()),
-			(KnownChar, KnownChar) => Ok(()),
+			(KnownVoid, KnownVoid) => Ok(KnownVoid),
+			(KnownBool, KnownBool) => Ok(KnownBool),
+			(KnownString, KnownString) => Ok(KnownString),
+			(KnownChar, KnownChar) => Ok(KnownChar),
 
-			(Ref(a), Ref(b)) => self.unify(*a, *b, true, idents),
+			(Ref(a), Ref(b)) => self.unify(*a, *b, true),
 
 			(KnownNumber(an), KnownNumber(bn)) => {
 				if exact {
@@ -158,7 +183,7 @@ impl InferEngine {
 							an.as_ty()
 						));
 					} else {
-						return Ok(());
+						return Ok(KnownNumber(*an));
 					}
 				}
 				use NumberLiteralKindKind::*;
@@ -192,22 +217,37 @@ impl InferEngine {
 					(None, _) => (*bn, *bn),
 				};
 				self.tys.insert(a, KnownNumber(a_result));
-				Ok(())
+				Ok(KnownNumber(a_result))
+			}
+
+			(UnknownGeneric(x), _) => {
+				println!("resolved generic {x} :D");
+				let resolution = ResolvedGeneric(x.clone(), b);
+				let r = x.clone();
+				self.tys.insert(a, resolution);
+				Ok(ResolvedGeneric(r, b))
+			}
+			(_, UnknownGeneric(x)) => {
+				println!("resolved generic {x} :D");
+				let resolution = ResolvedGeneric(x.clone(), a);
+				let r = x.clone();
+				self.tys.insert(b, resolution);
+				Ok(ResolvedGeneric(r, a))
 			}
 
 			(Unknown, _) => {
 				self.tys.insert(a, SameAs(b));
-				Ok(())
+				Ok(SameAs(b))
 			}
 			(_, Unknown) => {
 				self.tys.insert(b, SameAs(a));
-				Ok(())
+				Ok(SameAs(a))
 			}
 
 			(a, b) => Err(format!(
 				"type conflict between {} and {}",
-				a.display_follow_ref(self, idents),
-				b.display_follow_ref(self, idents)
+				a.display_follow_ref(self),
+				b.display_follow_ref(self)
 			)),
 		}
 	}
@@ -226,20 +266,17 @@ fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
-fn ty_errorify(span: Span, x: Result<(), String>) -> bool {
+fn ty_errorify(span: Span, x: Result<InferTypeInfo, String>) -> Option<InferTypeInfo> {
 	// TODO: put a secondary label wherever the type was inferred
-	match x {
-		Err(err) => {
-			add_diagnostic(
-				Diagnostic::error()
-					.with_message("type conflict")
-					.with_labels(vec![Label::primary(span.file_id, span.range())])
-					.with_notes(vec![err]),
-			);
-			true
-		}
-		Ok(_) => false,
+	if let Err(ref err) = x {
+		add_diagnostic(
+			Diagnostic::error()
+				.with_message("type conflict")
+				.with_labels(vec![Label::primary(span.file_id, span.range())])
+				.with_notes(vec![err.clone()]),
+		);
 	}
+	x.ok()
 }
 
 impl HoistedType {
@@ -271,7 +308,11 @@ impl HoistedType {
 				BuiltinType::Error => InferTypeInfo::Unknown,
 			},
 			// TODO: should we consider mutability?
-			Type::Ref(_, x, _) => InferTypeInfo::Ref(engine().add_ty(x.to_infer_info(named_tys))),
+			Type::Ref(_, x, _) => {
+				let infer_info = x.to_infer_info(named_tys);
+				let id = engine().add_ty(infer_info);
+				InferTypeInfo::Ref(id)
+			}
 			Type::Inferred(..) => InferTypeInfo::Unknown,
 			_ => todo!(),
 		}
@@ -279,7 +320,12 @@ impl HoistedType {
 }
 
 impl HoistedExpr {
-	pub fn to_infer_info(&self, idents: &HashMap<String, InferTypeId>) -> InferTypeInfo {
+	pub fn to_infer_info(
+		&self,
+		idents: &HashMap<String, InferTypeId>,
+		named_tys: &HashMap<String, InferTypeId>,
+		scope: &HoistedScope,
+	) -> InferTypeInfo {
 		match self {
 			Self::CharLiteral(..) => InferTypeInfo::KnownChar,
 			Self::StringLiteral(..) => InferTypeInfo::KnownString,
@@ -290,17 +336,17 @@ impl HoistedExpr {
 			Self::Identifier(_, name) => InferTypeInfo::SameAs(
 				*idents
 					.get(&name.to_string())
-					.expect(&format!("couldn't get ident with name {name}")),
+					.unwrap_or_else(|| panic!("couldn't get ident with name {name}")),
 			),
 			Self::BinaryOp(_, lhs, _op, rhs) => {
 				// TODO: allow for funky operators which return different tys and are between
 				// different tys
-				let lhs_infer_info = lhs.to_infer_info(idents);
+				let lhs_infer_info = lhs.to_infer_info(idents, named_tys, scope);
 				let lhs_ty = engine().add_ty(lhs_infer_info.clone());
-				let rhs_infer_info = rhs.to_infer_info(idents);
+				let rhs_infer_info = rhs.to_infer_info(idents, named_tys, scope);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
 				let span = self.span();
-				if ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false, idents)) {
+				if ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false)).is_none() {
 					InferTypeInfo::Bottom
 				} else {
 					lhs_infer_info
@@ -308,12 +354,68 @@ impl HoistedExpr {
 			}
 			Self::UnaryOp(_, _op, value) => {
 				// TODO: see above TODO
-				value.to_infer_info(idents)
+				value.to_infer_info(idents, named_tys, scope)
 			}
 			// TODO: i don't feel like dealing with lambdas rn
 			Self::Lambda(..) => todo!("lambdas"),
-			// TODO: function calls
-			Self::Call(..) => todo!("function calls"),
+			Self::Call(span, lhs, generics, args) => {
+				let Expr::Identifier(_, x) = *lhs.clone() else { todo!("lhs can be something else than an identifier! fix!") };
+				let name = &x.to_string();
+				let Some(func) = scope.get_func(name) else { todo!("this function does not exist! fix!") };
+				let func_generics = func.generics.clone();
+				let generics = generics
+					.clone()
+					.unwrap_or_else(|| vec![Type::Inferred(span.clone()); func.generics.len()]);
+				let mut named_tys_with_generics = named_tys.clone();
+				for (i, generic) in generics.iter().enumerate() {
+					let name = func_generics[i].to_string();
+					let mut value_info = generic.to_infer_info(named_tys);
+					if value_info == InferTypeInfo::Unknown {
+						value_info = InferTypeInfo::UnknownGeneric(name.clone());
+					}
+					let value_ty = engine().add_ty(value_info);
+					named_tys_with_generics.insert(name, value_ty);
+				}
+				let mut arg_tys = vec![];
+				let mut lessons = vec![];
+				for (i, arg) in args.iter().enumerate() {
+					let arg_info = arg.to_infer_info(idents, &named_tys_with_generics, scope);
+					let arg_ty = engine().add_ty(arg_info);
+					let func_arg = func.arg_tys[i].clone();
+					let func_arg_ty = func_arg.to_infer_info(&named_tys_with_generics);
+					let expected_arg_ty = engine().add_ty(func_arg_ty);
+					if let Some(x) =
+						ty_errorify(arg.span(), engine().unify(arg_ty, expected_arg_ty, false))
+					{
+						lessons.push(x);
+					}
+					arg_tys.push(expected_arg_ty);
+				}
+				let mut named_tys_with_generics = named_tys.clone();
+				for generic in func_generics {
+					let name = generic.to_string();
+					named_tys_with_generics.insert(name.clone(), {
+						let mut le_value = None;
+						for lesson in lessons.iter() {
+							let InferTypeInfo::ResolvedGeneric(current_name, value) = lesson else { panic!("what have you done") };
+							if *current_name == name {
+								if let Some(current_value) = le_value {
+									let current_ty = engine().tys[current_value].clone();
+									let engine = engine();
+									if current_ty.follow_ref(&engine) != lesson.follow_ref(&engine) {
+										panic!("incompatible generics definition (replace with proper error)");
+									}
+								}
+								le_value = Some(value);
+							}
+						}
+						*le_value.expect("huhu juju (replace with proper error)")
+					});
+				}
+				func.return_ty
+					.clone()
+					.to_infer_info(&named_tys_with_generics)
+			}
 			// TODO: dot access
 			Self::Dot(..) => todo!("dot access"),
 		}
@@ -342,9 +444,9 @@ fn infer_inner(
 		match stmt {
 			Stmt::Create(span, _, ty_ident, _, expr) => {
 				let lhs_ty = idents[&ty_ident.ident_str()];
-				let rhs_infer_info = expr.to_infer_info(&idents);
+				let rhs_infer_info = expr.to_infer_info(&idents, &named_tys, &scope);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
-				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false, &idents));
+				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false));
 			}
 			// hoisting will have taken care already
 			Stmt::Declare(..) => {}
@@ -352,9 +454,9 @@ fn infer_inner(
 				// TODO: check for setting non-existing symbols
 				let name = ident.to_string();
 				let lhs_ty = idents[&name];
-				let rhs_infer_info = expr.to_infer_info(&idents);
+				let rhs_infer_info = expr.to_infer_info(&idents, &named_tys, &scope);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
-				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false, &idents));
+				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false));
 			}
 			Stmt::Func(_, _, _, func) => {
 				let mut func_idents = idents.clone();
@@ -379,9 +481,9 @@ fn infer_inner(
 			}
 			Stmt::Return(span, expr) => {
 				if let Some(x) = &expected_return_ty {
-					let got_infer_info = expr.to_infer_info(&idents);
+					let got_infer_info = expr.to_infer_info(&idents, &named_tys, &scope);
 					let got_ty = engine().add_ty(got_infer_info);
-					ty_errorify(span, engine().unify(*x, got_ty, false, &idents));
+					ty_errorify(span, engine().unify(*x, got_ty, false));
 				} else {
 					todo!("error (we're returning in a non-returning thing)");
 				}

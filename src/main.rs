@@ -144,7 +144,7 @@ fn main() {
 		}
 
 		// TODO: replace the resolver
-		let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", || {
+		/*let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", || {
 			resolve::resolve(hoisted, resolve::Context::TopLevel, None)
 		});
 		for diagnostic in resolved_diagnostics {
@@ -160,7 +160,7 @@ fn main() {
 
 			std::fs::write(format!("{arg}.cpp"), code).unwrap();
 			cpp_sources.push(format!("{arg}.cpp"));
-		}
+		}*/
 	}
 
 	if !all_diagnostics.is_empty() {
@@ -178,7 +178,7 @@ fn main() {
 			execute_cmd_on_all("clang-format", vec!["-i"], cpp_sources.clone())
 		});
 	}
-	time(should_time, "g++", || {
-		execute_cmd_on_all("g++", vec![], cpp_sources)
-	});
+	// time(should_time, "g++", || {
+	// 	execute_cmd_on_all("g++", vec![], cpp_sources)
+	// });
 }
