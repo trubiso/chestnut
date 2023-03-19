@@ -341,11 +341,21 @@ impl HoistedExpr {
 				Type::Builtin(span.clone(), x.kind.as_ty()).to_infer_info(&HashMap::new())
 			}
 			// TODO: allow for hoisting
-			Self::Identifier(_, name) => InferTypeInfo::SameAs(
-				*idents
-					.get(&name.to_string())
-					.unwrap_or_else(|| panic!("couldn't get ident with name {name}")),
-			),
+			Self::Identifier(span, name) => {
+				let value = idents.get(&name.to_string());
+				match value {
+					Some(x) => InferTypeInfo::SameAs(*x),
+					None => {
+						add_diagnostic(
+							Diagnostic::error()
+								.with_message("can't find symbol")
+								.with_labels(vec![Label::primary(span.file_id, span.range())
+									.with_message("symbol not found in scope")]),
+						);
+						InferTypeInfo::Bottom
+					}
+				}
+			}
 			Self::BinaryOp(_, lhs, _op, rhs) => {
 				// TODO: allow for funky operators which return different tys and are between
 				// different tys
@@ -498,7 +508,7 @@ fn infer_inner(
 				if let Some(x) = &expected_return_ty {
 					let got_infer_info = expr.to_infer_info(&idents, &named_tys, &scope);
 					let got_ty = engine().add_ty(got_infer_info);
-					ty_errorify(span, None, engine().unify(*x, got_ty, false));
+					ty_errorify(span, Some(("incorrect return type".into(), vec!["the declared return type and the type of the expression being returned are incompatible".into()])), engine().unify(*x, got_ty, false));
 				} else {
 					todo!("error (we're returning in a non-returning thing)");
 				}
