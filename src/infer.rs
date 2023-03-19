@@ -191,6 +191,14 @@ impl InferEngine {
 			(Bottom, _) => Ok(Bottom),
 			(_, Bottom) => Ok(Bottom),
 
+			(Generics(a, x), Generics(b, y)) if a == b && x.len() == y.len() => {
+				let (a, x, y) = (a.clone(), x.clone(), y.clone());
+				for (a, b) in x.iter().zip(y.iter()) {
+					self.unify(*a, *b, exact)?;
+				}
+				Ok(Generics(a, x))
+			}
+
 			(Generic(a), Generic(b)) if a == b => Ok(Generic(a.clone())),
 
 			(KnownVoid, KnownVoid) => Ok(KnownVoid),
@@ -561,7 +569,7 @@ impl HoistedExpr {
 					named_tys_with_generics.insert(name.clone(), {
 						let mut le_value = None;
 						for lesson in lessons.iter() {
-							let InferTypeInfo::ResolvedGeneric(current_name, value) = lesson else { panic!("what have you done") };
+							let InferTypeInfo::ResolvedGeneric(current_name, value) = lesson else { panic!("what have you done, lesson: {lesson:?}") };
 							if *current_name == name {
 								if let Some(current_value) = le_value {
 									let current_ty = engine().tys[current_value].clone();
