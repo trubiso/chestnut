@@ -42,9 +42,9 @@ pub enum InferTypeInfo {
 	Ref(InferTypeId),
 	/// This type is passed as a generic to a function or a class. It does not
 	/// unify with anything (in the future it will be able to have trait
-	/// constraints which will let it unify with more types)
-	// TODO: add a name lol
-	Generic,
+	/// constraints which will let it unify with more types). The name is passed
+	/// in to avoid unifying unrelated generics.
+	Generic(String),
 	/// This type is an unknown generic that we're trying to resolve in a
 	/// function call, or perhaps the instantiation of a struct.
 	UnknownGeneric(String),
@@ -91,7 +91,7 @@ impl InferTypeInfo {
 			Self::KnownBool => "bool".into(),
 			Self::KnownString => "string".into(),
 			Self::KnownChar => "char".into(),
-			Self::Generic => "GENERIC".into(),
+			Self::Generic(x) => format!("GENERIC {x}"),
 			Self::UnknownGeneric(x) => format!("GENERIC {x}?"),
 			Self::ResolvedGeneric(x, y) => {
 				let reversed_idents = idents.reverse();
@@ -118,7 +118,7 @@ impl InferTypeInfo {
 			Self::KnownBool => "bool".into(),
 			Self::KnownString => "string".into(),
 			Self::KnownChar => "char".into(),
-			Self::Generic => "generic type".into(),
+			Self::Generic(x) => format!("generic type {x}"),
 			Self::UnknownGeneric(x) => format!("unknown generic type {x}"),
 			Self::ResolvedGeneric(x, y) => format!(
 				"generic type {x} resolved to {}",
@@ -165,7 +165,7 @@ impl InferEngine {
 			(Bottom, _) => Ok(Bottom),
 			(_, Bottom) => Ok(Bottom),
 
-			(Generic, Generic) => Ok(Generic),
+			(Generic(a), Generic(b)) if a == b => Ok(Generic(a.clone())),
 
 			(KnownVoid, KnownVoid) => Ok(KnownVoid),
 			(KnownBool, KnownBool) => Ok(KnownBool),
@@ -474,7 +474,7 @@ fn infer_inner(
 				let mut func_idents = idents.clone();
 				let mut func_named_tys = named_tys.clone();
 				for generic in func.generics {
-					let generic_ty = engine().add_ty(InferTypeInfo::Generic);
+					let generic_ty = engine().add_ty(InferTypeInfo::Generic(generic.to_string()));
 					func_named_tys.insert(generic.to_string(), generic_ty);
 				}
 				for arg in func.args {
