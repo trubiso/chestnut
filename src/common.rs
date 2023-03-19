@@ -106,11 +106,11 @@ impl<S: Scope<Self> + Clone + fmt::Display> Expr<S> {
 			| Self::StringLiteral(x, ..)
 			| Self::NumberLiteral(x, ..)
 			| Self::Identifier(x, ..)
-			| Self::BinaryOp(x, ..)
 			| Self::UnaryOp(x, ..)
 			| Self::Lambda(x, ..)
 			| Self::Call(x, ..)
 			| Self::Dot(x, ..) => x.clone(),
+			Self::BinaryOp(x, a, _, b) => a.span() + x.clone() + b.span(),
 		}
 	}
 }

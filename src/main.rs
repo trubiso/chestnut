@@ -136,7 +136,9 @@ fn main() {
 			all_diagnostics.push(diagnostic);
 		}
 
-		let infer_diagnostics = time(should_time, "infer", || infer::infer(hoisted.clone(), None));
+		let infer_diagnostics = time(should_time, "infer", || {
+			infer::infer(hoisted.clone(), None, None)
+		});
 		for diagnostic in infer_diagnostics {
 			all_diagnostics.push(diagnostic);
 		}
@@ -146,9 +148,7 @@ fn main() {
 			resolve::resolve(hoisted, resolve::Context::TopLevel, None)
 		});
 		for diagnostic in resolved_diagnostics {
-			{
-				all_diagnostics.push(diagnostic);
-			}
+			all_diagnostics.push(diagnostic);
 		}
 
 		let current_has_errors = all_diagnostics

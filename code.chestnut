@@ -5,6 +5,7 @@ class Array<T> {}
 void print_position(Tuple<i32[]&, i32?>[3]?& position) pure {}
 
 void print_grid(GridPiece&[3][4]?[] pieces) {}
+*/
 
 void print(string arg) {
 
@@ -37,14 +38,14 @@ class Node<T> {
 
 T add<T>(T a, T b) pure => a + b;
 
-i32 do_thing(i32 only_arg) {
+T do_thing<T>(T only_arg) {
 	let a = only_arg;
 	let b = 10;
 	let c = a + b;
 	let d = a * c;
-	let e = a + b + c + d;
+	let e = a + b + c + d + 1 + 2 + 3 + 4 + 5;
 	return e;
-}*/
+}
 
 void main() {
 	// print_position(3);
@@ -83,4 +84,4 @@ void main() {
 	// (string err) => print(err);
 }
 
-// i32 divided_by_two(i32 x) => x / 2;
+i32 divided_by_two(i32 x) => x / 2;
