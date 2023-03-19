@@ -1,4 +1,5 @@
 #![feature(let_chains)]
+#![feature(thread_local)]
 
 use chumsky::Stream;
 use codespan_reporting::diagnostic::{Diagnostic, Severity};
@@ -138,9 +139,7 @@ fn main() {
 			all_diagnostics.push(diagnostic);
 		}
 
-		let infer_diagnostics = time(should_time, "infer", || {
-			infer::infer(hoisted.clone())
-		});
+		let infer_diagnostics = time(should_time, "infer", || infer::infer(hoisted.clone()));
 		for diagnostic in infer_diagnostics {
 			all_diagnostics.push(diagnostic);
 		}

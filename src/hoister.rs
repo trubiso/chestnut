@@ -68,7 +68,7 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 
 // TODO: genericize for hoister and resolver to share common type sig class
 // TODO: add field & func decl_spans for better error reporting
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MadeTypeSignature {
 	pub generics: Vec<Ident>,
 	pub fields: HashMap<String, HoistedType>,
@@ -83,7 +83,7 @@ pub type HoistedFuncSignature = FuncSignature<HoistedType>;
 pub type HoistedExpr = Expr<HoistedScope>;
 pub type HoistedStmt = Stmt<HoistedExpr, HoistedFunc, HoistedScope>;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct HoistedScopeData {
 	pub vars: HashMap<String, HoistedType>,
 	pub var_mutabilities: HashMap<String, bool>,
@@ -94,7 +94,10 @@ pub struct HoistedScopeData {
 	pub type_spans: HashMap<String, Span>,
 }
 
-#[derive(Debug, Clone)]
+// NOTE: PartialEq and Eq are not, in fact, needed, i need to derive them just
+// to be able to equate type signatures, even though they don't require the
+// equality of hoisted scopes, it's just a hack so rust shuts up lol
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HoistedScope {
 	pub data: RefCell<HoistedScopeData>,
 	pub stmts: RefCell<Vec<HoistedStmt>>,
@@ -143,12 +146,9 @@ impl ParserExpr {
 			Expr::StringLiteral(a, b) => Expr::StringLiteral(a, b),
 			Expr::NumberLiteral(a, b) => Expr::NumberLiteral(a, b),
 			Expr::Identifier(a, b) => Expr::Identifier(a, b),
-			Expr::BinaryOp(a, b, c, d) => Expr::BinaryOp(
-				a,
-				Box::new(b.hoist(inherit)),
-				c,
-				Box::new(d.hoist(inherit)),
-			),
+			Expr::BinaryOp(a, b, c, d) => {
+				Expr::BinaryOp(a, Box::new(b.hoist(inherit)), c, Box::new(d.hoist(inherit)))
+			}
 			Expr::UnaryOp(a, b, c) => Expr::UnaryOp(a, b, Box::new(c.hoist(inherit))),
 			Expr::Lambda(a, b) => Expr::Lambda(a, b.hoist(inherit)),
 			Expr::Call(a, b, c, d) => Expr::Call(
@@ -157,11 +157,9 @@ impl ParserExpr {
 				c.map(|x| x.iter().map(|y| y.clone().hoist(inherit)).collect()),
 				d.iter().map(|x| x.clone().hoist(inherit)).collect(),
 			),
-			Expr::Dot(a, b, c) => Expr::Dot(
-				a,
-				Box::new(b.hoist(inherit)),
-				Box::new(c.hoist(inherit)),
-			),
+			Expr::Dot(a, b, c) => {
+				Expr::Dot(a, Box::new(b.hoist(inherit)), Box::new(c.hoist(inherit)))
+			}
 		}
 	}
 }

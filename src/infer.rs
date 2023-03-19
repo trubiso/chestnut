@@ -1,6 +1,6 @@
 use crate::{
 	common::{BuiltinType, Expr, NumberLiteralKindKind, Stmt, Type},
-	hoister::{HoistedExpr, HoistedScope, HoistedType},
+	hoister::{HoistedExpr, HoistedScope, HoistedType, MadeTypeSignature},
 	lexer::NumberLiteralKind,
 	span::Span,
 };
@@ -22,6 +22,11 @@ pub enum InferTypeInfo {
 	Unknown,
 	/// This type is known to be the exact same as another type.
 	SameAs(InferTypeId),
+	/// This type supplies the generics to a type that needs it, presumably
+	/// Signature.
+	Generics(InferTypeId, Vec<InferTypeId>),
+	/// This type describes a named type, which can be accessed through Named.
+	Signature(String, MadeTypeSignature),
 	/// This type is known to be any signed number type.
 	AnySigned,
 	/// This type is known to be any unsigned number type.
@@ -78,6 +83,17 @@ impl InferTypeInfo {
 				let name = reversed_idents.get(x).cloned().unwrap_or("anon".into());
 				format!("={name} ({})", engine.tys[x].display(engine, idents))
 			}
+			// TODO: pass in named tys
+			Self::Generics(x, g) => format!(
+				"NAMED {}{}",
+				engine.tys[x].display(engine, idents),
+				g.iter()
+					.map(|x| engine.tys[x].display(engine, idents))
+					.reduce(|acc, b| acc + ", " + &b)
+					.map(|x| "<".to_string() + &x + ">")
+					.unwrap_or_else(|| "".into())
+			),
+			Self::Signature(x, _) => x.clone(),
 			Self::AnySigned => "int".into(),
 			Self::AnyUnsigned => "uint".into(),
 			Self::AnyFloat => "float".into(),
@@ -108,6 +124,16 @@ impl InferTypeInfo {
 	pub fn display_follow_ref(&self, engine: &InferEngine) -> String {
 		match self {
 			Self::Unknown => "unknown type".into(),
+			Self::Generics(x, g) => format!(
+				"named type {}{}",
+				engine.tys[x].display_follow_ref(engine),
+				g.iter()
+					.map(|x| engine.tys[x].display_follow_ref(engine))
+					.reduce(|acc, b| acc + ", " + &b)
+					.map(|x| "<".to_string() + &x + ">")
+					.unwrap_or_else(|| "".into())
+			),
+			Self::Signature(x, _) => x.clone(),
 			Self::SameAs(x) => engine.tys[x].display_follow_ref(engine),
 			Self::AnySigned => "int".into(),
 			Self::AnyUnsigned => "unsigned int".into(),
@@ -253,9 +279,12 @@ impl InferEngine {
 	}
 }
 
+// i really do not care about thread safety
+unsafe impl Send for InferEngine {}
+
 lazy_static! {
-	static ref ENGINE: Mutex<InferEngine> = Mutex::new(InferEngine::default());
 	static ref DIAGNOSTICS: Mutex<Vec<Diagnostic<usize>>> = Mutex::new(vec![]);
+	static ref ENGINE: Mutex<InferEngine> = Mutex::new(InferEngine::default());
 }
 
 fn engine<'a>() -> MutexGuard<'a, InferEngine> {
@@ -290,7 +319,122 @@ fn ty_errorify(
 impl HoistedType {
 	pub fn to_infer_info(&self, named_tys: &HashMap<String, InferTypeId>) -> InferTypeInfo {
 		match self {
-			Type::BareType(_, x) => engine().tys[&named_tys[&x.ident.to_string()]].clone(),
+			Type::BareType(span, x) => match named_tys.get(&x.ident.to_string()) {
+				None => {
+					add_diagnostic(
+						Diagnostic::error()
+							.with_message("non-existing type")
+							.with_labels(vec![Label::primary(span.file_id, span.range())]),
+					);
+					InferTypeInfo::Unknown
+				}
+				Some(u) => {
+					let temp_engine = engine();
+					let got = temp_engine.tys.get(u).cloned();
+					drop(temp_engine);
+					match got {
+						None => {
+							panic!("TODO: unregistered named type");
+						}
+						Some(i) => match i {
+							InferTypeInfo::Signature(_, s) if !s.generics.is_empty() => {
+								if s.generics.len() != x.generics.len() {
+									if x.generics.is_empty() {
+										InferTypeInfo::Generics(
+											*u,
+											s.generics
+												.iter()
+												.map(|x| {
+													engine().add_ty(InferTypeInfo::UnknownGeneric(
+														x.to_string(),
+													))
+												})
+												.collect(),
+										)
+									} else if x.generics.len() < s.generics.len() {
+										add_diagnostic(
+											Diagnostic::warning()
+												.with_message("not enough generics in type")
+												.with_labels(vec![Label::primary(
+													span.file_id,
+													span.range(),
+												)]),
+										);
+										InferTypeInfo::Generics(
+											*u,
+											s.generics
+												.iter()
+												.enumerate()
+												.map(|(i, n)| {
+													if let Some(x) = x.generics.get(i) {
+														let mut info = x.to_infer_info(named_tys);
+														if matches!(info, InferTypeInfo::Unknown) {
+															info = InferTypeInfo::UnknownGeneric(
+																s.generics[i].to_string(),
+															);
+														}
+														engine().add_ty(info)
+													} else {
+														engine().add_ty(
+															InferTypeInfo::UnknownGeneric(
+																n.to_string(),
+															),
+														)
+													}
+												})
+												.collect(),
+										)
+									} else {
+										add_diagnostic(
+											Diagnostic::warning()
+												.with_message("too many generics in type")
+												.with_labels(vec![Label::primary(
+													span.file_id,
+													span.range(),
+												)]),
+										);
+										InferTypeInfo::Generics(
+											*u,
+											x.generics
+												.iter()
+												.take(s.generics.len())
+												.enumerate()
+												.map(|(i, x)| {
+													let mut info = x.to_infer_info(named_tys);
+													if matches!(info, InferTypeInfo::Unknown) {
+														info = InferTypeInfo::UnknownGeneric(
+															s.generics[i].to_string(),
+														);
+													}
+													engine().add_ty(info)
+												})
+												.collect(),
+										)
+									}
+								} else {
+									InferTypeInfo::Generics(
+										*u,
+										x.generics
+											.iter()
+											.enumerate()
+											.map(|(i, x)| {
+												let mut info = x.to_infer_info(named_tys);
+												if matches!(info, InferTypeInfo::Unknown) {
+													info = InferTypeInfo::UnknownGeneric(
+														s.generics[i].to_string(),
+													);
+												}
+												engine().add_ty(info)
+											})
+											.collect(),
+									)
+								}
+							}
+							_ => i,
+						},
+					}
+				}
+			},
 			Type::Builtin(_, x) => match x {
 				BuiltinType::I8 => InferTypeInfo::KnownNumber(NumberLiteralKind::I8),
 				BuiltinType::I16 => InferTypeInfo::KnownNumber(NumberLiteralKind::I16),
@@ -388,7 +532,7 @@ impl HoistedExpr {
 				for (i, generic) in generics.iter().enumerate() {
 					let name = func_generics[i].to_string();
 					let mut value_info = generic.to_infer_info(named_tys);
-					if value_info == InferTypeInfo::Unknown {
+					if matches!(value_info, InferTypeInfo::Unknown) {
 						value_info = InferTypeInfo::UnknownGeneric(name.clone());
 					}
 					let value_ty = engine().add_ty(value_info);
@@ -455,7 +599,11 @@ fn infer_inner(
 	let stmts = scope.stmts.borrow().clone();
 	// TODO: hoist named tys from scope.data.types. this will require Type::Generic
 	// to work
-	let named_tys = inherit_named_tys.cloned().unwrap_or_default();
+	let mut named_tys = inherit_named_tys.cloned().unwrap_or_default();
+	for (name, ty) in &scope.data.borrow().types {
+		let ty = engine().add_ty(InferTypeInfo::Signature(name.clone(), ty.clone()));
+		named_tys.insert(name.clone(), ty);
+	}
 	let mut idents = inherit_idents.cloned().unwrap_or_default();
 	for (name, ty) in &scope.data.borrow().vars {
 		let infer_info = ty.to_infer_info(&named_tys);
