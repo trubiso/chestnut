@@ -127,6 +127,11 @@ impl InferEngine {
 
 			(Generic, Generic) => Ok(()),
 
+			(KnownVoid, KnownVoid) => Ok(()),
+			(KnownBool, KnownBool) => Ok(()),
+			(KnownString, KnownString) => Ok(()),
+			(KnownChar, KnownChar) => Ok(()),
+
 			(Ref(a), Ref(b)) => self.unify(*a, *b, idents),
 
 			(KnownNumber(an), KnownNumber(bn)) => {
@@ -296,28 +301,27 @@ fn infer_inner(
 ) -> Vec<Diagnostic<usize>> {
 	// TODO: good error reporting instead of just unwrapping random stuff
 	let stmts = scope.stmts.borrow().clone();
-	// TODO: hoisting. this will be done by pre-making all the vars and then doing
-	// the unifications, but present trubiso doesn't feel like doing that
-	let mut idents = inherit_idents.cloned().unwrap_or_default();
+	// TODO: hoist named tys from scope.data.types. this will require Type::Generic
+	// to work
 	let named_tys = inherit_named_tys.cloned().unwrap_or_default();
+	let mut idents = inherit_idents.cloned().unwrap_or_default();
+	for (name, ty) in &scope.data.borrow().vars {
+		let infer_info = ty.to_infer_info(&named_tys);
+		let ty = engine().add_ty(infer_info);
+		idents.insert(name.clone(), ty);
+	}
 	for stmt in stmts {
 		match stmt {
 			Stmt::Create(span, _, ty_ident, _, expr) => {
-				let name = ty_ident.ident_str();
-				let lhs_infer_info = ty_ident.ty.to_infer_info(&named_tys);
-				let lhs_ty = engine().add_ty(lhs_infer_info);
-				idents.insert(name, lhs_ty);
+				let lhs_ty = idents[&ty_ident.ident_str()];
 				let rhs_infer_info = expr.to_infer_info(&idents);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
 				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, &idents));
 			}
-			Stmt::Declare(_, _, ty_ident, _) => {
-				let name = ty_ident.ident_str();
-				let lhs_infer_info = ty_ident.ty.to_infer_info(&named_tys);
-				let lhs_ty = engine().add_ty(lhs_infer_info);
-				idents.insert(name, lhs_ty);
-			}
+			// hoisting will have taken care already
+			Stmt::Declare(..) => {}
 			Stmt::Set(span, ident, expr) => {
+				// TODO: check for setting non-existing symbols
 				let name = ident.to_string();
 				let lhs_ty = idents[&name];
 				let rhs_infer_info = expr.to_infer_info(&idents);

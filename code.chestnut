@@ -38,7 +38,7 @@ class Node<T> {
 
 T add<T>(T a, T b) pure => a + b;
 
-T do_thing<T>(T only_arg) {
+i32 do_thing(i32 only_arg) {
 	let a = only_arg;
 	let b = 10;
 	let c = a + b;
@@ -50,10 +50,10 @@ T do_thing<T>(T only_arg) {
 void main() {
 	// print_position(3);
 	// let ~ = do_thing();
-	mut i32 t;
-	unsafe {
+	mut char t;
+	/*unsafe {
 		t = 10;
-	}
+	}*/
 	t = t;
 	mut i32 d;
 	// d.value;
