@@ -325,6 +325,7 @@ fn infer_inner(
 	scope: HoistedScope,
 	inherit_idents: Option<&HashMap<String, InferTypeId>>,
 	inherit_named_tys: Option<&HashMap<String, InferTypeId>>,
+	expected_return_ty: Option<InferTypeId>,
 ) -> Vec<Diagnostic<usize>> {
 	// TODO: good error reporting instead of just unwrapping random stuff
 	let stmts = scope.stmts.borrow().clone();
@@ -367,7 +368,23 @@ fn infer_inner(
 					let arg_ty = engine().add_ty(arg_infer_info);
 					func_idents.insert(arg.ident_str(), arg_ty);
 				}
-				infer_inner(func.body, Some(&func_idents), Some(&func_named_tys));
+				let return_ty = func.return_ty.to_infer_info(&func_named_tys);
+				let return_ty_id = engine().add_ty(return_ty);
+				infer_inner(
+					func.body,
+					Some(&func_idents),
+					Some(&func_named_tys),
+					Some(return_ty_id),
+				);
+			}
+			Stmt::Return(span, expr) => {
+				if let Some(x) = &expected_return_ty {
+					let got_infer_info = expr.to_infer_info(&idents);
+					let got_ty = engine().add_ty(got_infer_info);
+					ty_errorify(span, engine().unify(*x, got_ty, false, &idents));
+				} else {
+					todo!("error (we're returning in a non-returning thing)");
+				}
 			}
 			_ => {}
 		}
@@ -387,5 +404,5 @@ fn infer_inner(
 }
 
 pub fn infer(scope: HoistedScope) -> Vec<Diagnostic<usize>> {
-	infer_inner(scope, None, None)
+	infer_inner(scope, None, None, None)
 }

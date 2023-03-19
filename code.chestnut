@@ -53,6 +53,11 @@ void test() {
 	u64& z = y;
 }
 
+i128 lets_return_a_reference() {
+	~x;
+	return x;
+}
+
 void main() {
 	// print_position(3);
 	// let ~ = do_thing();
