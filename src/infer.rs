@@ -18,17 +18,31 @@ type InferTypeId = usize;
 
 #[derive(Debug, Clone)]
 pub enum InferTypeInfo {
+	/// This type is completely unknown.
 	Unknown,
+	/// This type is known to be the exact same as another type.
 	SameAs(InferTypeId),
+	/// This type is known to be any signed number type.
 	AnySigned,
+	/// This type is known to be any unsigned number type.
 	AnyUnsigned,
+	/// This type is known to be any float number type.
 	AnyFloat,
+	/// This type is known to be one of the numerous number types.
 	KnownNumber(NumberLiteralKind),
+	/// This type is known to be `void`.
 	KnownVoid,
+	/// This type is known to be `bool`.
 	KnownBool,
+	/// This type is known to be `string`.
 	KnownString,
+	/// This type is known to be `char`.
 	KnownChar,
+	/// This type is a reference to another type, analogous to `&x` in code.
 	Ref(InferTypeId),
+	/// This type is passed as a generic to a function or a class. It does not
+	/// unify with anything (in the future it will be able to have trait
+	/// constraints which will let it unify with more types)
 	Generic,
 	/// This type succeeds unification with everything, it is used to avoid
 	/// throwing more errors than necessary.
@@ -115,12 +129,13 @@ impl InferEngine {
 		&mut self,
 		a: InferTypeId,
 		b: InferTypeId,
+		exact: bool,
 		idents: &HashMap<String, usize>,
 	) -> Result<(), String> {
 		use InferTypeInfo::*;
 		match (&self.tys[&a], &self.tys[&b]) {
-			(SameAs(a), _) => self.unify(*a, b, idents),
-			(_, SameAs(b)) => self.unify(a, *b, idents),
+			(SameAs(a), _) => self.unify(*a, b, exact, idents),
+			(_, SameAs(b)) => self.unify(a, *b, exact, idents),
 
 			(Bottom, _) => Ok(()),
 			(_, Bottom) => Ok(()),
@@ -132,9 +147,20 @@ impl InferEngine {
 			(KnownString, KnownString) => Ok(()),
 			(KnownChar, KnownChar) => Ok(()),
 
-			(Ref(a), Ref(b)) => self.unify(*a, *b, idents),
+			(Ref(a), Ref(b)) => self.unify(*a, *b, true, idents),
 
 			(KnownNumber(an), KnownNumber(bn)) => {
+				if exact {
+					if *an != *bn {
+						return Err(format!(
+							"numeric type {} is not exactly equal to the expected numeric type {}",
+							bn.as_ty(),
+							an.as_ty()
+						));
+					} else {
+						return Ok(());
+					}
+				}
 				use NumberLiteralKindKind::*;
 				let (a_bytes, a_kind) = an.as_useful_infer_info();
 				let (b_bytes, b_kind) = bn.as_useful_infer_info();
@@ -201,13 +227,14 @@ fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 }
 
 fn ty_errorify(span: Span, x: Result<(), String>) -> bool {
+	// TODO: put a secondary label wherever the type was inferred
 	match x {
 		Err(err) => {
 			add_diagnostic(
 				Diagnostic::error()
-					.with_message(err)
-					.with_labels(vec![Label::primary(span.file_id, span.range())
-						.with_message("type error occurred here")]),
+					.with_message("type conflict")
+					.with_labels(vec![Label::primary(span.file_id, span.range())])
+					.with_notes(vec![err]),
 			);
 			true
 		}
@@ -273,7 +300,7 @@ impl HoistedExpr {
 				let rhs_infer_info = rhs.to_infer_info(idents);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
 				let span = self.span();
-				if ty_errorify(span, engine().unify(lhs_ty, rhs_ty, idents)) {
+				if ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false, idents)) {
 					InferTypeInfo::Bottom
 				} else {
 					lhs_infer_info
@@ -316,7 +343,7 @@ fn infer_inner(
 				let lhs_ty = idents[&ty_ident.ident_str()];
 				let rhs_infer_info = expr.to_infer_info(&idents);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
-				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, &idents));
+				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false, &idents));
 			}
 			// hoisting will have taken care already
 			Stmt::Declare(..) => {}
@@ -326,7 +353,7 @@ fn infer_inner(
 				let lhs_ty = idents[&name];
 				let rhs_infer_info = expr.to_infer_info(&idents);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
-				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, &idents));
+				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false, &idents));
 			}
 			Stmt::Func(_, _, _, func) => {
 				let mut func_idents = idents.clone();

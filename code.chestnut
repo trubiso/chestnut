@@ -47,6 +47,12 @@ i32 do_thing(i32 only_arg) {
 	return e;
 }
 
+void test() {
+	~& x;
+	u32& y = x;
+	u64& z = y;
+}
+
 void main() {
 	// print_position(3);
 	// let ~ = do_thing();
