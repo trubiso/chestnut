@@ -32,7 +32,7 @@ class Node<T> {
 	}
 }
 
-T add<T, U>(T a, U b) pure => a + b;
+T add<T, T>(T a, T b) pure => a + b;
 
 i32 do_thing(i32 only_arg) {
 	let a = only_arg;
@@ -73,6 +73,7 @@ void main() {
 	i32 x = 2 + (3 - 4);
 	i32 iw;
 	iw = add(x, x);
+	// TODO: add<~, u64>(x, x); throws the huhu juju error
 	mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a += 10;
 	a *= 9 + 10;

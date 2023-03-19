@@ -419,6 +419,7 @@ impl HoistedExpr {
 								le_value = Some(value);
 							}
 						}
+						// TODO: stop ignoring the user's info regarding generics
 						*le_value.expect("huhu juju (replace with proper error)")
 					});
 				}
