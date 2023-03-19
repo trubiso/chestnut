@@ -266,14 +266,22 @@ fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
-fn ty_errorify(span: Span, x: Result<InferTypeInfo, String>) -> Option<InferTypeInfo> {
+fn ty_errorify(
+	span: Span,
+	custom: Option<(String, Vec<String>)>,
+	x: Result<InferTypeInfo, String>,
+) -> Option<InferTypeInfo> {
 	// TODO: put a secondary label wherever the type was inferred
 	if let Err(ref err) = x {
+		let custom = custom.unwrap_or_else(|| ("type conflict".into(), vec![]));
+		let title = custom.0;
+		let mut extra_error_info = custom.1;
+		extra_error_info.push(err.clone());
 		add_diagnostic(
 			Diagnostic::error()
-				.with_message("type conflict")
+				.with_message(title)
 				.with_labels(vec![Label::primary(span.file_id, span.range())])
-				.with_notes(vec![err.clone()]),
+				.with_notes(extra_error_info),
 		);
 	}
 	x.ok()
@@ -346,7 +354,7 @@ impl HoistedExpr {
 				let rhs_infer_info = rhs.to_infer_info(idents, named_tys, scope);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
 				let span = self.span();
-				if ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false)).is_none() {
+				if ty_errorify(span, None, engine().unify(lhs_ty, rhs_ty, false)).is_none() {
 					InferTypeInfo::Bottom
 				} else {
 					lhs_infer_info
@@ -384,9 +392,11 @@ impl HoistedExpr {
 					let func_arg = func.arg_tys[i].clone();
 					let func_arg_ty = func_arg.to_infer_info(&named_tys_with_generics);
 					let expected_arg_ty = engine().add_ty(func_arg_ty);
-					if let Some(x) =
-						ty_errorify(arg.span(), engine().unify(arg_ty, expected_arg_ty, false))
-					{
+					if let Some(x) = ty_errorify(
+						arg.span(),
+						None,
+						engine().unify(arg_ty, expected_arg_ty, false),
+					) {
 						lessons.push(x);
 					}
 					arg_tys.push(expected_arg_ty);
@@ -428,6 +438,7 @@ fn infer_inner(
 	inherit_idents: Option<&HashMap<String, InferTypeId>>,
 	inherit_named_tys: Option<&HashMap<String, InferTypeId>>,
 	expected_return_ty: Option<InferTypeId>,
+	nicer_error_span: Option<Span>,
 ) -> Vec<Diagnostic<usize>> {
 	// TODO: good error reporting instead of just unwrapping random stuff
 	let stmts = scope.stmts.borrow().clone();
@@ -440,13 +451,14 @@ fn infer_inner(
 		let ty = engine().add_ty(infer_info);
 		idents.insert(name.clone(), ty);
 	}
+	let mut has_returned = false;
 	for stmt in stmts {
 		match stmt {
 			Stmt::Create(span, _, ty_ident, _, expr) => {
 				let lhs_ty = idents[&ty_ident.ident_str()];
 				let rhs_infer_info = expr.to_infer_info(&idents, &named_tys, &scope);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
-				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false));
+				ty_errorify(span, None, engine().unify(lhs_ty, rhs_ty, false));
 			}
 			// hoisting will have taken care already
 			Stmt::Declare(..) => {}
@@ -456,7 +468,7 @@ fn infer_inner(
 				let lhs_ty = idents[&name];
 				let rhs_infer_info = expr.to_infer_info(&idents, &named_tys, &scope);
 				let rhs_ty = engine().add_ty(rhs_infer_info);
-				ty_errorify(span, engine().unify(lhs_ty, rhs_ty, false));
+				ty_errorify(span, None, engine().unify(lhs_ty, rhs_ty, false));
 			}
 			Stmt::Func(_, _, _, func) => {
 				let mut func_idents = idents.clone();
@@ -477,19 +489,26 @@ fn infer_inner(
 					Some(&func_idents),
 					Some(&func_named_tys),
 					Some(return_ty_id),
+					Some(func.decl_span),
 				);
 			}
 			Stmt::Return(span, expr) => {
+				has_returned = true;
 				if let Some(x) = &expected_return_ty {
 					let got_infer_info = expr.to_infer_info(&idents, &named_tys, &scope);
 					let got_ty = engine().add_ty(got_infer_info);
-					ty_errorify(span, engine().unify(*x, got_ty, false));
+					ty_errorify(span, None, engine().unify(*x, got_ty, false));
 				} else {
 					todo!("error (we're returning in a non-returning thing)");
 				}
 			}
 			_ => {}
 		}
+	}
+	if !has_returned && let Some(x) = &expected_return_ty {
+		let got_ty = engine().add_ty(InferTypeInfo::KnownVoid);
+		let span = nicer_error_span.unwrap_or(scope.span);
+		ty_errorify(span, Some(("no return in non-void function".into(), vec!["missing return statement in function returning non-void".into()])), engine().unify(*x, got_ty, false));
 	}
 	let engine = engine();
 	for (name, ty) in idents.iter() {
@@ -506,5 +525,5 @@ fn infer_inner(
 }
 
 pub fn infer(scope: HoistedScope) -> Vec<Diagnostic<usize>> {
-	infer_inner(scope, None, None, None)
+	infer_inner(scope, None, None, None, None)
 }

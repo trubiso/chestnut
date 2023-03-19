@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 use chumsky::Stream;
 use codespan_reporting::diagnostic::{Diagnostic, Severity};
 use codespan_reporting::files::SimpleFiles;
