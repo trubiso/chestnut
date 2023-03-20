@@ -20,6 +20,10 @@ export void set_element() mut {
 
 }
 
+void takes_in_function(void() x) {
+	
+}
+
 class Node<T> {
 	Node<T>& next;
 	public T value;

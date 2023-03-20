@@ -435,6 +435,7 @@ pub enum Type<Expr> {
 	Array(Span, Box<Type<Expr>>, Option<Box<Expr>>),
 	Ref(Span, Box<Type<Expr>>, bool),
 	Optional(Span, Box<Type<Expr>>),
+	Function(Span, Box<FuncSignature<Type<Expr>>>),
 	Inferred(Span),
 }
 
@@ -476,6 +477,13 @@ impl<E: PartialEq> PartialEq for Type<E> {
 					false
 				}
 			}
+			Self::Function(_, x) => {
+				if let Self::Function(_, y) = other {
+					*x == *y
+				} else {
+					false
+				}
+			}
 			Self::Inferred(_) => matches!(other, Self::Inferred(_)),
 		}
 	}
@@ -491,15 +499,8 @@ impl<E> Type<E> {
 			| Self::Array(x, ..)
 			| Self::Ref(x, ..)
 			| Self::Optional(x, ..)
+			| Self::Function(x, ..)
 			| Self::Inferred(x, ..) => x.clone(),
-		}
-	}
-
-	pub fn is_inferred(&self) -> bool {
-		match self {
-			Self::Inferred(_) => true,
-			Self::BareType(_, _) | Self::Builtin(_, _) => false,
-			Self::Array(_, x, _) | Self::Ref(_, x, _) | Self::Optional(_, x) => x.is_inferred(),
 		}
 	}
 
@@ -524,6 +525,8 @@ impl<E: fmt::Display> fmt::Display for Type<E> {
 			)),
 			Type::Ref(_, x, m) => f.write_fmt(format_args!("{x}{}&", if *m { "mut" } else { "" })),
 			Type::Optional(_, x) => f.write_fmt(format_args!("{x}?")),
+			// TODO: implement fmt::Display for FuncSignature
+			Type::Function(_, _x) => f.write_str("see above"),
 			Type::Inferred(_) => f.write_str("~"),
 		}
 	}

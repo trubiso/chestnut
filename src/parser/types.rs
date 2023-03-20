@@ -1,4 +1,4 @@
-use crate::common::{Expr, Func, Scope, ScopeFmt, Stmt, Type, TypedIdent, BareType};
+use crate::common::{Expr, Func, Scope, ScopeFmt, Stmt, Type, TypedIdent, BareType, FuncSignature};
 use crate::lexer::Token;
 use crate::span::Span;
 use chumsky::prelude::*;
@@ -12,6 +12,7 @@ pub type ParserExpr = Expr<ParserScope>;
 pub type ParserType = Type<ParserExpr>;
 pub type ParserTypedIdent = TypedIdent<ParserType>;
 pub type ParserFunc = Func<ParserExpr, ParserScope>;
+pub type ParserFuncSignature = FuncSignature<ParserType>;
 pub type ParserStmt = Stmt<ParserExpr, ParserFunc, ParserScope>;
 pub type ParserBareType = BareType<ParserType>;
 

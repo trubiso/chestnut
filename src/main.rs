@@ -11,13 +11,13 @@ use std::fs;
 use crate::parser::CodeStream;
 use crate::span::Span;
 
-pub mod codegen;
+// pub mod codegen;
 pub mod common;
 pub mod hoister;
 pub mod infer;
 pub mod lexer;
 pub mod parser;
-pub mod resolve;
+// pub mod resolve;
 pub mod span;
 
 // TODO: store all lex, ast, parse and resolve in hashmaps that can be accessed

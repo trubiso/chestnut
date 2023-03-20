@@ -196,6 +196,8 @@ impl ParserType {
 			),
 			Type::Ref(s, t, m) => Type::Ref(s, Box::new(t.hoist(inherit)), m),
 			Type::Optional(s, t) => Type::Optional(s, Box::new(t.hoist(inherit))),
+			// TODO: hoist func signature
+			Type::Function(_s, _sig) => todo!("hoist func signatures"),
 			Type::Inferred(s) => Type::Inferred(s),
 		}
 	}

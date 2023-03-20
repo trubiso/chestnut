@@ -1,4 +1,4 @@
-use super::types::{ExprRecursive, ParserExpr, ParserType};
+use super::types::{ExprRecursive, ParserExpr, ParserFuncSignature, ParserType};
 use crate::common::{BareType, BuiltinType};
 use crate::lexer::Token;
 use crate::parser::expr;
@@ -14,7 +14,7 @@ enum PostfixOp {
 }
 
 /// Parses `<ident>[array][optional][ref][mut]` into ParserType
-pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
+fn simple_ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
 			.then(angled!(ty,).or_not())
@@ -68,6 +68,29 @@ pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
 					Box::new(ParserType::Ref(span, Box::new(ty), false)),
 					false,
 				),
+			})
+	})
+}
+
+// Parses `<bare ty>[(<bare ty>, ...)]` into ParserType
+pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
+	// TODO: support functions that return functions (foldl)
+	// TODO: generics (we might have to change the syntax to accomodate for them)
+	recursive(|ty| {
+		simple_ty(er)
+			.then(parened!(ty,).or_not())
+			.map_with_span(|(l, args), span| {
+				match args {
+					Some(args) => ParserType::Function(
+						span,
+						Box::new(ParserFuncSignature {
+							generics: vec![], // see above
+							arg_tys: args,
+							return_ty: l,
+						}),
+					),
+					None => l,
+				}
 			})
 	})
 }
