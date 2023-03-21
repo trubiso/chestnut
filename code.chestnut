@@ -24,6 +24,10 @@ void takes_in_function<T>() {
 	
 }
 
+i128 proxy(i128() x) {
+	return x();
+}
+
 class Node<T> {
 	Node<T>& next;
 	public T value;
@@ -40,6 +44,7 @@ class Node<T> {
 T add<T, T>(T a, T b) pure => a + b;
 
 i32 do_thing(i32 only_arg) {
+	let u = proxy(() => 2);
 	let a = only_arg;
 	let b = 10;
 	let c = a + b;
