@@ -28,7 +28,8 @@ pub enum InferTypeInfo {
 	/// This type describes a named type, which can be accessed through Named.
 	// TODO: do not store like this for generic inference on type signatures
 	TypeSignature(String, MadeTypeSignature),
-	/// This type describes a function signature.
+	/// This type describes a function signature. The order of the parameters is
+	/// generics, args and return type.
 	FuncSignature(String, Vec<InferTypeId>, Vec<InferTypeId>, InferTypeId),
 	/// This type is known to be any signed number type.
 	AnySigned,
@@ -184,12 +185,7 @@ impl InferEngine {
 	}
 
 	/// NOTE: a := b doesn't mean b := a, use with care
-	pub fn unify(
-		&mut self,
-		a: InferTypeId,
-		b: InferTypeId,
-		exact: bool,
-	) -> Result<(), String> {
+	pub fn unify(&mut self, a: InferTypeId, b: InferTypeId, exact: bool) -> Result<(), String> {
 		use InferTypeInfo::*;
 		match (&self.tys[&a], &self.tys[&b]) {
 			(SameAs(a), _) => self.unify(*a, b, exact),
@@ -559,6 +555,38 @@ impl HoistedExpr {
 				let Expr::Identifier(_, x) = *lhs.clone() else { todo!("lhs can be something else than an identifier! fix!") };
 				let name = &x.to_string();
 				let Some(func) = scope.get_func(name) else { todo!("this function does not exist! fix!") };
+
+				let signature = {
+					let mut named_tys_with_generics = named_tys.clone();
+
+					let mut generics = Vec::new();
+					for generic in func.generics.iter() {
+						let ty =
+							engine().add_ty(InferTypeInfo::UnknownGeneric(generic.to_string()));
+						generics.push(ty);
+						named_tys_with_generics.insert(generic.to_string(), ty);
+					}
+
+					let mut args = Vec::new();
+					for arg in func.arg_tys.iter() {
+						let info = arg.to_infer_info(&named_tys_with_generics);
+						let ty = engine().add_ty(info);
+						args.push(ty);
+					}
+
+					let return_ty = {
+						let info = func.return_ty.to_infer_info(&named_tys_with_generics);
+						engine().add_ty(info)
+					};
+
+					let name = name.clone();
+					let info = InferTypeInfo::FuncSignature(name, generics, args, return_ty);
+					engine().add_ty(info)
+				};
+
+				let user = {
+					// TODO
+				};
 				let func_generics = func.generics.clone();
 				let generics = generics
 					.clone()
@@ -593,24 +621,7 @@ impl HoistedExpr {
 				let mut named_tys_with_generics = named_tys.clone();
 				for generic in func_generics {
 					let name = generic.to_string();
-					named_tys_with_generics.insert(name.clone(), {
-						let mut le_value = None;
-						for lesson in lessons.iter() {
-							let InferTypeInfo::ResolvedGeneric(current_name, value) = lesson else { panic!("what have you done, lesson: {lesson:?}") };
-							if *current_name == name {
-								if let Some(current_value) = le_value {
-									let current_ty = engine().tys[current_value].clone();
-									let engine = engine();
-									if current_ty.follow_ref(&engine) != lesson.follow_ref(&engine) {
-										panic!("incompatible generics definition (replace with proper error)");
-									}
-								}
-								le_value = Some(value);
-							}
-						}
-						// TODO: stop ignoring the user's info regarding generics
-						*le_value.expect("huhu juju (replace with proper error)")
-					});
+					named_tys_with_generics.insert(name.clone(), { todo!() });
 				}
 				func.return_ty
 					.clone()
