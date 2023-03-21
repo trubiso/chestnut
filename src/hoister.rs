@@ -1,7 +1,7 @@
 use crate::{
 	common::{BareType, Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypedIdent},
 	parser::types::{
-		Ident, ParserExpr, ParserFunc, ParserScope, ParserStmt, ParserType, ParserTypedIdent,
+		Ident, ParserExpr, ParserFunc, ParserScope, ParserStmt, ParserType, ParserTypedIdent, ParserFuncSignature,
 	},
 	span::Span,
 };
@@ -174,6 +174,16 @@ impl ParserTypedIdent {
 	}
 }
 
+impl ParserFuncSignature {
+	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedFuncSignature {
+		HoistedFuncSignature {
+			generics: self.generics,
+			arg_tys: self.arg_tys.iter().map(|x| x.clone().hoist(inherit)).collect(),
+			return_ty: self.return_ty.hoist(inherit),
+		}
+	}
+}
+
 impl ParserType {
 	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedType {
 		match self {
@@ -197,7 +207,7 @@ impl ParserType {
 			Type::Ref(s, t, m) => Type::Ref(s, Box::new(t.hoist(inherit)), m),
 			Type::Optional(s, t) => Type::Optional(s, Box::new(t.hoist(inherit))),
 			// TODO: hoist func signature
-			Type::Function(_s, _sig) => todo!("hoist func signatures"),
+			Type::Function(s, sig) => Type::Function(s, Box::new(sig.hoist(inherit))),
 			Type::Inferred(s) => Type::Inferred(s),
 		}
 	}
