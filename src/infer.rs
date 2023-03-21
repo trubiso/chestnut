@@ -26,7 +26,10 @@ pub enum InferTypeInfo {
 	/// Signature.
 	Generics(InferTypeId, Vec<InferTypeId>),
 	/// This type describes a named type, which can be accessed through Named.
-	Signature(String, MadeTypeSignature),
+	// TODO: do not store like this for generic inference on type signatures
+	TypeSignature(String, MadeTypeSignature),
+	/// This type describes a function signature.
+	FuncSignature(String, Vec<InferTypeId>, Vec<InferTypeId>, InferTypeId),
 	/// This type is known to be any signed number type.
 	AnySigned,
 	/// This type is known to be any unsigned number type.
@@ -93,7 +96,9 @@ impl InferTypeInfo {
 					.map(|x| "<".to_string() + &x + ">")
 					.unwrap_or_else(|| "".into())
 			),
-			Self::Signature(x, _) => x.clone(),
+			Self::TypeSignature(x, _) => x.clone(),
+			// TODO: proper display
+			Self::FuncSignature(x, ..) => x.clone(),
 			Self::AnySigned => "int".into(),
 			Self::AnyUnsigned => "uint".into(),
 			Self::AnyFloat => "float".into(),
@@ -133,7 +138,9 @@ impl InferTypeInfo {
 					.map(|x| "<".to_string() + &x + ">")
 					.unwrap_or_else(|| "".into())
 			),
-			Self::Signature(x, _) => x.clone(),
+			Self::TypeSignature(x, _) => x.clone(),
+			// TODO: proper display
+			Self::FuncSignature(x, ..) => x.clone(),
 			Self::SameAs(x) => engine.tys[x].display_follow_ref(engine),
 			Self::AnySigned => "int".into(),
 			Self::AnyUnsigned => "unsigned int".into(),
@@ -345,7 +352,7 @@ impl HoistedType {
 							panic!("TODO: unregistered named type");
 						}
 						Some(i) => match i {
-							InferTypeInfo::Signature(_, s) if !s.generics.is_empty() => {
+							InferTypeInfo::TypeSignature(_, s) if !s.generics.is_empty() => {
 								if s.generics.len() != x.generics.len() {
 									if x.generics.is_empty() {
 										InferTypeInfo::Generics(
@@ -609,7 +616,7 @@ fn infer_inner(
 	// to work
 	let mut named_tys = inherit_named_tys.cloned().unwrap_or_default();
 	for (name, ty) in &scope.data.borrow().types {
-		let ty = engine().add_ty(InferTypeInfo::Signature(name.clone(), ty.clone()));
+		let ty = engine().add_ty(InferTypeInfo::TypeSignature(name.clone(), ty.clone()));
 		named_tys.insert(name.clone(), ty);
 	}
 	let mut idents = inherit_idents.cloned().unwrap_or_default();
