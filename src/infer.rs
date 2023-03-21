@@ -189,29 +189,49 @@ impl InferEngine {
 		a: InferTypeId,
 		b: InferTypeId,
 		exact: bool,
-	) -> Result<InferTypeInfo, String> {
+	) -> Result<(), String> {
 		use InferTypeInfo::*;
 		match (&self.tys[&a], &self.tys[&b]) {
 			(SameAs(a), _) => self.unify(*a, b, exact),
 			(_, SameAs(b)) => self.unify(a, *b, exact),
 
-			(Bottom, _) => Ok(Bottom),
-			(_, Bottom) => Ok(Bottom),
+			(Bottom, _) => Ok(()),
+			(_, Bottom) => Ok(()),
+
+			(FuncSignature(_, a, b, c), FuncSignature(_, d, e, f))
+				if a.len() == d.len() && b.len() == e.len() =>
+			{
+				let (a, b, c, d, e, f) = (
+					a.clone(),
+					b.clone(),
+					c.clone(),
+					d.clone(),
+					e.clone(),
+					f.clone(),
+				);
+				for (x, y) in a.iter().zip(d.iter()) {
+					self.unify(*x, *y, false)?;
+				}
+				for (x, y) in b.iter().zip(e.iter()) {
+					self.unify(*x, *y, false)?;
+				}
+				self.unify(c, f, false)
+			}
 
 			(Generics(a, x), Generics(b, y)) if a == b && x.len() == y.len() => {
 				let (a, x, y) = (*a, x.clone(), y.clone());
 				for (a, b) in x.iter().zip(y.iter()) {
 					self.unify(*a, *b, exact)?;
 				}
-				Ok(Generics(a, x))
+				Ok(())
 			}
 
-			(Generic(a), Generic(b)) if a == b => Ok(Generic(a.clone())),
+			(Generic(a), Generic(b)) if a == b => Ok(()),
 
-			(KnownVoid, KnownVoid) => Ok(KnownVoid),
-			(KnownBool, KnownBool) => Ok(KnownBool),
-			(KnownString, KnownString) => Ok(KnownString),
-			(KnownChar, KnownChar) => Ok(KnownChar),
+			(KnownVoid, KnownVoid) => Ok(()),
+			(KnownBool, KnownBool) => Ok(()),
+			(KnownString, KnownString) => Ok(()),
+			(KnownChar, KnownChar) => Ok(()),
 
 			(Ref(a), Ref(b)) => self.unify(*a, *b, true),
 
@@ -224,7 +244,7 @@ impl InferEngine {
 							an.as_ty()
 						));
 					} else {
-						return Ok(KnownNumber(*an));
+						return Ok(());
 					}
 				}
 				use NumberLiteralKindKind::*;
@@ -258,7 +278,7 @@ impl InferEngine {
 					(None, _) => (*bn, *bn),
 				};
 				self.tys.insert(a, KnownNumber(a_result));
-				Ok(KnownNumber(a_result))
+				Ok(())
 			}
 
 			(UnknownGeneric(x), _) => {
@@ -266,23 +286,23 @@ impl InferEngine {
 				let resolution = ResolvedGeneric(x.clone(), b);
 				let r = x.clone();
 				self.tys.insert(a, resolution);
-				Ok(ResolvedGeneric(r, b))
+				Ok(())
 			}
 			(_, UnknownGeneric(x)) => {
 				println!("resolved generic {x} :D");
 				let resolution = ResolvedGeneric(x.clone(), a);
 				let r = x.clone();
 				self.tys.insert(b, resolution);
-				Ok(ResolvedGeneric(r, a))
+				Ok(())
 			}
 
 			(Unknown, _) => {
 				self.tys.insert(a, SameAs(b));
-				Ok(SameAs(b))
+				Ok(())
 			}
 			(_, Unknown) => {
 				self.tys.insert(b, SameAs(a));
-				Ok(SameAs(a))
+				Ok(())
 			}
 
 			(a, b) => Err(format!(
@@ -313,8 +333,8 @@ fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 fn ty_errorify(
 	span: Span,
 	custom: Option<(String, Vec<String>)>,
-	x: Result<InferTypeInfo, String>,
-) -> Option<InferTypeInfo> {
+	x: Result<(), String>,
+) -> Option<()> {
 	// TODO: put a secondary label wherever the type was inferred
 	if let Err(ref err) = x {
 		let custom = custom.unwrap_or_else(|| ("type conflict".into(), vec![]));
