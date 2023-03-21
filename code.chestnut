@@ -20,7 +20,7 @@ export void set_element() mut {
 
 }
 
-void takes_in_function(void() x) {
+void takes_in_function<T>() {
 	
 }
 
@@ -74,6 +74,7 @@ void extract<T>(Node<T> x) {
 }
 
 void main() {
+	takes_in_function<void(void())>();
 	// print_position(3);
 	// let ~ = do_thing();
 	mut char t;

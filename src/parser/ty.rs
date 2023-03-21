@@ -13,11 +13,11 @@ enum PostfixOp {
 	MutRefRef,
 }
 
-/// Parses `<ident>[array][optional][ref][mut]` into ParserType
-fn simple_ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
+/// Parses `<ident>[array][optional][ref][mut][(<ty>, ...)]` into ParserType
+pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
-			.then(angled!(ty,).or_not())
+			.then(angled!(ty.clone(),).or_not())
 			.map_with_span(|(ident, generics), span| {
 				if ident == keyword!(DontCare) {
 					ParserType::Inferred(span)
@@ -69,17 +69,10 @@ fn simple_ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
 					false,
 				),
 			})
-	})
-}
-
-// Parses `<bare ty>[(<bare ty>, ...)]` into ParserType
-pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
-	// TODO: support functions that return functions (foldl)
-	// TODO: generics (we might have to change the syntax to accomodate for them)
-	recursive(|ty| {
-		simple_ty(er)
 			.then(parened!(ty,).or_not())
 			.map_with_span(|(l, args), span| {
+				// TODO: support functions that return functions (foldl)
+				// TODO: generics (we might have to change the syntax to accomodate for them)
 				match args {
 					Some(args) => ParserType::Function(
 						span,
