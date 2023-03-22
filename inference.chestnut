@@ -1,0 +1,15 @@
+// this file contains a test for inference
+
+class Node<T> {}
+
+// these 2 functions don't return so infer gets mad but let's ignore that
+T unify<T>(Node<T> x, Node<T> y) {}
+T extract_value<T>(Node<T> node) {}
+
+void main() {
+	~ x;
+	Node y;
+	unify(x, y);
+	// TODO: we need to specify i32 here for inference to work
+	i32 z = extract_value<i32>(x);
+}

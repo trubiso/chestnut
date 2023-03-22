@@ -694,6 +694,11 @@ fn infer_inner(
 					todo!("error (we're returning in a non-returning thing)");
 				}
 			}
+
+			Stmt::BareExpr(_span, expr) => {
+				let info = expr.to_infer_info(&idents, &named_tys, &scope);
+				let _ = engine().add_ty(info);
+			}
 			_ => {}
 		}
 	}
