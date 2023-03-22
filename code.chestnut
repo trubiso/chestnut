@@ -90,7 +90,7 @@ void main() {
 	mut i32 d;
 	// d.value;
 	i32 x = 2 + (3 - 4);
-	i32 iw;
+	~ iw;
 	iw = add(x, x);
 	// TODO: add<~, u64>(x, x); throws the huhu juju error
 	mut a = 3 + 5 + (2 - 3) * -9 + 4/2;

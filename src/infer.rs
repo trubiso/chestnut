@@ -197,6 +197,7 @@ impl InferEngine {
 			(FuncSignature(_, a, b, c), FuncSignature(_, d, e, f))
 				if a.len() == d.len() && b.len() == e.len() =>
 			{
+				// TODO: this doesn't unify properly!
 				let (a, b, c, d, e, f) = (
 					a.clone(),
 					b.clone(),
