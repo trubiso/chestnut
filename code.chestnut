@@ -24,9 +24,9 @@ void takes_in_function<T>() {
 	
 }
 
-i128 proxy(i128() x) {
-	return x();
-}
+// i128 proxy(i128() x) {
+// 	return x();
+// }
 
 class Node<T> {
 	Node<T>& next;
@@ -44,7 +44,7 @@ class Node<T> {
 T add<T, T>(T a, T b) pure => a + b;
 
 i32 do_thing(i32 only_arg) {
-	let u = proxy(() => 2);
+	// let u = proxy(() => 2);
 	let a = only_arg;
 	let b = 10;
 	let c = a + b;
@@ -101,7 +101,7 @@ void main() {
 	Node<~> u;
 	Tuple<~> not_enough;
 	Tuple<~, ~, ~> too_many;
-	let cvxjnk = dbg(-10);
+	let cvxjnk = dbg(-10); // TODO: cvxjnk is failing
 	4+2+4;
 	// .3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;
 

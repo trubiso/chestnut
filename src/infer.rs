@@ -622,9 +622,10 @@ impl HoistedExpr {
 
 				ty_errorify(span.clone(), None, engine().unify(signature, user, false));
 
-				let ty = &engine().tys[&user];
+				let engine = engine();
+				let ty = &engine.tys[&user];
 				let InferTypeInfo::FuncSignature(_, _, _, return_ty) = ty else { unreachable!() };
-				let return_ty = &engine().tys[return_ty];
+				let return_ty = engine.tys[return_ty].clone();
 				
 				return_ty.clone()
 			}
