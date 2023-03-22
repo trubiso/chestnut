@@ -98,8 +98,19 @@ impl InferTypeInfo {
 					.unwrap_or_else(|| "".into())
 			),
 			Self::TypeSignature(x, _) => x.clone(),
-			// TODO: proper display
-			Self::FuncSignature(x, ..) => x.clone(),
+			Self::FuncSignature(_, g, a, r) => format!(
+				"SIGNATURE {}({}) -> {}",
+				g.iter()
+					.map(|x| engine.tys[x].display(engine, idents))
+					.reduce(|acc, b| acc + ", " + &b)
+					.map(|x| "<".to_string() + &x + ">")
+					.unwrap_or_else(|| "".into()),
+				a.iter()
+					.map(|x| engine.tys[x].display(engine, idents))
+					.reduce(|acc, b| acc + ", " + &b)
+					.unwrap_or_else(|| "".into()),
+				engine.tys[r].display(engine, idents)
+			),
 			Self::AnySigned => "int".into(),
 			Self::AnyUnsigned => "uint".into(),
 			Self::AnyFloat => "float".into(),
@@ -627,7 +638,7 @@ impl HoistedExpr {
 				let ty = &engine.tys[&user];
 				let InferTypeInfo::FuncSignature(_, _, _, return_ty) = ty else { unreachable!() };
 				let return_ty = engine.tys[return_ty].clone();
-				
+
 				return_ty.clone()
 			}
 			// TODO: dot access
@@ -719,9 +730,27 @@ fn infer_inner(
 		ty_errorify(span, Some(("no return in non-void function".into(), vec!["missing return statement in function returning non-void".into()])), engine().unify(*x, got_ty, false));
 	}
 	let engine = engine();
-	for (name, ty) in idents.iter() {
-		let ty = engine.tys.get(ty);
-		println!("{name}: {}", ty.unwrap().display(&engine, &idents));
+	let max_len = idents
+		.keys()
+		.collect::<Vec<_>>()
+		.iter()
+		.map(|x| x.len())
+		.max()
+		.unwrap_or_default()
+		.max(4); // "anon"
+	let max_num = engine.tys.len().to_string().len();
+	for (i, (j, ty)) in engine.tys.iter().enumerate() {
+		let name = idents
+			.reverse()
+			.get(j)
+			.cloned()
+			.unwrap_or_else(|| "anon".into());
+		println!(
+			"{}{i} -> {name}{} => {}",
+			" ".repeat(max_num - i.to_string().len()),
+			" ".repeat(max_len - name.len()),
+			ty.display(&engine, &idents)
+		);
 	}
 	println!("{} types created", engine.id_counter);
 	if !DIAGNOSTICS.lock().unwrap().is_empty() {
