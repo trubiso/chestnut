@@ -123,5 +123,3 @@ void main() {
 
 	// (string err) => print(err);
 }
-
-i32 divided_by_two(i32 x) => x / 2;

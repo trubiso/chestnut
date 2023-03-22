@@ -57,10 +57,6 @@ pub enum InferTypeInfo {
 	/// This type is an unknown generic that we're trying to resolve in a
 	/// function call, or perhaps the instantiation of a struct.
 	UnknownGeneric(String),
-	/// This type is an unknown generic that has been resolved to another type.
-	/// Practically, it acts like SameAs, except it lets us track what was
-	/// resolved.
-	ResolvedGeneric(String, InferTypeId),
 	/// This type succeeds unification with everything, it is used to avoid
 	/// throwing more errors than necessary.
 	Bottom,
@@ -126,14 +122,6 @@ impl InferTypeInfo {
 			Self::KnownChar => "char".into(),
 			Self::Generic(x) => format!("GENERIC {x}"),
 			Self::UnknownGeneric(x) => format!("GENERIC {x}?"),
-			Self::ResolvedGeneric(x, y) => {
-				let reversed_idents = idents.reverse();
-				let name = reversed_idents.get(y).cloned().unwrap_or("anon".into());
-				format!(
-					"GENERIC {x}! = {name} ({})",
-					engine.tys[y].display(engine, idents)
-				)
-			}
 			Self::Bottom => "BOTTOM".into(),
 		}
 	}
@@ -165,10 +153,6 @@ impl InferTypeInfo {
 			Self::KnownChar => "char".into(),
 			Self::Generic(x) => format!("generic type {x}"),
 			Self::UnknownGeneric(x) => format!("unknown generic type {x}"),
-			Self::ResolvedGeneric(x, y) => format!(
-				"generic type {x} resolved to {}",
-				engine.tys[y].display_follow_ref(engine)
-			),
 			Self::Bottom => "bottom type".into(),
 		}
 	}
@@ -176,7 +160,6 @@ impl InferTypeInfo {
 	pub fn follow_ref(&self, engine: &InferEngine) -> InferTypeInfo {
 		match self {
 			Self::SameAs(x) => engine.tys[x].follow_ref(engine),
-			Self::ResolvedGeneric(_, x) => engine.tys[x].follow_ref(engine),
 			other => other.clone(),
 		}
 	}
@@ -289,24 +272,11 @@ impl InferEngine {
 				Ok(())
 			}
 
-			(UnknownGeneric(x), _) => {
-				println!("resolved generic {x} :D");
-				let resolution = ResolvedGeneric(x.clone(), b);
-				self.tys.insert(a, resolution);
-				Ok(())
-			}
-			(_, UnknownGeneric(x)) => {
-				println!("resolved generic {x} :D");
-				let resolution = ResolvedGeneric(x.clone(), a);
-				self.tys.insert(b, resolution);
-				Ok(())
-			}
-
-			(Unknown, _) => {
+			(Unknown | UnknownGeneric(_), _) => {
 				self.tys.insert(a, SameAs(b));
 				Ok(())
 			}
-			(_, Unknown) => {
+			(_, Unknown | UnknownGeneric(_)) => {
 				self.tys.insert(b, SameAs(a));
 				Ok(())
 			}
@@ -471,7 +441,7 @@ impl HoistedType {
 									)
 								}
 							}
-							_ => i,
+							_ => InferTypeInfo::SameAs(*u),
 						},
 					}
 				}
@@ -591,6 +561,9 @@ impl HoistedExpr {
 
 					let name = name.clone();
 					let info = InferTypeInfo::FuncSignature(name, generics, args, return_ty);
+
+					println!("----- FUNC SIG = {}", info.display(&engine(), idents));
+
 					engine().add_ty(info)
 				};
 
