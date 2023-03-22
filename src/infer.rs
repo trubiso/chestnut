@@ -215,7 +215,7 @@ impl InferEngine {
 			}
 
 			(Generics(a, x), Generics(b, y)) if a == b && x.len() == y.len() => {
-				let (a, x, y) = (*a, x.clone(), y.clone());
+				let (x, y) = (x.clone(), y.clone());
 				for (a, b) in x.iter().zip(y.iter()) {
 					self.unify(*a, *b, exact)?;
 				}
@@ -280,14 +280,12 @@ impl InferEngine {
 			(UnknownGeneric(x), _) => {
 				println!("resolved generic {x} :D");
 				let resolution = ResolvedGeneric(x.clone(), b);
-				let r = x.clone();
 				self.tys.insert(a, resolution);
 				Ok(())
 			}
 			(_, UnknownGeneric(x)) => {
 				println!("resolved generic {x} :D");
 				let resolution = ResolvedGeneric(x.clone(), a);
-				let r = x.clone();
 				self.tys.insert(b, resolution);
 				Ok(())
 			}
@@ -585,47 +583,50 @@ impl HoistedExpr {
 				};
 
 				let user = {
-					// TODO
+					let mut named_tys_with_generics = named_tys.clone();
+
+					let mut user_generics = generics
+						.clone()
+						.unwrap_or_else(|| vec![Type::Inferred(span.clone()); func.generics.len()]);
+					while user_generics.len() < func.generics.len() {
+						user_generics.push(Type::Inferred(span.clone()));
+					}
+					if user_generics.len() > func.generics.len() {
+						user_generics = user_generics
+							.iter()
+							.take(func.generics.len())
+							.cloned()
+							.collect();
+					}
+					let mut generics = Vec::new();
+					for (generic, ident) in user_generics.iter().zip(func.generics.iter()) {
+						let info = generic.to_infer_info(named_tys);
+						let ty = engine().add_ty(info);
+						generics.push(ty);
+						named_tys_with_generics.insert(ident.to_string(), ty);
+					}
+
+					let user_args = args;
+					let mut args = Vec::new();
+					for arg in user_args.iter() {
+						let info = arg.to_infer_info(idents, &named_tys_with_generics, scope);
+						let ty = engine().add_ty(info);
+						args.push(ty);
+					}
+
+					let return_ty = engine().add_ty(InferTypeInfo::Unknown);
+
+					let info = InferTypeInfo::FuncSignature("~".into(), generics, args, return_ty);
+					engine().add_ty(info)
 				};
-				let func_generics = func.generics.clone();
-				let generics = generics
-					.clone()
-					.unwrap_or_else(|| vec![Type::Inferred(span.clone()); func.generics.len()]);
-				let mut named_tys_with_generics = named_tys.clone();
-				for (i, generic) in generics.iter().enumerate() {
-					let name = func_generics[i].to_string();
-					let mut value_info = generic.to_infer_info(named_tys);
-					if matches!(value_info, InferTypeInfo::Unknown) {
-						value_info = InferTypeInfo::UnknownGeneric(name.clone());
-					}
-					let value_ty = engine().add_ty(value_info);
-					named_tys_with_generics.insert(name, value_ty);
-				}
-				let mut arg_tys = vec![];
-				let mut lessons = vec![];
-				for (i, arg) in args.iter().enumerate() {
-					let arg_info = arg.to_infer_info(idents, &named_tys_with_generics, scope);
-					let arg_ty = engine().add_ty(arg_info);
-					let func_arg = func.arg_tys[i].clone();
-					let func_arg_ty = func_arg.to_infer_info(&named_tys_with_generics);
-					let expected_arg_ty = engine().add_ty(func_arg_ty);
-					if let Some(x) = ty_errorify(
-						arg.span(),
-						None,
-						engine().unify(arg_ty, expected_arg_ty, false),
-					) {
-						lessons.push(x);
-					}
-					arg_tys.push(expected_arg_ty);
-				}
-				let mut named_tys_with_generics = named_tys.clone();
-				for generic in func_generics {
-					let name = generic.to_string();
-					named_tys_with_generics.insert(name.clone(), { todo!() });
-				}
-				func.return_ty
-					.clone()
-					.to_infer_info(&named_tys_with_generics)
+
+				ty_errorify(span.clone(), None, engine().unify(signature, user, false));
+
+				let ty = &engine().tys[&user];
+				let InferTypeInfo::FuncSignature(_, _, _, return_ty) = ty else { unreachable!() };
+				let return_ty = &engine().tys[return_ty];
+				
+				return_ty.clone()
 			}
 			// TODO: dot access
 			Self::Dot(..) => todo!("dot access"),
