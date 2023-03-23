@@ -78,6 +78,15 @@ void extract<T>(Node<T> x) {
 
 }
 
+i32 get_an_int() => 5;
+
+T get_back<T>(T value) => value;
+
+void get_an_int_test() {
+	let get_an_int_test_variable = get_an_int();
+	let get_back_test_variable = get_back("hi");
+}
+
 void main() {
 	takes_in_function<void(void())>();
 	// print_position(3);

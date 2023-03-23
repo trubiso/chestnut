@@ -1,8 +1,6 @@
 use crate::{
-	common::{BareType, Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypedIdent},
-	parser::types::{
-		Ident, ParserExpr, ParserFunc, ParserScope, ParserStmt, ParserType, ParserTypedIdent, ParserFuncSignature,
-	},
+	common::{BareType, Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypedIdent, UnscopedExpr},
+	parser::types::{Ident, ParserExpr, ParserFunc, ParserScope, ParserStmt},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -71,24 +69,20 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MadeTypeSignature {
 	pub generics: Vec<Ident>,
-	pub fields: HashMap<String, HoistedType>,
-	pub funcs: HashMap<String, HoistedFuncSignature>,
+	pub fields: HashMap<String, Type>,
+	pub funcs: HashMap<String, FuncSignature>,
 }
 
-pub type HoistedType = Type<HoistedExpr>;
-pub type HoistedTypedIdent = TypedIdent<HoistedType>;
-pub type HoistedBareType = BareType<HoistedType>;
 pub type HoistedFunc = Func<HoistedExpr, HoistedScope>;
-pub type HoistedFuncSignature = FuncSignature<HoistedType>;
 pub type HoistedExpr = Expr<HoistedScope>;
 pub type HoistedStmt = Stmt<HoistedExpr, HoistedFunc, HoistedScope>;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct HoistedScopeData {
-	pub vars: HashMap<String, HoistedType>,
+	pub vars: HashMap<String, Type>,
 	pub var_mutabilities: HashMap<String, bool>,
 	pub var_spans: HashMap<String, Span>,
-	pub funcs: HashMap<String, HoistedFuncSignature>,
+	pub funcs: HashMap<String, FuncSignature>,
 	pub func_spans: HashMap<String, Span>,
 	pub types: HashMap<String, MadeTypeSignature>,
 	pub type_spans: HashMap<String, Span>,
@@ -114,10 +108,10 @@ impl fmt::Display for HoistedScope {
 impl HoistedScope {
 	get_datum!(get_type get_type_mut has_type add_type => types (MadeTypeSignature));
 	get_datum!(get_type_span get_type_span_mut has_type_span add_type_span => type_spans (Span));
-	get_datum!(get_var get_var_mut has_var add_var => vars (HoistedType));
+	get_datum!(get_var get_var_mut has_var add_var => vars (Type));
 	get_datum!(get_var_mutability get_var_mutability_mut has_var_mutability add_var_mutability => var_mutabilities (bool));
 	get_datum!(get_var_span get_var_span_mut has_var_span add_var_span => var_spans (Span));
-	get_datum!(get_func get_func_mut has_func add_func => funcs (HoistedFuncSignature));
+	get_datum!(get_func get_func_mut has_func add_func => funcs (FuncSignature));
 	get_datum!(get_func_span get_func_span_mut has_func_span add_func_span => func_spans (Span));
 
 	pub fn stmts_mut(&self) -> RefMut<Vec<HoistedStmt>> {
@@ -142,73 +136,8 @@ impl ParserExpr {
 	// and save like 100% of this code's .clone()s (or not, lambdas)
 	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedExpr {
 		match self {
-			Expr::CharLiteral(a, b) => Expr::CharLiteral(a, b),
-			Expr::StringLiteral(a, b) => Expr::StringLiteral(a, b),
-			Expr::NumberLiteral(a, b) => Expr::NumberLiteral(a, b),
-			Expr::Identifier(a, b) => Expr::Identifier(a, b),
-			Expr::BinaryOp(a, b, c, d) => {
-				Expr::BinaryOp(a, Box::new(b.hoist(inherit)), c, Box::new(d.hoist(inherit)))
-			}
-			Expr::UnaryOp(a, b, c) => Expr::UnaryOp(a, b, Box::new(c.hoist(inherit))),
+			Expr::Unscoped(x) => Expr::Unscoped(x),
 			Expr::Lambda(a, b) => Expr::Lambda(a, b.hoist(inherit)),
-			Expr::Call(a, b, c, d) => Expr::Call(
-				a,
-				Box::new(b.hoist(inherit)),
-				c.map(|x| x.iter().map(|y| y.clone().hoist(inherit)).collect()),
-				d.iter().map(|x| x.clone().hoist(inherit)).collect(),
-			),
-			Expr::Dot(a, b, c) => {
-				Expr::Dot(a, Box::new(b.hoist(inherit)), Box::new(c.hoist(inherit)))
-			}
-		}
-	}
-}
-
-impl ParserTypedIdent {
-	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedTypedIdent {
-		HoistedTypedIdent {
-			span: self.span,
-			ty: self.ty.hoist(inherit),
-			ident: self.ident,
-		}
-	}
-}
-
-impl ParserFuncSignature {
-	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedFuncSignature {
-		HoistedFuncSignature {
-			generics: self.generics,
-			arg_tys: self.arg_tys.iter().map(|x| x.clone().hoist(inherit)).collect(),
-			return_ty: self.return_ty.hoist(inherit),
-		}
-	}
-}
-
-impl ParserType {
-	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedType {
-		match self {
-			Type::BareType(s, t) => Type::BareType(
-				s,
-				HoistedBareType {
-					ident: t.ident,
-					generics: t
-						.generics
-						.iter()
-						.map(|x| x.clone().hoist(inherit))
-						.collect(),
-				},
-			),
-			Type::Builtin(s, t) => Type::Builtin(s, t),
-			Type::Array(s, l, r) => Type::Array(
-				s,
-				Box::new(l.hoist(inherit)),
-				r.map(|x| Box::new(x.hoist(inherit))),
-			),
-			Type::Ref(s, t, m) => Type::Ref(s, Box::new(t.hoist(inherit)), m),
-			Type::Optional(s, t) => Type::Optional(s, Box::new(t.hoist(inherit))),
-			// TODO: hoist func signature
-			Type::Function(s, sig) => Type::Function(s, Box::new(sig.hoist(inherit))),
-			Type::Inferred(s) => Type::Inferred(s),
 		}
 	}
 }
@@ -217,12 +146,13 @@ impl ParserFunc {
 	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedFunc {
 		HoistedFunc {
 			span: self.span,
-			return_ty: self.return_ty.hoist(inherit),
-			args: self.args.iter().map(|x| x.clone().hoist(inherit)).collect(),
+			return_ty: self.return_ty,
+			args: self.args,
 			generics: self.generics,
 			body: hoist(self.body, inherit).0,
 			attribs: self.attribs,
 			decl_span: self.decl_span,
+			_expr: std::marker::PhantomData,
 		}
 	}
 }

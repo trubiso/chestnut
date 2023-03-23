@@ -1,6 +1,6 @@
 use crate::{
-	common::{BuiltinType, Expr, NumberLiteralKindKind, Stmt, Type},
-	hoister::{HoistedExpr, HoistedScope, HoistedType, MadeTypeSignature},
+	common::{BuiltinType, Expr, NumberLiteralKindKind, Stmt, Type, UnscopedExpr},
+	hoister::{HoistedExpr, HoistedScope, MadeTypeSignature},
 	lexer::NumberLiteralKind,
 	span::Span,
 };
@@ -11,6 +11,8 @@ use std::{
 	hash::Hash,
 	sync::{Mutex, MutexGuard},
 };
+
+// TODO: to_infer_info trait
 
 // sincere thanks to https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=174ca95a8b938168764846e97d5e9a2c
 
@@ -327,7 +329,7 @@ fn ty_errorify(
 	x.ok()
 }
 
-impl HoistedType {
+impl Type {
 	pub fn to_infer_info(&self, named_tys: &HashMap<String, InferTypeId>) -> InferTypeInfo {
 		match self {
 			Type::BareType(span, x) => match named_tys.get(&x.ident.to_string()) {
@@ -482,7 +484,7 @@ impl HoistedType {
 	}
 }
 
-impl HoistedExpr {
+impl UnscopedExpr {
 	pub fn to_infer_info(
 		&self,
 		idents: &HashMap<String, InferTypeId>,
@@ -529,10 +531,8 @@ impl HoistedExpr {
 				// TODO: see above TODO
 				value.to_infer_info(idents, named_tys, scope)
 			}
-			// TODO: i don't feel like dealing with lambdas rn
-			Self::Lambda(..) => todo!("lambdas"),
 			Self::Call(span, lhs, generics, args) => {
-				let Expr::Identifier(_, x) = *lhs.clone() else { todo!("lhs can be something else than an identifier! fix!") };
+				let UnscopedExpr::Identifier(_, x) = *lhs.clone() else { todo!("lhs can be something else than an identifier! fix!") };
 				let name = &x.to_string();
 				let Some(func) = scope.get_func(name) else { todo!("this function does not exist! fix!") };
 
@@ -616,6 +616,21 @@ impl HoistedExpr {
 			}
 			// TODO: dot access
 			Self::Dot(..) => todo!("dot access"),
+		}
+	}
+}
+
+impl HoistedExpr {
+	pub fn to_infer_info(
+		&self,
+		idents: &HashMap<String, InferTypeId>,
+		named_tys: &HashMap<String, InferTypeId>,
+		scope: &HoistedScope,
+	) -> InferTypeInfo {
+		match self {
+			Self::Unscoped(x) => x.to_infer_info(idents, named_tys, scope),
+			// TODO: i don't feel like dealing with lambdas rn
+			Self::Lambda(..) => todo!("lambdas"),
 		}
 	}
 }

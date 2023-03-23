@@ -1,5 +1,5 @@
 use crate::{
-	common::FuncAttribs,
+	common::{FuncAttribs, TypedIdent},
 	lexer::{Keyword, Token},
 	span::{Span, Spanned},
 };
@@ -55,8 +55,8 @@ fn func_attribs() -> token_parser!(FuncAttribs) {
 	)
 }
 
-/// Parses `<ty ident>, ...` into Vec<ParserTypedIdent>
-fn func_args() -> token_parser!(Vec<ParserTypedIdent>) {
+/// Parses `<ty ident>, ...` into Vec<TypedIdent>
+fn func_args() -> token_parser!(Vec<TypedIdent>) {
 	parened!(ty_ident(None),)
 }
 
@@ -99,6 +99,7 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(ParserStmt : '_) {
 						body,
 						attribs,
 						decl_span,
+						_expr: std::marker::PhantomData,
 					},
 				)
 			},

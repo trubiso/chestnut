@@ -4,7 +4,9 @@ use crate::{
 	span::Span,
 };
 use derive_more::Display;
-use std::fmt;
+use std::{fmt, marker::PhantomData};
+
+// TODO: make GetSpan trait and perhaps change its return type to a ref
 
 pub trait Scope<Expr: fmt::Display> {
 	fn braced(&self) -> String
@@ -49,42 +51,52 @@ impl<S: Scope<Expr<S>> + Clone + fmt::Display> ScopeFmt for S {
 
 #[derive(Debug, Display, Clone, PartialEq, Eq)]
 #[display(fmt = "{ty} {ident}")]
-pub struct TypedIdent<Ty: fmt::Display> {
+pub struct TypedIdent {
 	pub span: Span,
-	pub ty: Ty,
+	pub ty: Type,
 	pub ident: Ident,
 }
 
-impl<Ty: fmt::Display> TypedIdent<Ty> {
+impl TypedIdent {
 	pub fn ident_str(&self) -> String {
 		self.ident.to_string()
 	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Expr<Sc: Scope<Self> + Clone + fmt::Display> {
+pub enum UnscopedExpr {
 	CharLiteral(Span, String),
 	StringLiteral(Span, String),
 	NumberLiteral(Span, NumberLiteral),
 	Identifier(Span, Ident),
-	BinaryOp(Span, Box<Expr<Sc>>, Operator, Box<Expr<Sc>>),
-	UnaryOp(Span, Operator, Box<Expr<Sc>>),
-	Lambda(Span, Func<Self, Sc>),
-	Call(Span, Box<Expr<Sc>>, Option<Vec<Type<Self>>>, Vec<Expr<Sc>>),
-	Dot(Span, Box<Expr<Sc>>, Box<Expr<Sc>>),
+	BinaryOp(Span, Box<UnscopedExpr>, Operator, Box<UnscopedExpr>),
+	UnaryOp(Span, Operator, Box<UnscopedExpr>),
+	Call(
+		Span,
+		Box<UnscopedExpr>,
+		Option<Vec<Type>>,
+		Vec<UnscopedExpr>,
+	),
+	Dot(Span, Box<UnscopedExpr>, Box<UnscopedExpr>),
 }
 
-impl<Sc: Scope<Self> + Clone + fmt::Display> fmt::Display for Expr<Sc> {
+// TODO: add all of UnscopedExpr and functions to convert between them
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expr<Sc: Scope<Self> + Clone + fmt::Display> {
+	Unscoped(UnscopedExpr),
+	Lambda(Span, Func<Self, Sc>),
+}
+
+impl fmt::Display for UnscopedExpr {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Expr::CharLiteral(_, x) => f.write_fmt(format_args!("{x}")),
-			Expr::StringLiteral(_, x) => f.write_fmt(format_args!("{x}")),
-			Expr::NumberLiteral(_, x) => f.write_fmt(format_args!("{x}")),
-			Expr::Identifier(_, x) => f.write_fmt(format_args!("{x}")),
-			Expr::BinaryOp(_, lhs, op, rhs) => f.write_fmt(format_args!("({lhs} {op} {rhs})")),
-			Expr::UnaryOp(_, op, expr) => f.write_fmt(format_args!("({op}{expr})")),
-			Expr::Lambda(_, func) => f.write_fmt(format_args!("lambda {func}")),
-			Expr::Call(_, callee, generics, args) => f.write_fmt(format_args!(
+			Self::CharLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			Self::StringLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			Self::NumberLiteral(_, x) => f.write_fmt(format_args!("{x}")),
+			Self::Identifier(_, x) => f.write_fmt(format_args!("{x}")),
+			Self::BinaryOp(_, lhs, op, rhs) => f.write_fmt(format_args!("({lhs} {op} {rhs})")),
+			Self::UnaryOp(_, op, expr) => f.write_fmt(format_args!("({op}{expr})")),
+			Self::Call(_, callee, generics, args) => f.write_fmt(format_args!(
 				"{callee}{}({})",
 				generics
 					.as_ref()
@@ -94,12 +106,21 @@ impl<Sc: Scope<Self> + Clone + fmt::Display> fmt::Display for Expr<Sc> {
 					.unwrap_or("".to_string()),
 				join_comma(args).unwrap_or("".to_string())
 			)),
-			Expr::Dot(_, lhs, rhs) => f.write_fmt(format_args!("{lhs}.{rhs}")),
+			Self::Dot(_, lhs, rhs) => f.write_fmt(format_args!("{lhs}.{rhs}")),
 		}
 	}
 }
 
-impl<S: Scope<Self> + Clone + fmt::Display> Expr<S> {
+impl<Sc: Scope<Self> + Clone + fmt::Display> fmt::Display for Expr<Sc> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Unscoped(x) => f.write_fmt(format_args!("{x}")),
+			Self::Lambda(_, func) => f.write_fmt(format_args!("lambda {func}")),
+		}
+	}
+}
+
+impl UnscopedExpr {
 	pub fn span(&self) -> Span {
 		match self {
 			Self::CharLiteral(x, ..)
@@ -107,10 +128,18 @@ impl<S: Scope<Self> + Clone + fmt::Display> Expr<S> {
 			| Self::NumberLiteral(x, ..)
 			| Self::Identifier(x, ..)
 			| Self::UnaryOp(x, ..)
-			| Self::Lambda(x, ..)
 			| Self::Call(x, ..)
 			| Self::Dot(x, ..) => x.clone(),
 			Self::BinaryOp(x, a, _, b) => a.span() + x.clone() + b.span(),
+		}
+	}
+}
+
+impl<S: Scope<Self> + Clone + fmt::Display> Expr<S> {
+	pub fn span(&self) -> Span {
+		match self {
+			Self::Unscoped(x) => x.span(),
+			Self::Lambda(x, ..) => x.clone(),
 		}
 	}
 }
@@ -136,23 +165,25 @@ impl fmt::Display for FuncAttribs {
 #[derive(Debug, Clone)]
 pub struct Func<Expr: fmt::Display, Sc: Scope<Expr>> {
 	pub span: Span,
-	pub return_ty: Type<Expr>,
-	pub args: Vec<TypedIdent<Type<Expr>>>, // TODO: perhaps we might need to change this
-	pub generics: Vec<Ident>,              // TODO: same here
+	pub return_ty: Type,
+	pub args: Vec<TypedIdent>, // TODO: perhaps we might need to change this
+	pub generics: Vec<Ident>,  // TODO: same here
 	pub body: Sc,
 	pub attribs: FuncAttribs,
 	pub decl_span: Span,
+	// TODO: unneeded! this is to avoid infinitely recursive types
+	pub _expr: PhantomData<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FuncSignature<Ty> {
+pub struct FuncSignature {
 	pub generics: Vec<Ident>,
-	pub arg_tys: Vec<Ty>,
-	pub return_ty: Ty,
+	pub arg_tys: Vec<Type>,
+	pub return_ty: Type,
 }
 
 impl<E: fmt::Display + Clone, S: Scope<E>> Func<E, S> {
-	pub fn signature(&self) -> FuncSignature<Type<E>> {
+	pub fn signature(&self) -> FuncSignature {
 		FuncSignature {
 			generics: self.generics.clone(),
 			arg_tys: self.args.iter().map(|x| x.ty.clone()).collect(),
@@ -184,8 +215,8 @@ impl<E: fmt::Display, S: Scope<E> + fmt::Display> fmt::Display for Func<E, S> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt<Expr: fmt::Display, Fn, Sc: Scope<Expr>> {
-	Create(Span, Privacy, TypedIdent<Type<Expr>>, bool, Expr),
-	Declare(Span, Privacy, TypedIdent<Type<Expr>>, bool),
+	Create(Span, Privacy, TypedIdent, bool, Expr),
+	Declare(Span, Privacy, TypedIdent, bool),
 	Set(Span, Ident, Expr),
 	Func(Span, Privacy, Ident, Fn),
 	Return(Span, Expr),
@@ -409,13 +440,14 @@ impl NumberLiteral {
 	}
 }
 
+// TODO: remove BareType
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BareType<Ty> {
-	pub ident: Ident,      // typename
-	pub generics: Vec<Ty>, // generics
+pub struct BareType {
+	pub ident: Ident,        // typename
+	pub generics: Vec<Type>, // generics
 }
 
-impl<Ty: fmt::Display> fmt::Display for BareType<Ty> {
+impl fmt::Display for BareType {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.write_fmt(format_args!(
 			"{}{}",
@@ -429,17 +461,17 @@ impl<Ty: fmt::Display> fmt::Display for BareType<Ty> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Type<Expr> {
-	BareType(Span, BareType<Type<Expr>>),
+pub enum Type {
+	BareType(Span, BareType),
 	Builtin(Span, BuiltinType),
-	Array(Span, Box<Type<Expr>>, Option<Box<Expr>>),
-	Ref(Span, Box<Type<Expr>>, bool),
-	Optional(Span, Box<Type<Expr>>),
-	Function(Span, Box<FuncSignature<Type<Expr>>>),
+	Array(Span, Box<Self>, Option<Box<UnscopedExpr>>),
+	Ref(Span, Box<Self>, bool),
+	Optional(Span, Box<Self>),
+	Function(Span, Box<FuncSignature>),
 	Inferred(Span),
 }
 
-impl<E: PartialEq> PartialEq for Type<E> {
+impl PartialEq for Type {
 	fn eq(&self, other: &Self) -> bool {
 		match self {
 			Self::BareType(_, x) => {
@@ -489,9 +521,9 @@ impl<E: PartialEq> PartialEq for Type<E> {
 	}
 }
 
-impl<E: PartialEq> Eq for Type<E> {}
+impl Eq for Type {}
 
-impl<E> Type<E> {
+impl Type {
 	pub fn span(&self) -> Span {
 		match self {
 			Self::BareType(x, ..)
@@ -510,7 +542,7 @@ impl<E> Type<E> {
 	}
 }
 
-impl<E: fmt::Display> fmt::Display for Type<E> {
+impl fmt::Display for Type {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			Type::BareType(_, x) => f.write_fmt(format_args!("{x}")),

@@ -1,3 +1,4 @@
+use crate::common::UnscopedExpr;
 use crate::lexer::Operator;
 use crate::parser::expr::expr;
 use crate::parser::types::{ParserExpr, ParserStmt};
@@ -12,12 +13,12 @@ macro_rules! assg_stmt {
 			ParserStmt::Set(
 				span.clone(),
 				lhs.clone(),
-				ParserExpr::BinaryOp(
+				ParserExpr::Unscoped(UnscopedExpr::BinaryOp(
 					span,
-					Box::new(ParserExpr::Identifier(lhs.clone().span(), lhs)),
+					Box::new(UnscopedExpr::Identifier(lhs.clone().span(), lhs)),
 					Operator::$op,
 					Box::new(rhs),
-				),
+				)),
 			)
 		})
 	};

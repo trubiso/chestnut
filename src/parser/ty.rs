@@ -1,5 +1,5 @@
-use super::types::{ExprRecursive, ParserExpr, ParserFuncSignature, ParserType};
-use crate::common::{BareType, BuiltinType};
+use super::types::{ExprRecursive, ParserExpr};
+use crate::common::{BareType, BuiltinType, FuncSignature, Type};
 use crate::lexer::Token;
 use crate::parser::expr;
 use chumsky::prelude::*;
@@ -13,21 +13,21 @@ enum PostfixOp {
 	MutRefRef,
 }
 
-/// Parses `<ident>[array][optional][ref][mut][(<ty>, ...)]` into ParserType
-pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
+/// Parses `<ident>[array][optional][ref][mut][(<ty>, ...)]` into Type
+pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
 	recursive(|ty| {
 		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
 			.then(angled!(ty.clone(),).or_not())
 			.map_with_span(|(ident, generics), span| {
 				if ident == keyword!(DontCare) {
-					ParserType::Inferred(span)
+					Type::Inferred(span)
 				} else {
 					// TODO: incorrect span
 					let ident = force_token!(ident => Identifier, span.clone());
 					if let Some(x) = BuiltinType::from_name(&ident.to_string()) {
-						ParserType::Builtin(span, x)
+						Type::Builtin(span, x)
 					} else {
-						ParserType::BareType(
+						Type::BareType(
 							span,
 							BareType {
 								ident,
@@ -54,18 +54,18 @@ pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
 				.repeated(),
 			)
 			.foldl(|ty, (new_info, span)| match new_info {
-				PostfixOp::Array(x) => ParserType::Array(span, Box::new(ty), x.map(Box::new)),
-				PostfixOp::Optional => ParserType::Optional(span, Box::new(ty)),
-				PostfixOp::MutRef => ParserType::Ref(span, Box::new(ty), true),
-				PostfixOp::MutRefRef => ParserType::Ref(
+				PostfixOp::Array(x) => Type::Array(span, Box::new(ty), x.map(Box::new)),
+				PostfixOp::Optional => Type::Optional(span, Box::new(ty)),
+				PostfixOp::MutRef => Type::Ref(span, Box::new(ty), true),
+				PostfixOp::MutRefRef => Type::Ref(
 					span.clone(),
-					Box::new(ParserType::Ref(span, Box::new(ty), true)),
+					Box::new(Type::Ref(span, Box::new(ty), true)),
 					false,
 				),
-				PostfixOp::Ref => ParserType::Ref(span, Box::new(ty), false),
-				PostfixOp::RefRef => ParserType::Ref(
+				PostfixOp::Ref => Type::Ref(span, Box::new(ty), false),
+				PostfixOp::RefRef => Type::Ref(
 					span.clone(),
-					Box::new(ParserType::Ref(span, Box::new(ty), false)),
+					Box::new(Type::Ref(span, Box::new(ty), false)),
 					false,
 				),
 			})
@@ -74,9 +74,9 @@ pub fn ty(er: Option<ExprRecursive>) -> token_parser!(ParserType : '_) {
 				// TODO: support functions that return functions (foldl)
 				// TODO: generics (we might have to change the syntax to accomodate for them)
 				match args {
-					Some(args) => ParserType::Function(
+					Some(args) => Type::Function(
 						span,
-						Box::new(ParserFuncSignature {
+						Box::new(FuncSignature {
 							generics: vec![], // see above
 							arg_tys: args,
 							return_ty: l,

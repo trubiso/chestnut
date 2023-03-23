@@ -1,4 +1,4 @@
-use crate::common::{Expr, Func, Scope, ScopeFmt, Stmt, Type, TypedIdent, BareType, FuncSignature};
+use crate::common::{Expr, Func, Scope, ScopeFmt, Stmt, Type, TypedIdent};
 use crate::lexer::Token;
 use crate::span::Span;
 use chumsky::prelude::*;
@@ -9,12 +9,8 @@ pub type ScopeRecursive<'a> = TokenRecursive<'a, ParserScope>;
 pub type ExprRecursive<'a> = TokenRecursive<'a, ParserExpr>;
 
 pub type ParserExpr = Expr<ParserScope>;
-pub type ParserType = Type<ParserExpr>;
-pub type ParserTypedIdent = TypedIdent<ParserType>;
 pub type ParserFunc = Func<ParserExpr, ParserScope>;
-pub type ParserFuncSignature = FuncSignature<ParserType>;
 pub type ParserStmt = Stmt<ParserExpr, ParserFunc, ParserScope>;
-pub type ParserBareType = BareType<ParserType>;
 
 // TODO: go on each PartialEq with spans and re-implement it manually
 
@@ -73,7 +69,7 @@ impl Ident {
 		}
 	}
 
-	pub fn infer_type<Expr: fmt::Display>(&self) -> TypedIdent<Type<Expr>> {
+	pub fn infer_type(&self) -> TypedIdent {
 		TypedIdent {
 			span: self.span(),
 			ty: Type::Inferred(self.span()),
