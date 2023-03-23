@@ -1,11 +1,11 @@
-use super::types::{ExprRecursive, ParserExpr};
-use crate::common::{BareType, BuiltinType, FuncSignature, Type};
+use super::types::{ExprRecursive, Ident};
+use crate::common::{BareType, BuiltinType, FuncSignature, Type, UnscopedExpr};
 use crate::lexer::Token;
 use crate::parser::expr;
 use chumsky::prelude::*;
 
 enum PostfixOp {
-	Array(Option<ParserExpr>),
+	Array(Option<Box<UnscopedExpr>>),
 	Optional,
 	Ref,
 	RefRef,
@@ -43,7 +43,20 @@ pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
 						.map(|x| x.boxed())
 						.unwrap_or_else(|| expr().boxed())
 						.or_not())
-					.map(PostfixOp::Array),
+					.validate(|x, span, emit| {
+						PostfixOp::Array(x.map(|x| {
+							x.unscoped_box().unwrap_or_else(|| {
+								emit(chumsky::error::Simple::custom(
+									span.clone(),
+									"invalid scoped expression in array length",
+								));
+								Box::new(UnscopedExpr::Identifier(
+									span.clone(),
+									Ident::Discarded(span),
+								))
+							})
+						}))
+					}),
 					jop!(Question).map(|_| PostfixOp::Optional),
 					jkeyword!(Mut).then(jop!(Amp)).map(|_| PostfixOp::MutRef),
 					jkeyword!(Mut).then(jop!(And)).map(|_| PostfixOp::MutRefRef),
@@ -55,9 +68,7 @@ pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
 			)
 			.foldl(|ty, (new_info, span)| match new_info {
 				// TODO: error handling, unwrap is bad in this case
-				PostfixOp::Array(x) => {
-					Type::Array(span, Box::new(ty), x.map(|x| x.unscoped_box().unwrap()))
-				}
+				PostfixOp::Array(x) => Type::Array(span, Box::new(ty), x),
 				PostfixOp::Optional => Type::Optional(span, Box::new(ty)),
 				PostfixOp::MutRef => Type::Ref(span, Box::new(ty), true),
 				PostfixOp::MutRefRef => Type::Ref(
