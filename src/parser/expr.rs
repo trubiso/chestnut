@@ -2,7 +2,7 @@ use super::ident::{ident, potentially_qualified_ident};
 use super::ty::ty;
 use super::ty_ident::ty_ident;
 use super::types::{ParserExpr, ParserFunc, ParserScope, ParserStmt};
-use crate::common::{FuncAttribs, Type, UnscopedExpr};
+use crate::common::{Expr, FuncAttribs, Type};
 use crate::span::Span;
 use chumsky::error::Simple;
 use chumsky::prelude::*;
@@ -14,7 +14,7 @@ macro_rules! binop_parser {
 				span!(choice(($(jop!($op),)*)))
 				.then($next()).repeated())
 				// FIXME: get the proper span of lhs + op + rhs
-			.foldl(|lhs, ((op, span), rhs)| UnscopedExpr::BinaryOp(span, Box::new(lhs), force_token!(op => Operator), Box::new(rhs)))
+			.foldl(|lhs, ((op, span), rhs)| Expr::BinaryOp(span, Box::new(lhs), force_token!(op => Operator), Box::new(rhs)))
 	};
 }
 
@@ -24,14 +24,14 @@ macro_rules! unop_parser {
 			.then($next())
 			// NOTE: i don't know if this span is correct?
 			// TODO: perhaps get rhs span
-			.foldr(|(op, s), rhs| UnscopedExpr::UnaryOp(s, force_token!(op => Operator), Box::new(rhs)))
+			.foldr(|(op, s), rhs| Expr::UnaryOp(s, force_token!(op => Operator), Box::new(rhs)))
 	};
 }
 
 macro_rules! literal_parser {
 	($kind:ident) => {
 		filter(|x| matches!(x, $crate::lexer::Token::$kind(_))).map_with_span(|x, span: Span| {
-			UnscopedExpr::$kind(span.clone(), force_token!(x => $kind, span))
+			Expr::$kind(span.clone(), force_token!(x => $kind, span))
 		})
 	};
 }
@@ -46,7 +46,7 @@ pub fn expr() -> token_parser!(ParserExpr) {
 				literal_parser!(StringLiteral),
 				literal_parser!(NumberLiteral),
 				literal_parser!(CharLiteral),
-				potentially_qualified_ident().map(|x| UnscopedExpr::Identifier(x.span(), x)),
+				potentially_qualified_ident().map(|x| Expr::Identifier(x.span(), x)),
 			))
 		};
 		let fc_parser = || {
@@ -60,7 +60,7 @@ pub fn expr() -> token_parser!(ParserExpr) {
 				.foldl(|(lhs, ls), ((generics, args), rs)| {
 					let span: Span = ls + rs;
 					(
-						UnscopedExpr::Call(span.clone(), Box::new(lhs), generics, args),
+						Expr::Call(span.clone(), Box::new(lhs), generics, args),
 						span,
 					)
 				})
@@ -128,6 +128,7 @@ pub fn expr() -> token_parser!(ParserExpr) {
 						args,
 						attribs: FuncAttribs::default(),
 						decl_span,
+						_expr: std::marker::PhantomData,
 					},
 				)
 			})

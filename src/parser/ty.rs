@@ -54,7 +54,10 @@ pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
 				.repeated(),
 			)
 			.foldl(|ty, (new_info, span)| match new_info {
-				PostfixOp::Array(x) => Type::Array(span, Box::new(ty), x.map(Box::new)),
+				// TODO: error handling, unwrap is bad in this case
+				PostfixOp::Array(x) => {
+					Type::Array(span, Box::new(ty), x.map(|x| x.unscoped_box().unwrap()))
+				}
 				PostfixOp::Optional => Type::Optional(span, Box::new(ty)),
 				PostfixOp::MutRef => Type::Ref(span, Box::new(ty), true),
 				PostfixOp::MutRefRef => Type::Ref(

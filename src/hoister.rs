@@ -1,5 +1,5 @@
 use crate::{
-	common::{BareType, Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypedIdent, UnscopedExpr},
+	common::{Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type},
 	parser::types::{Ident, ParserExpr, ParserFunc, ParserScope, ParserStmt},
 	span::Span,
 };
@@ -136,8 +136,24 @@ impl ParserExpr {
 	// and save like 100% of this code's .clone()s (or not, lambdas)
 	pub fn hoist(self, inherit: Option<&HoistedScope>) -> HoistedExpr {
 		match self {
-			Expr::Unscoped(x) => Expr::Unscoped(x),
+			Expr::CharLiteral(a, b) => Expr::CharLiteral(a, b),
+			Expr::StringLiteral(a, b) => Expr::StringLiteral(a, b),
+			Expr::NumberLiteral(a, b) => Expr::NumberLiteral(a, b),
+			Expr::Identifier(a, b) => Expr::Identifier(a, b),
+			Expr::BinaryOp(a, b, c, d) => {
+				Expr::BinaryOp(a, Box::new(b.hoist(inherit)), c, Box::new(d.hoist(inherit)))
+			}
+			Expr::UnaryOp(a, b, c) => Expr::UnaryOp(a, b, Box::new(c.hoist(inherit))),
 			Expr::Lambda(a, b) => Expr::Lambda(a, b.hoist(inherit)),
+			Expr::Call(a, b, c, d) => Expr::Call(
+				a,
+				Box::new(b.hoist(inherit)),
+				c.map(|x| x.iter().map(|y| y.clone()).collect()),
+				d.iter().map(|x| x.clone().hoist(inherit)).collect(),
+			),
+			Expr::Dot(a, b, c) => {
+				Expr::Dot(a, Box::new(b.hoist(inherit)), Box::new(c.hoist(inherit)))
+			}
 		}
 	}
 }
@@ -201,13 +217,10 @@ pub fn hoist(
 					let decl_span = hoisted.get_var_span(&ty_ident.ident_str()).unwrap();
 					redeclaration_error("variable", &span, decl_span);
 				}
-				hoisted.add_var(
-					&ty_ident.ident_str(),
-					ty_ident.ty.clone().hoist(Some(&hoisted)),
-				);
+				hoisted.add_var(&ty_ident.ident_str(), ty_ident.ty.clone());
 				hoisted.add_var_mutability(&ty_ident.ident_str(), is_mut);
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
-				let hoisted_ty_ident = ty_ident.hoist(Some(&hoisted));
+				let hoisted_ty_ident = ty_ident;
 				// NOTE: ???????
 				let hoisted_expr = expr.hoist(Some(&hoisted));
 				hoisted.stmts_mut().push(HoistedStmt::Create(
@@ -223,13 +236,10 @@ pub fn hoist(
 					let decl_span = hoisted.get_var_span(&ty_ident.ident_str()).unwrap();
 					redeclaration_error("variable", &span, decl_span);
 				}
-				hoisted.add_var(
-					&ty_ident.ident_str(),
-					ty_ident.ty.clone().hoist(Some(&hoisted)),
-				);
+				hoisted.add_var(&ty_ident.ident_str(), ty_ident.ty.clone());
 				hoisted.add_var_mutability(&ty_ident.ident_str(), is_mut);
 				hoisted.add_var_span(&ty_ident.ident_str(), span.clone());
-				let hoisted_ty_ident = ty_ident.hoist(Some(&hoisted));
+				let hoisted_ty_ident = ty_ident;
 				hoisted.stmts_mut().push(HoistedStmt::Declare(
 					span,
 					privacy,
@@ -332,7 +342,7 @@ pub fn hoist(
 				}
 				for arg in &func.args {
 					// TODO: deal with discarded args
-					frs.add_var(&arg.ident_str(), arg.ty.clone().hoist(Some(&frs)));
+					frs.add_var(&arg.ident_str(), arg.ty.clone());
 					frs.add_var_span(&arg.ident_str(), arg.span.clone());
 				}
 				let hoisted_func = func.hoist(Some(&frs));

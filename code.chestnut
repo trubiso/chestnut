@@ -91,6 +91,7 @@ void main() {
 	takes_in_function<void(void())>();
 	// print_position(3);
 	// let ~ = do_thing();
+	int[() => 3] boom;
 	mut char t;
 	/*unsafe {
 		t = 10;

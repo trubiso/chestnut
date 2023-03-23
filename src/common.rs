@@ -80,11 +80,72 @@ pub enum UnscopedExpr {
 	Dot(Span, Box<UnscopedExpr>, Box<UnscopedExpr>),
 }
 
-// TODO: add all of UnscopedExpr and functions to convert between them
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr<Sc: Scope<Self> + Clone + fmt::Display> {
-	Unscoped(UnscopedExpr),
+	CharLiteral(Span, String),
+	StringLiteral(Span, String),
+	NumberLiteral(Span, NumberLiteral),
+	Identifier(Span, Ident),
+	BinaryOp(Span, Box<Expr<Sc>>, Operator, Box<Expr<Sc>>),
+	UnaryOp(Span, Operator, Box<Expr<Sc>>),
+	Call(Span, Box<Expr<Sc>>, Option<Vec<Type>>, Vec<Expr<Sc>>),
+	Dot(Span, Box<Expr<Sc>>, Box<Expr<Sc>>),
 	Lambda(Span, Func<Self, Sc>),
+}
+
+impl UnscopedExpr {
+	pub fn scoped<Sc: Scope<Expr<Sc>> + Clone + fmt::Display>(self) -> Expr<Sc> {
+		match self {
+			Self::CharLiteral(a, b) => Expr::CharLiteral(a, b),
+			Self::StringLiteral(a, b) => Expr::StringLiteral(a, b),
+			Self::NumberLiteral(a, b) => Expr::NumberLiteral(a, b),
+			Self::Identifier(a, b) => Expr::Identifier(a, b),
+			Self::BinaryOp(a, b, c, d) => Expr::BinaryOp(a, b.scoped_box(), c, d.scoped_box()),
+			Self::UnaryOp(a, b, c) => Expr::UnaryOp(a, b, c.scoped_box()),
+			Self::Call(a, b, c, d) => Expr::Call(
+				a,
+				b.scoped_box(),
+				c,
+				d.iter().map(|x| x.clone().scoped()).collect(),
+			),
+			Self::Dot(a, b, c) => Expr::Dot(a, b.scoped_box(), c.scoped_box()),
+		}
+	}
+
+	pub fn scoped_box<Sc: Scope<Expr<Sc>> + Clone + fmt::Display>(self) -> Box<Expr<Sc>> {
+		Box::new(self.scoped())
+	}
+}
+
+impl<Sc: Scope<Expr<Sc>> + Clone + fmt::Display> Expr<Sc> {
+	pub fn unscoped(self) -> Option<UnscopedExpr> {
+		if matches!(self, Self::Lambda(..)) {
+			return None;
+		}
+		Some(match self {
+			Self::CharLiteral(a, b) => UnscopedExpr::CharLiteral(a, b),
+			Self::StringLiteral(a, b) => UnscopedExpr::StringLiteral(a, b),
+			Self::NumberLiteral(a, b) => UnscopedExpr::NumberLiteral(a, b),
+			Self::Identifier(a, b) => UnscopedExpr::Identifier(a, b),
+			Self::BinaryOp(a, b, c, d) => {
+				UnscopedExpr::BinaryOp(a, b.unscoped_box()?, c, d.unscoped_box()?)
+			}
+			Self::UnaryOp(a, b, c) => UnscopedExpr::UnaryOp(a, b, c.unscoped_box()?),
+			Self::Call(a, b, c, d) => UnscopedExpr::Call(
+				a,
+				b.unscoped_box()?,
+				c,
+				// TODO: make better error handling
+				d.iter().map(|x| x.clone().unscoped().unwrap()).collect(),
+			),
+			Self::Dot(a, b, c) => UnscopedExpr::Dot(a, b.unscoped_box()?, c.unscoped_box()?),
+			_ => unreachable!(),
+		})
+	}
+
+	pub fn unscoped_box(self) -> Option<Box<UnscopedExpr>> {
+		self.unscoped().map(|x| Box::new(x))
+	}
 }
 
 impl fmt::Display for UnscopedExpr {
@@ -114,8 +175,8 @@ impl fmt::Display for UnscopedExpr {
 impl<Sc: Scope<Self> + Clone + fmt::Display> fmt::Display for Expr<Sc> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Unscoped(x) => f.write_fmt(format_args!("{x}")),
 			Self::Lambda(_, func) => f.write_fmt(format_args!("lambda {func}")),
+			other => other.clone().unscoped().unwrap().fmt(f),
 		}
 	}
 }
@@ -138,8 +199,8 @@ impl UnscopedExpr {
 impl<S: Scope<Self> + Clone + fmt::Display> Expr<S> {
 	pub fn span(&self) -> Span {
 		match self {
-			Self::Unscoped(x) => x.span(),
 			Self::Lambda(x, ..) => x.clone(),
+			other => other.clone().unscoped().unwrap().span(),
 		}
 	}
 }

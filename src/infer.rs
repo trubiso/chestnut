@@ -491,7 +491,22 @@ impl UnscopedExpr {
 		named_tys: &HashMap<String, InferTypeId>,
 		scope: &HoistedScope,
 	) -> InferTypeInfo {
+		self.clone()
+			.scoped()
+			.to_infer_info(idents, named_tys, scope)
+	}
+}
+
+impl HoistedExpr {
+	pub fn to_infer_info(
+		&self,
+		idents: &HashMap<String, InferTypeId>,
+		named_tys: &HashMap<String, InferTypeId>,
+		scope: &HoistedScope,
+	) -> InferTypeInfo {
 		match self {
+			// TODO: i don't feel like dealing with lambdas rn
+			Self::Lambda(..) => todo!("lambdas"),
 			Self::CharLiteral(..) => InferTypeInfo::KnownChar,
 			Self::StringLiteral(..) => InferTypeInfo::KnownString,
 			Self::NumberLiteral(span, x) => {
@@ -532,7 +547,7 @@ impl UnscopedExpr {
 				value.to_infer_info(idents, named_tys, scope)
 			}
 			Self::Call(span, lhs, generics, args) => {
-				let UnscopedExpr::Identifier(_, x) = *lhs.clone() else { todo!("lhs can be something else than an identifier! fix!") };
+				let Expr::Identifier(_, x) = *lhs.clone() else { todo!("lhs can be something else than an identifier! fix!") };
 				let name = &x.to_string();
 				let Some(func) = scope.get_func(name) else { todo!("this function does not exist! fix!") };
 
@@ -616,21 +631,6 @@ impl UnscopedExpr {
 			}
 			// TODO: dot access
 			Self::Dot(..) => todo!("dot access"),
-		}
-	}
-}
-
-impl HoistedExpr {
-	pub fn to_infer_info(
-		&self,
-		idents: &HashMap<String, InferTypeId>,
-		named_tys: &HashMap<String, InferTypeId>,
-		scope: &HoistedScope,
-	) -> InferTypeInfo {
-		match self {
-			Self::Unscoped(x) => x.to_infer_info(idents, named_tys, scope),
-			// TODO: i don't feel like dealing with lambdas rn
-			Self::Lambda(..) => todo!("lambdas"),
 		}
 	}
 }
