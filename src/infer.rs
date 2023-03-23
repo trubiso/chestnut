@@ -1,5 +1,5 @@
 use crate::{
-	common::{BuiltinType, Expr, NumberLiteralKindKind, Stmt, Type, UnscopedExpr},
+	common::{BuiltinType, Expr, FuncSignature, NumberLiteralKindKind, Stmt, Type, UnscopedExpr},
 	hoister::{HoistedExpr, HoistedScope, MadeTypeSignature},
 	lexer::NumberLiteralKind,
 	span::Span,
@@ -12,7 +12,8 @@ use std::{
 	sync::{Mutex, MutexGuard},
 };
 
-// TODO: to_infer_info trait
+// TODO: to_infer_info trait, also automatically implements something to avoid
+// having to split up code into several lines due to mutex deadlocks
 
 // sincere thanks to https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=174ca95a8b938168764846e97d5e9a2c
 
@@ -472,14 +473,17 @@ impl Type {
 				BuiltinType::Char => InferTypeInfo::KnownChar,
 				BuiltinType::Error => InferTypeInfo::Unknown,
 			},
+			// TODO: Type::Array
 			// TODO: should we consider mutability?
 			Type::Ref(_, x, _) => {
 				let infer_info = x.to_infer_info(named_tys);
 				let id = engine().add_ty(infer_info);
 				InferTypeInfo::Ref(id)
 			}
+			// TODO: Type::Optional
+			Type::Function(_, x) => x.to_infer_info("anon".into(), named_tys),
 			Type::Inferred(..) => InferTypeInfo::Unknown,
-			_ => todo!(),
+			x => todo!("{x}"),
 		}
 	}
 }
@@ -494,6 +498,47 @@ impl UnscopedExpr {
 		self.clone()
 			.scoped()
 			.to_infer_info(idents, named_tys, scope)
+	}
+}
+
+impl FuncSignature {
+	pub fn to_infer_info(
+		&self,
+		name: String,
+		named_tys: &HashMap<String, InferTypeId>,
+	) -> InferTypeInfo {
+		let mut named_tys_with_generics = named_tys.clone();
+
+		let mut generics = Vec::new();
+		for generic in self.generics.iter() {
+			let ty = engine().add_ty(InferTypeInfo::UnknownGeneric(generic.to_string()));
+			generics.push(ty);
+			named_tys_with_generics.insert(generic.to_string(), ty);
+		}
+
+		let mut args = Vec::new();
+		for arg in self.arg_tys.iter() {
+			let info = arg.to_infer_info(&named_tys_with_generics);
+			let ty = engine().add_ty(info);
+			args.push(ty);
+		}
+
+		let return_ty = {
+			let info = self.return_ty.to_infer_info(&named_tys_with_generics);
+			engine().add_ty(info)
+		};
+
+		let name = name.clone();
+		InferTypeInfo::FuncSignature(name, generics, args, return_ty)
+	}
+
+	pub fn into_engine_ty(
+		&self,
+		name: String,
+		named_tys: &HashMap<String, InferTypeId>,
+	) -> InferTypeId {
+		let info = self.to_infer_info(name, named_tys);
+		engine().add_ty(info)
 	}
 }
 
@@ -551,36 +596,8 @@ impl HoistedExpr {
 				let name = &x.to_string();
 				let Some(func) = scope.get_func(name) else { todo!("this function does not exist! fix!") };
 
-				let signature = {
-					let mut named_tys_with_generics = named_tys.clone();
-
-					let mut generics = Vec::new();
-					for generic in func.generics.iter() {
-						let ty =
-							engine().add_ty(InferTypeInfo::UnknownGeneric(generic.to_string()));
-						generics.push(ty);
-						named_tys_with_generics.insert(generic.to_string(), ty);
-					}
-
-					let mut args = Vec::new();
-					for arg in func.arg_tys.iter() {
-						let info = arg.to_infer_info(&named_tys_with_generics);
-						let ty = engine().add_ty(info);
-						args.push(ty);
-					}
-
-					let return_ty = {
-						let info = func.return_ty.to_infer_info(&named_tys_with_generics);
-						engine().add_ty(info)
-					};
-
-					let name = name.clone();
-					let info = InferTypeInfo::FuncSignature(name, generics, args, return_ty);
-
-					println!("----- FUNC SIG = {}", info.display(&engine(), idents));
-
-					engine().add_ty(info)
-				};
+				let signature_info = func.to_infer_info(name.clone(), named_tys);
+				let signature = engine().add_ty(signature_info);
 
 				let user = {
 					let mut named_tys_with_generics = named_tys.clone();
