@@ -1,6 +1,6 @@
 use crate::{
-	common::{Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type},
-	parser::types::{Ident, ParserExpr, ParserFunc, ParserScope, ParserStmt},
+	common::{Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypeSignature},
+	parser::types::{ParserExpr, ParserFunc, ParserScope, ParserStmt},
 	span::Span,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -64,15 +64,6 @@ pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
 	DIAGNOSTICS.lock().unwrap().push(diagnostic);
 }
 
-// TODO: genericize for hoister and resolver to share common type sig class
-// TODO: add field & func decl_spans for better error reporting
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct MadeTypeSignature {
-	pub generics: Vec<Ident>,
-	pub fields: HashMap<String, Type>,
-	pub funcs: HashMap<String, FuncSignature>,
-}
-
 pub type HoistedFunc = Func<HoistedExpr, HoistedScope>;
 pub type HoistedExpr = Expr<HoistedScope>;
 pub type HoistedStmt = Stmt<HoistedExpr, HoistedFunc, HoistedScope>;
@@ -84,7 +75,7 @@ pub struct HoistedScopeData {
 	pub var_spans: HashMap<String, Span>,
 	pub funcs: HashMap<String, FuncSignature>,
 	pub func_spans: HashMap<String, Span>,
-	pub types: HashMap<String, MadeTypeSignature>,
+	pub types: HashMap<String, TypeSignature>,
 	pub type_spans: HashMap<String, Span>,
 }
 
@@ -106,7 +97,7 @@ impl fmt::Display for HoistedScope {
 }
 
 impl HoistedScope {
-	get_datum!(get_type get_type_mut has_type add_type => types (MadeTypeSignature));
+	get_datum!(get_type get_type_mut has_type add_type => types (TypeSignature));
 	get_datum!(get_type_span get_type_span_mut has_type_span add_type_span => type_spans (Span));
 	get_datum!(get_var get_var_mut has_var add_var => vars (Type));
 	get_datum!(get_var_mutability get_var_mutability_mut has_var_mutability add_var_mutability => var_mutabilities (bool));
@@ -275,11 +266,15 @@ pub fn hoist(
 				// TODO: inherit the hoistation
 				let hoisted_scope = hoist(body.clone(), Some(&hoisted)).0;
 				let vars = hoisted_scope.data.borrow().vars.clone();
+				let var_spans = hoisted_scope.data.borrow().var_spans.clone();
 				let funcs = hoisted_scope.data.borrow().funcs.clone();
-				let sig = MadeTypeSignature {
+				let func_spans = hoisted_scope.data.borrow().func_spans.clone();
+				let sig = TypeSignature {
 					generics: generics.clone(),
 					fields: vars,
 					funcs,
+					field_spans: var_spans,
+					func_spans,
 				};
 				hoisted.add_type(&ident.to_string(), sig);
 				hoisted.add_type_span(&ident.to_string(), decl_span.clone());
@@ -331,12 +326,8 @@ pub fn hoist(
 					let name = generic.to_string();
 					frs.add_type(
 						&name,
-						MadeTypeSignature {
-							generics: vec![],
-							// NOTE: maybe change this
-							fields: HashMap::new(),
-							funcs: HashMap::new(),
-						},
+						// NOTE: maybe change this
+						TypeSignature::default(),
 					);
 					frs.add_type_span(&name, generic.span());
 				}
@@ -363,12 +354,8 @@ pub fn hoist(
 					let name = generic.to_string();
 					crs.add_type(
 						&name,
-						MadeTypeSignature {
-							generics: vec![],
-							// NOTE: maybe change this
-							fields: HashMap::new(),
-							funcs: HashMap::new(),
-						},
+						// NOTE: maybe change this
+						TypeSignature::default(),
 					);
 					crs.add_type_span(&name, generic.span());
 				}

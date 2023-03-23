@@ -17,7 +17,7 @@ pub mod hoister;
 pub mod infer;
 pub mod lexer;
 pub mod parser;
-// pub mod resolve;
+pub mod collector;
 pub mod span;
 
 // TODO: store all lex, ast, parse and resolve in hashmaps that can be accessed

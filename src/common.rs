@@ -4,7 +4,7 @@ use crate::{
 	span::Span,
 };
 use derive_more::Display;
-use std::{fmt, marker::PhantomData};
+use std::{fmt, marker::PhantomData, collections::HashMap};
 
 // TODO: make GetSpan trait and perhaps change its return type to a ref
 
@@ -272,6 +272,15 @@ impl<E: fmt::Display, S: Scope<E> + fmt::Display> fmt::Display for Func<E, S> {
 			self.body.braced(),
 		))
 	}
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct TypeSignature {
+	pub generics: Vec<Ident>,
+	pub fields: HashMap<String, Type>,
+	pub funcs: HashMap<String, FuncSignature>,
+	pub field_spans: HashMap<String, Span>,
+	pub func_spans: HashMap<String, Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

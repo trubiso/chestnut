@@ -1,6 +1,9 @@
 use crate::{
-	common::{BuiltinType, Expr, FuncSignature, NumberLiteralKindKind, Stmt, Type, UnscopedExpr},
-	hoister::{HoistedExpr, HoistedScope, MadeTypeSignature},
+	common::{
+		BuiltinType, Expr, FuncSignature, NumberLiteralKindKind, Stmt, Type, TypeSignature,
+		UnscopedExpr,
+	},
+	hoister::{HoistedExpr, HoistedScope},
 	lexer::NumberLiteralKind,
 	span::Span,
 };
@@ -17,7 +20,7 @@ use std::{
 
 // sincere thanks to https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=174ca95a8b938168764846e97d5e9a2c
 
-type InferTypeId = usize;
+pub type InferTypeId = usize;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InferTypeInfo {
@@ -30,7 +33,7 @@ pub enum InferTypeInfo {
 	Generics(InferTypeId, Vec<InferTypeId>),
 	/// This type describes a named type, which can be accessed through Named.
 	// TODO: do not store like this for generic inference on type signatures
-	TypeSignature(String, MadeTypeSignature),
+	TypeSignature(String, TypeSignature),
 	/// This type describes a function signature. The order of the parameters is
 	/// generics, args and return type.
 	FuncSignature(String, Vec<InferTypeId>, Vec<InferTypeId>, InferTypeId),
