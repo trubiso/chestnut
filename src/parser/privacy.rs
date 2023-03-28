@@ -13,9 +13,9 @@ macro_rules! privacy_qualifiers {
 			}
 
 			if let Some(x) = attribs.get(0) {
-				match force_token!(x => Keyword) {
+				match x.as_keyword().unwrap() {
 					$(Keyword::$kw => Privacy::$kw(span),)*
-					_ => unreachable!()
+					other => unreachable!("{other}")
 				}
 			} else {
 				Privacy::Default

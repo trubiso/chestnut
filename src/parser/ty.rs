@@ -1,6 +1,6 @@
 use super::types::{ExprRecursive, Ident};
 use crate::common::{BareType, BuiltinType, FuncSignature, Type, UnscopedExpr};
-use crate::lexer::Token;
+use crate::lexer::{Token, Keyword};
 use crate::parser::expr;
 use chumsky::prelude::*;
 
@@ -16,10 +16,10 @@ enum PostfixOp {
 /// Parses `<ident>[array][optional][ref][mut][(<ty>, ...)]` into Type
 pub fn ty(er: Option<ExprRecursive>) -> token_parser!(Type : '_) {
 	recursive(|ty| {
-		filter(|token| matches!(token, Token::Identifier(_)) || *token == keyword!(DontCare))
+		filter(|token| matches!(token, Token::Identifier(_)))
 			.then(angled!(ty.clone(),).or_not())
 			.map_with_span(|(ident, generics), span| {
-				if ident == keyword!(DontCare) {
+				if ident.is_keyword(Keyword::DontCare) {
 					Type::Inferred(span)
 				} else {
 					// TODO: incorrect span

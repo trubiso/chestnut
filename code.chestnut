@@ -54,12 +54,12 @@ i32 do_thing(i32 only_arg) {
 }
 
 void test() {
-	~& x;
+	_& x;
 	u32& y = x;
 }
 
 i128 lets_return_a_reference() {
-	~x;
+	_x;
 	return x;
 }
 
@@ -90,7 +90,7 @@ void get_an_int_test() {
 void main() {
 	takes_in_function<void(void())>();
 	// print_position(3);
-	// let ~ = do_thing();
+	// let _ = do_thing();
 	mut char t;
 	/*unsafe {
 		t = 10;
@@ -100,17 +100,17 @@ void main() {
 	// d.value;
 	// TODO: infer these int types
 	u16 x = 2u16 + (3u16 - 4u16);
-	~ iw;
+	_ iw;
 	iw = add(x, x);
-	let long_name_so_i_can_find_it_in_the_debugger = add<~, u64>(x, x);
+	let long_name_so_i_can_find_it_in_the_debugger = add<_, u64>(x, x);
 	mut a = 3 + 5 + (2 - 3) * -9 + 4/2;
 	a += 10;
 	a *= 9 + 10;
 	Node bob = sam(3, 4);
 	let boom = extract(bob);
-	Node<~> u;
-	Tuple<~> not_enough;
-	Tuple<~, ~, ~> too_many;
+	Node<_> u;
+	Tuple<_> not_enough;
+	Tuple<_, _, _> too_many;
 	let cvxjnk = dbg(-10);
 	4+2+4;
 	.3u + (0xDead_Beefu - 2iz) - 7u32 * 0b1010_1001i128 / 0o7f;

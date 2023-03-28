@@ -30,7 +30,7 @@ macro_rules! func_attribs {
 		.validate(|attribs, span: Span, emit| {
 			let mut final_attribs = FuncAttribs::default();
 			for i in 0..attribs.len() {
-				match force_token!(attribs[i] => Keyword) {
+				match attribs[i].as_keyword().unwrap() {
 					$(
 						Keyword::$kw => {
 							if final_attribs.$prop {
@@ -76,7 +76,7 @@ fn func_stmt(scope: ScopeRecursive) -> token_parser!(ParserStmt : '_) {
 		.then(func_attribs())
 		.map_with_span(|pre, span| (pre, span))
 		.then(choice((
-			jkeyword!(FatArrow)
+			jpunct!(FatArrow)
 				.ignore_then(expr())
 				.then_ignore(jpunct!(Semicolon))
 				.map_with_span(|expr, span| ParserScope {

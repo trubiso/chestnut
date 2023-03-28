@@ -133,17 +133,88 @@ pub enum NumberLiteralKind {
 	F128,
 }
 
-macro_rules! def_token {
-	($($vid:ident { $($match:expr => $to:ident,)* })*) => {
-		$(
-			#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-			pub enum $vid { $($to,)* }
-			impl Display for $vid {
-				fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-					f.write_str(match *self { $(Self::$to => $match,)* })
+/*
+	Keyword {
+		"private" => Private,
+		"protected" => Protected,
+		"public" => Public,
+		"export" => Export,
+		"class" => Class,
+		"func" => Function,
+		"pure" => Pure,
+		"return" => Return,
+		"let" => Let,
+		"mut" => Mut,
+		"for" => For,
+		"in" => In,
+		"while" => While,
+		"loop" => Loop,
+		"if" => If,
+		"import" => Import,
+		"unsafe" => Unsafe,
+		"cpp" => Cpp,
+	}
+*/
+
+macro_rules! tok_venum {
+	($vid:ident { $($match:expr => $to:ident,)* }) => {
+		#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+		pub enum $vid { $($to,)* }
+		impl Display for $vid {
+			fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+				f.write_str(match *self { $(Self::$to => $match,)* })
+			}
+		}
+	}
+}
+
+macro_rules! token_keyword {
+	($($match:expr => $to:ident,)*) => {
+		tok_venum!{Keyword {$($match => $to,)*}}
+
+		impl $crate::parser::types::Ident {
+			pub fn is_keyword(&self, keyword: Keyword) -> bool {
+				match self.as_keyword() {
+					Some(x) => x == keyword,
+					None => false,
 				}
 			}
-		)*
+
+			pub fn as_keyword(&self) -> Option<Keyword> {
+				match self {
+					Self::Named(_, x) => {
+						$(if x == $match { return Some(Keyword::$to); })*
+						return None;
+					}
+					_ => return None,
+				}
+			}
+		}
+
+		impl Token {
+			pub fn is_keyword(&self, keyword: Keyword) -> bool {
+				match self.as_keyword() {
+					Some(x) => x == keyword,
+					None => false,
+				}
+			}
+
+			pub fn as_keyword(&self) -> Option<Keyword> {
+				match self {
+					Token::Identifier(data) => {
+						$(if data == $match { return Some(Keyword::$to); })*
+						return None;
+					}
+					_ => return None,
+				}
+			}
+		}
+	}
+}
+
+macro_rules! def_token {
+	($($vid:ident { $($match:expr => $to:ident,)* })*) => {
+		$(tok_venum!{$vid {$($match => $to,)*}})*
 		#[derive(Logos, Debug, Display, PartialEq, Eq, Clone, Hash)]
 		pub enum Token {
 			#[error]
@@ -164,34 +235,32 @@ macro_rules! def_token {
 			#[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", lex_to_str)]
 			Identifier(String),
 		}
+
+		token_keyword!{
+			"private" => Private,
+			"protected" => Protected,
+			"public" => Public,
+			"export" => Export,
+			"class" => Class,
+			"func" => Function,
+			"pure" => Pure,
+			"return" => Return,
+			"let" => Let,
+			"mut" => Mut,
+			"for" => For,
+			"in" => In,
+			"while" => While,
+			"loop" => Loop,
+			"if" => If,
+			"import" => Import,
+			"unsafe" => Unsafe,
+			"cpp" => Cpp,
+			"_" => DontCare,
+		}
 	};
 }
 
 def_token!(
-	Keyword {
-		"private" => Private,
-		"protected" => Protected,
-		"public" => Public,
-		"export" => Export,
-		"class" => Class,
-		"func" => Function,
-		"pure" => Pure,
-		"return" => Return,
-		"->" => Arrow,
-		"=>" => FatArrow,
-		"let" => Let,
-		"mut" => Mut,
-		"for" => For,
-		"in" => In,
-		"while" => While,
-		"loop" => Loop,
-		"if" => If,
-		"import" => Import,
-		"unsafe" => Unsafe,
-		"cpp" => Cpp,
-		"~" => DontCare,
-	}
-
 	Operator {
 		"?" => Question,
 		"!" => Bang,
@@ -228,9 +297,12 @@ def_token!(
 		"{" => LBrace,
 		"}" => RBrace,
 		"." => Dot,
+		".." => DotDot,
 		"," => Comma,
 		":" => Colon,
 		"::" => ColonColon,
+		"->" => Arrow,
+		"=>" => FatArrow,
 		";" => Semicolon,
 	}
 );

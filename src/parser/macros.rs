@@ -40,7 +40,13 @@ macro_rules! token_gen {
 	};
 }
 
-token_gen!(keyword, jkeyword => Keyword);
+#[macro_export]
+macro_rules! jkeyword {
+	($var:ident) => {
+		filter(|token: &$crate::lexer::Token| token.is_keyword($crate::lexer::Keyword::$var))
+	}
+}
+
 token_gen!(punct, jpunct => Punctuation);
 token_gen!(_assg_op, jassg_op => AssignmentOp);
 token_gen!(op, jop => Operator);

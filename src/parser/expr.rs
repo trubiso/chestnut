@@ -104,13 +104,13 @@ pub fn expr() -> token_parser!(ParserExpr) {
 			.map_with_span(|pre, span| (pre, span))
 			.then(choice((
 				// bare_scope(),
-				jkeyword!(FatArrow)
+				jpunct!(FatArrow)
 					.ignore_then(pn_parser())
 					.map_with_span(|expr, span| ParserScope {
 						span: span.clone(),
 						stmts: vec![ParserStmt::Return(span, expr)],
 					}),
-				jkeyword!(FatArrow)
+				jpunct!(FatArrow)
 					.ignore_then(pn_parser())
 					.map_with_span(|expr, span| ParserScope {
 						span: span.clone(),
