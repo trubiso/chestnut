@@ -29,7 +29,7 @@ void takes_in_function<T>() {
 // }
 
 class Node<T> {
-	Node<T>& next;
+	Node<T>& neXt;
 	public T value;
 
 	unsafe {

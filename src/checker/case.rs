@@ -1,5 +1,5 @@
 use super::add_diagnostic;
-use crate::span::Span;
+use crate::{parser::types::Ident, span::Span};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 
@@ -64,8 +64,10 @@ pub fn check_case(span: Span, name: String, wanted: Case) {
 					Case::SnakeCase
 				} else if name.contains('_') {
 					Case::UpperSnakeCase
-				} else {
+				} else if begins_with_uppercase(&name) {
 					Case::PascalCase
+				} else {
+					Case::CamelCase
 				}
 			} else {
 				Case::SnakeCase
@@ -92,4 +94,8 @@ pub fn check_case(span: Span, name: String, wanted: Case) {
 					.with_message(format!("expected {wanted}, found {found}",))]),
 		)
 	}
+}
+
+pub fn check_case_ident(ident: &Ident, wanted: Case) {
+	check_case(ident.span(), ident.to_string(), wanted)
 }

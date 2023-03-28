@@ -10,6 +10,10 @@ use derive_more::Display;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
+use self::case::{check_case, check_case_ident, Case};
+
+pub mod case;
+
 lazy_static! {
 	static ref DIAGNOSTICS: Mutex<Vec<Diagnostic<usize>>> = Mutex::new(vec![]);
 }
@@ -89,14 +93,20 @@ fn check_inner(scope: &ParserScope, context: Context) {
 	for stmt in &scope.stmts {
 		check_stmt(stmt, &context);
 		match stmt {
-			Stmt::Create(_, x, ..) | Stmt::Declare(_, x, ..) => {
+			Stmt::Create(_, x, ty_ident, ..) | Stmt::Declare(_, x, ty_ident, ..) => {
+				check_case_ident(&ty_ident.ident, Case::SnakeCase);
 				check_privacy(x, &context);
 			}
-			Stmt::Func(_, x, _, f) => {
+			Stmt::Func(_, x, i, f) => {
+				check_case_ident(i, Case::SnakeCase);
 				check_privacy(x, &context);
 				check_inner(&f.body, Context::Func);
 			}
-			Stmt::Class(_, x, _, _, _, b) => {
+			Stmt::Class(_, x, i, g, _, b) => {
+				check_case_ident(i, Case::PascalCase);
+				for x in g.iter() {
+					check_case_ident(x, Case::PascalCase);
+				}
 				check_privacy(x, &context);
 				check_inner(b, Context::Class);
 			}
