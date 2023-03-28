@@ -21,12 +21,12 @@ pub fn stmt(scope: ScopeRecursive, semi: bool) -> token_parser!(ParserStmt : '_)
 	choice((
 		semi!(Y let_stmt()),
 		semi!(Y import_stmt()),
+		semi!(Y return_stmt()),
 		semi!(Y create_stmt()),
 		semi!(Y mut_stmt()),
 		semi!(Y declare_stmt()),
 		semi!(N func_stmt(scope.clone())),
 		semi!(N class_stmt(scope.clone())),
-		semi!(Y return_stmt()),
 		semi!(Y assg()),
 		semi!(Y bare_expr_stmt()),
 		semi!(N unsafe_scope_stmt(scope)),
