@@ -12,12 +12,13 @@ use crate::parser::CodeStream;
 use crate::span::Span;
 
 // pub mod codegen;
+pub mod checker;
+pub mod collector;
 pub mod common;
 pub mod hoister;
 pub mod infer;
 pub mod lexer;
 pub mod parser;
-pub mod collector;
 pub mod span;
 
 // TODO: store all lex, ast, parse and resolve in hashmaps that can be accessed
@@ -133,6 +134,11 @@ fn main() {
 			}
 		};
 
+		let check_diagnostics = time(should_time, "checker", || checker::check(&parsed));
+		for diagnostic in check_diagnostics {
+			all_diagnostics.push(diagnostic);
+		}
+
 		let (hoisted, hoisted_diagnostics) =
 			time(should_time, "hoister", || hoister::hoist(parsed, None));
 		for diagnostic in hoisted_diagnostics {
@@ -145,8 +151,8 @@ fn main() {
 		}
 
 		// TODO: replace the resolver
-		// let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", || {
-		// 	resolve::resolve(hoisted, resolve::Context::TopLevel, None)
+		// let ((resolved, _), resolved_diagnostics) = time(should_time, "resolver", ||
+		// { 	resolve::resolve(hoisted, resolve::Context::TopLevel, None)
 		// });
 		// for diagnostic in resolved_diagnostics {
 		// 	all_diagnostics.push(diagnostic);
@@ -157,7 +163,8 @@ fn main() {
 			.any(|x| x.severity == Severity::Error);
 		have_errors = have_errors || current_has_errors;
 		// if !current_has_errors {
-		// 	let code = time(should_time, "codegen", || codegen::codegen(resolved));
+		// 	let code = time(should_time, "codegen", ||
+		// codegen::codegen(resolved));
 
 		// 	std::fs::write(format!("{arg}.cpp"), code).unwrap();
 		// 	cpp_sources.push(format!("{arg}.cpp"));
@@ -168,7 +175,7 @@ fn main() {
 		if have_errors {
 			emit_errors(&files, all_diagnostics);
 			println!("errors present, cannot compile :(");
-			// return;
+		// return;
 		} else {
 			emit_errors(&files, all_diagnostics);
 		}

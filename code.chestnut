@@ -32,6 +32,10 @@ class Node<T> {
 	Node<T>& next;
 	public T value;
 
+	unsafe {
+		cpp "/* he he i am silly cpp */";
+	}
+
 	public void traverse() {
 		let x = 9;
 	}

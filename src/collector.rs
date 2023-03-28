@@ -1,9 +1,5 @@
-//! The collector does two things simultaneously: it puts the types the
-//! inference figured out in variables and fails if some are still unknown, and
-//! checks statements against their respective context to check whether they are
-//! valid.
-
-// TODO: move the second functionality after the parser
+//! The collector puts the types the inference figured out in variables and
+//! fails if some are still unknown.
 
 use crate::{
 	common::{Expr, Func, Scope, ScopeFmt, Stmt, Type, TypeSignature},
@@ -64,23 +60,10 @@ impl std::fmt::Display for CollectedScope {
 	}
 }
 
-#[derive(Debug, Display, Clone, PartialEq, Eq)]
-pub enum Context {
-	#[display(fmt = "top level")]
-	TopLevel,
-	#[display(fmt = "class")]
-	Class,
-	#[display(fmt = "function")]
-	Func,
-	#[display(fmt = "unsafe")]
-	Unsafe,
-}
-
 fn collect_inner(
 	scope: HoistedScope,
 	engine: &InferEngine,
 	idents: HashMap<String, InferTypeId>,
-	context: Context,
 ) -> CollectedScope {
 	let collected = CollectedScope {
 		stmts: vec![],
@@ -109,5 +92,5 @@ pub fn collect(
 	engine: &InferEngine,
 	idents: HashMap<String, InferTypeId>,
 ) -> CollectedScope {
-	collect_inner(scope, engine, idents, Context::TopLevel)
+	collect_inner(scope, engine, idents)
 }
