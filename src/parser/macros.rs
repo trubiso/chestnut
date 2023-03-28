@@ -44,7 +44,7 @@ macro_rules! token_gen {
 macro_rules! jkeyword {
 	($var:ident) => {
 		filter(|token: &$crate::lexer::Token| token.is_keyword($crate::lexer::Keyword::$var))
-	}
+	};
 }
 
 token_gen!(punct, jpunct => Punctuation);
@@ -118,5 +118,23 @@ macro_rules! assg {
 	};
 	(noident ignore $ident:ident) => {
 		jassg_op!($ident).ignore_then(expr())
+	};
+	($op:ident -> $ident:ident) => {
+		$crate::parser::ident::ident()
+			.then(jop!($op))
+			.then(jassg_op!($ident))
+			.then(expr())
+	};
+	($op:ident -> ignore $ident:ident) => {
+		$crate::parser::ident::ident()
+			.then_ignore(jop!($op))
+			.then_ignore(jassg_op!($ident))
+			.then(expr())
+	};
+	($op:ident -> noident $ident:ident) => {
+		jop!($op).then(jassg_op!($ident)).then(expr())
+	};
+	($op:ident -> noident ignore $ident:ident) => {
+		jop!($op).then(jassg_op!($ident)).ignore_then(expr())
 	};
 }

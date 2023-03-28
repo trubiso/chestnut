@@ -133,29 +133,6 @@ pub enum NumberLiteralKind {
 	F128,
 }
 
-/*
-	Keyword {
-		"private" => Private,
-		"protected" => Protected,
-		"public" => Public,
-		"export" => Export,
-		"class" => Class,
-		"func" => Function,
-		"pure" => Pure,
-		"return" => Return,
-		"let" => Let,
-		"mut" => Mut,
-		"for" => For,
-		"in" => In,
-		"while" => While,
-		"loop" => Loop,
-		"if" => If,
-		"import" => Import,
-		"unsafe" => Unsafe,
-		"cpp" => Cpp,
-	}
-*/
-
 macro_rules! tok_venum {
 	($vid:ident { $($match:expr => $to:ident,)* }) => {
 		#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -283,10 +260,6 @@ def_token!(
 
 	AssignmentOp {
 		"=" => Set,
-		"-=" => NegSet,
-		"*=" => StarSet,
-		"+=" => PlusSet,
-		"/=" => DivSet,
 	}
 
 	Punctuation {
