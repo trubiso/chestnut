@@ -1,6 +1,6 @@
 use super::types::{ExprRecursive, Ident};
 use crate::common::{BareType, BuiltinType, FuncSignature, Type, UnscopedExpr};
-use crate::lexer::{Token, Keyword};
+use crate::lexer::{Keyword, Token};
 use crate::parser::expr;
 use chumsky::prelude::*;
 

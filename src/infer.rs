@@ -198,14 +198,7 @@ impl InferEngine {
 				if a.len() == d.len() && b.len() == e.len() =>
 			{
 				// TODO: this doesn't unify properly!
-				let (a, b, c, d, e, f) = (
-					a.clone(),
-					b.clone(),
-					c.clone(),
-					d.clone(),
-					e.clone(),
-					f.clone(),
-				);
+				let (a, b, c, d, e, f) = (a.clone(), b.clone(), *c, d.clone(), e.clone(), *f);
 				for (x, y) in a.iter().zip(d.iter()) {
 					self.unify(*x, *y, false)?;
 				}
@@ -531,7 +524,6 @@ impl FuncSignature {
 			engine().add_ty(info)
 		};
 
-		let name = name.clone();
 		InferTypeInfo::FuncSignature(name, generics, args, return_ty)
 	}
 
@@ -645,9 +637,8 @@ impl HoistedExpr {
 				let engine = engine();
 				let ty = &engine.tys[&user];
 				let InferTypeInfo::FuncSignature(_, _, _, return_ty) = ty else { unreachable!() };
-				let return_ty = engine.tys[return_ty].clone();
 
-				return_ty.clone()
+				engine.tys[return_ty].clone()
 			}
 			// TODO: dot access
 			Self::Dot(..) => todo!("dot access"),

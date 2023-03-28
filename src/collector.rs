@@ -7,7 +7,6 @@ use crate::{
 	infer::{InferEngine, InferTypeId, InferTypeInfo},
 	span::Span,
 };
-use derive_more::Display;
 use std::collections::HashMap;
 
 pub type CollectedFunc = Func<CollectedExpr, CollectedScope>;
@@ -63,7 +62,7 @@ impl std::fmt::Display for CollectedScope {
 fn collect_inner(
 	scope: HoistedScope,
 	engine: &InferEngine,
-	idents: HashMap<String, InferTypeId>,
+	_idents: HashMap<String, InferTypeId>,
 ) -> CollectedScope {
 	let collected = CollectedScope {
 		stmts: vec![],
@@ -71,7 +70,7 @@ fn collect_inner(
 	};
 
 	let data = scope.data.borrow();
-	for ((i, (name, span)), (_, mutable)) in data
+	for ((i, (_name, _span)), (_, _mutable)) in data
 		.var_spans
 		.iter()
 		.enumerate()

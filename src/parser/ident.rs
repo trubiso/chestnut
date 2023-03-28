@@ -1,17 +1,16 @@
 use super::types::Ident;
-use crate::lexer::{Token, Keyword};
+use crate::lexer::{Keyword, Token};
 use chumsky::prelude::*;
 
 /// Parses an ident token into Ident::Named
 pub fn ident() -> token_parser!(Ident) {
-	filter(|token| matches!(token, Token::Identifier(_)))
-		.map_with_span(|token, span| {
-			if token.is_keyword(Keyword::DontCare) {
-				Ident::Discarded(span)
-			} else {
-				force_token!(token => Identifier, span)
-			}
-		})
+	filter(|token| matches!(token, Token::Identifier(_))).map_with_span(|token, span| {
+		if token.is_keyword(Keyword::DontCare) {
+			Ident::Discarded(span)
+		} else {
+			force_token!(token => Identifier, span)
+		}
+	})
 }
 
 /// Parses a non-inferred ident token into Ident

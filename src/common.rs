@@ -4,7 +4,7 @@ use crate::{
 	span::Span,
 };
 use derive_more::Display;
-use std::{fmt, marker::PhantomData, collections::HashMap};
+use std::{collections::HashMap, fmt, marker::PhantomData};
 
 // TODO: make GetSpan trait and perhaps change its return type to a ref
 
@@ -144,7 +144,7 @@ impl<Sc: Scope<Expr<Sc>> + Clone + fmt::Display> Expr<Sc> {
 	}
 
 	pub fn unscoped_box(self) -> Option<Box<UnscopedExpr>> {
-		self.unscoped().map(|x| Box::new(x))
+		self.unscoped().map(Box::new)
 	}
 }
 

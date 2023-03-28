@@ -10,7 +10,7 @@ use derive_more::Display;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
 
-use self::case::{check_case, check_case_ident, Case};
+use self::case::{check_case_ident, Case};
 
 pub mod case;
 

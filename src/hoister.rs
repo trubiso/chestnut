@@ -139,7 +139,7 @@ impl ParserExpr {
 			Expr::Call(a, b, c, d) => Expr::Call(
 				a,
 				Box::new(b.hoist(inherit)),
-				c.map(|x| x.iter().map(|y| y.clone()).collect()),
+				c.map(|x| x.to_vec()),
 				d.iter().map(|x| x.clone().hoist(inherit)).collect(),
 			),
 			Expr::Dot(a, b, c) => {

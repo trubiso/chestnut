@@ -265,7 +265,8 @@ pub fn parse(
 	))
 }
 
-// TODO: decide whether to change the function signature to allow returning functions with generics.
-// i think it's pretty ugly to write `Node<T><T>(T) return_node_maker()`
-//                                vs `func return_node_maker() -> func<T>(T) -> Node<T>`
-// but maybe the cases are rare enough that we can ignore these problems.
+// TODO: decide whether to change the function signature to allow returning
+// functions with generics. i think it's pretty ugly to write `Node<T><T>(T)
+// return_node_maker()`                                vs `func
+// return_node_maker() -> func<T>(T) -> Node<T>` but maybe the cases are rare
+// enough that we can ignore these problems.
