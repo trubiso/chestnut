@@ -145,8 +145,13 @@ fn main() {
 			all_diagnostics.push(diagnostic);
 		}
 
-		let infer_diagnostics = time(should_time, "infer", || infer::infer(hoisted.clone()));
+		let (infer_idents, infer_diagnostics) = time(should_time, "infer", || infer::infer(hoisted.clone()));
 		for diagnostic in infer_diagnostics {
+			all_diagnostics.push(diagnostic);
+		}
+
+		let (_collected, collect_diagnostics) = time(should_time, "collector", || collector::collect(hoisted, &infer::engine(), &infer_idents));
+		for diagnostic in collect_diagnostics {
 			all_diagnostics.push(diagnostic);
 		}
 

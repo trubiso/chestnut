@@ -137,6 +137,9 @@ void main() {
 	let b = 'b';
 	let cc = 'c';
 
+	_ variable;
+	Node variablee;
+
 	// a + b(); -> error
 
 	// (string err) => print(err);

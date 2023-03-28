@@ -1,5 +1,5 @@
 //! The collector puts the types the inference figured out in variables and
-//! fails if some are still unknown.
+//! fails if some are still unknown. It also checks for use before define.
 
 use crate::{
 	common::{Expr, Func, Scope, ScopeFmt, Stmt, Type, TypeSignature},
@@ -7,7 +7,17 @@ use crate::{
 	infer::{InferEngine, InferTypeId, InferTypeInfo},
 	span::Span,
 };
-use std::collections::HashMap;
+use codespan_reporting::diagnostic::{Diagnostic, Label};
+use lazy_static::lazy_static;
+use std::{collections::HashMap, sync::Mutex};
+
+lazy_static! {
+	static ref DIAGNOSTICS: Mutex<Vec<Diagnostic<usize>>> = Mutex::new(vec![]);
+}
+
+pub fn add_diagnostic(diagnostic: Diagnostic<usize>) {
+	DIAGNOSTICS.lock().unwrap().push(diagnostic);
+}
 
 pub type CollectedFunc = Func<CollectedExpr, CollectedScope>;
 pub type CollectedExpr = Expr<CollectedScope>;
@@ -59,10 +69,47 @@ impl std::fmt::Display for CollectedScope {
 	}
 }
 
+impl InferTypeInfo {
+	pub fn is_partially_unknown(&self, engine: &InferEngine) -> bool {
+		let duct_tape = |x| {
+			engine
+				.tys
+				.get(&x)
+				.map(|x| x.is_partially_unknown(engine))
+				.unwrap_or(true)
+		};
+		let helper = |x: &usize| duct_tape(*x);
+		let helper_arr = |x: &[usize]| {
+			x.iter()
+				.copied()
+				.map(duct_tape)
+				.reduce(|acc, b| acc || b)
+				.unwrap_or(false)
+		};
+		match self {
+			Self::Unknown => true,
+			Self::SameAs(x) => helper(x),
+			Self::Generics(x, g) => helper(x) || helper_arr(g),
+			Self::TypeSignature(..) => false,
+			Self::FuncSignature(_, g, a, r) => helper_arr(g) || helper_arr(a) || helper(r),
+			Self::AnySigned | Self::AnyUnsigned | Self::AnyFloat => false,
+			Self::KnownNumber(..)
+			| Self::KnownVoid
+			| Self::KnownBool
+			| Self::KnownString
+			| Self::KnownChar => false,
+			Self::Ref(x) => helper(x),
+			Self::Generic(_) => false,
+			Self::UnknownGeneric(_) => true,
+			Self::Bottom => false,
+		}
+	}
+}
+
 fn collect_inner(
-	scope: HoistedScope,
+	scope: &HoistedScope,
 	engine: &InferEngine,
-	_idents: HashMap<String, InferTypeId>,
+	idents: &HashMap<String, InferTypeId>,
 ) -> CollectedScope {
 	let collected = CollectedScope {
 		stmts: vec![],
@@ -70,17 +117,38 @@ fn collect_inner(
 	};
 
 	let data = scope.data.borrow();
-	for ((i, (_name, _span)), (_, _mutable)) in data
-		.var_spans
-		.iter()
-		.enumerate()
-		.zip(data.var_mutabilities.iter())
-	{
-		let engine_ty = engine.tys[&i].clone().follow_ref(engine);
-		if matches!(engine_ty, InferTypeInfo::Unknown) {
-			todo!("make a good error message");
+	for ((name, span), (_, _mutable)) in data.var_spans.iter().zip(data.var_mutabilities.iter()) {
+		let engine_ty = match idents.get(name) {
+			None => todo!("ident {name} not found"),
+			Some(x) => match engine.tys.get(x) {
+				None => todo!("ident {name} has no type (???)"),
+				Some(x) => x.clone().follow_ref(engine),
+			},
+		};
+		if engine_ty.is_partially_unknown(engine) {
+			add_diagnostic(
+				Diagnostic::error()
+					.with_message("explicit type required")
+					.with_labels(vec![Label::primary(span.file_id, span.range())
+						.with_message("could not infer type of variable")]),
+			);
 		}
-		todo!("turn infer type info to actual type")
+		//todo!("turn infer type info to actual type")
+	}
+
+	for stmt in scope.stmts.borrow().iter() {
+		match stmt {
+			Stmt::Func(_, _, _, f) => {
+				collect_inner(&f.body, engine, idents);
+			}
+			/*Stmt::Class(_, _, _, _, _, b) => {
+				collect_inner(b, engine, idents);
+			}*/
+			Stmt::Unsafe(_, b) => {
+				collect_inner(b, engine, idents);
+			}
+			_ => {}
+		}
 	}
 
 	collected
@@ -89,7 +157,10 @@ fn collect_inner(
 pub fn collect(
 	scope: HoistedScope,
 	engine: &InferEngine,
-	idents: HashMap<String, InferTypeId>,
-) -> CollectedScope {
-	collect_inner(scope, engine, idents)
+	idents: &HashMap<String, InferTypeId>,
+) -> (CollectedScope, Vec<Diagnostic<usize>>) {
+	(
+		collect_inner(&scope, engine, idents),
+		DIAGNOSTICS.lock().unwrap().clone(),
+	)
 }

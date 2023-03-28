@@ -295,10 +295,15 @@ unsafe impl Send for InferEngine {}
 lazy_static! {
 	static ref DIAGNOSTICS: Mutex<Vec<Diagnostic<usize>>> = Mutex::new(vec![]);
 	static ref ENGINE: Mutex<InferEngine> = Mutex::new(InferEngine::default());
+	static ref IDENTS: Mutex<HashMap<String, InferTypeId>> = Mutex::new(HashMap::default());
 }
 
-fn engine<'a>() -> MutexGuard<'a, InferEngine> {
+pub fn engine<'a>() -> MutexGuard<'a, InferEngine> {
 	ENGINE.lock().unwrap()
+}
+
+fn idents_mutex<'a>() -> MutexGuard<'a, HashMap<String, InferTypeId>> {
+	IDENTS.lock().unwrap()
 }
 
 fn add_diagnostic(diagnostic: Diagnostic<usize>) {
@@ -654,6 +659,7 @@ fn infer_inner(
 	expected_return_ty: Option<InferTypeId>,
 	nicer_error_span: Option<Span>,
 ) -> Vec<Diagnostic<usize>> {
+	// FIXME: shadowing (will need a name resolver for this)
 	// TODO: good error reporting instead of just unwrapping random stuff
 	let stmts = scope.stmts.borrow().clone();
 	// TODO: hoist named tys from scope.data.types. this will require Type::Generic
@@ -733,30 +739,13 @@ fn infer_inner(
 		let span = nicer_error_span.unwrap_or(scope.span);
 		ty_errorify(span, Some(("no return in non-void function".into(), vec!["missing return statement in function returning non-void".into()])), engine().unify(*x, got_ty, false));
 	}
-	let engine = engine();
-	let max_len = idents
-		.keys()
-		.collect::<Vec<_>>()
-		.iter()
-		.map(|x| x.len())
-		.max()
-		.unwrap_or_default()
-		.max(4); // "anon"
-	let max_num = engine.tys.len().to_string().len();
-	for (i, (j, ty)) in engine.tys.iter().enumerate() {
-		let name = idents
-			.reverse()
-			.get(j)
-			.cloned()
-			.unwrap_or_else(|| "anon".into());
-		println!(
-			"{}{i} -> {name}{} => {}",
-			" ".repeat(max_num - i.to_string().len()),
-			" ".repeat(max_len - name.len()),
-			ty.display(&engine, &idents)
-		);
+	{
+		let mut idents_mutex_lock = idents_mutex();
+		for ident in idents {
+			idents_mutex_lock.insert(ident.0, ident.1);
+		}
+		drop(idents_mutex_lock);
 	}
-	println!("{} types created", engine.id_counter);
 	if !DIAGNOSTICS.lock().unwrap().is_empty() {
 		let diagnostics = DIAGNOSTICS.lock().unwrap();
 		diagnostics.clone()
@@ -765,6 +754,7 @@ fn infer_inner(
 	}
 }
 
-pub fn infer(scope: HoistedScope) -> Vec<Diagnostic<usize>> {
-	infer_inner(scope, None, None, None, None)
+pub fn infer(scope: HoistedScope) -> (HashMap<String, InferTypeId>, Vec<Diagnostic<usize>>) {
+	let inferred = infer_inner(scope, None, None, None, None);
+	(idents_mutex().clone(), inferred)
 }
