@@ -2,8 +2,9 @@
 //! fails if some are still unknown. It also checks for use before define.
 
 use crate::{
-	common::{Expr, Func, Scope, ScopeFmt, Stmt, Type, TypeSignature},
+	common::{BareType, BuiltinType, Expr, Func, Scope, ScopeFmt, Stmt, Type, TypeSignature},
 	hoister::HoistedScope,
+	ident,
 	infer::{InferEngine, InferTypeId, InferTypeInfo},
 	span::Span,
 };
@@ -104,6 +105,58 @@ impl InferTypeInfo {
 			Self::Bottom => false,
 		}
 	}
+
+	pub fn collect(&self, engine: &InferEngine, span: Span) -> Type {
+		// we won't go to codegen if this failed -> it's ok to put any junk type here
+		let error_ty = Type::Inferred(span.clone());
+		let duct_tape = |x| {
+			engine
+				.tys
+				.get(&x)
+				.map(|x| x.collect(engine, span.clone()))
+				.unwrap_or_else(|| error_ty.clone())
+		};
+		let helper = |x: &usize| duct_tape(*x);
+		let helper_arr = |x: &[usize]| x.iter().copied().map(duct_tape).collect();
+		match self {
+			Self::Unknown => error_ty,
+			Self::SameAs(x) => helper(x),
+			Self::Generics(x, g) => Type::BareType(
+				span.clone(),
+				BareType {
+					ident: ident!(
+						span.clone(),
+						match &engine.tys[x] {
+							Self::TypeSignature(s, _) => s,
+							_ => unreachable!(),
+						}
+					),
+					generics: helper_arr(g),
+				},
+			),
+			Self::TypeSignature(..) => unreachable!(),
+			Self::FuncSignature(..) => todo!(),
+			Self::AnySigned => Type::Builtin(span, BuiltinType::I32),
+			Self::AnyUnsigned => Type::Builtin(span, BuiltinType::U32),
+			Self::AnyFloat => Type::Builtin(span, BuiltinType::F32),
+			Self::KnownNumber(x) => Type::Builtin(span, x.as_ty()),
+			Self::KnownVoid => Type::Builtin(span, BuiltinType::Void),
+			Self::KnownBool => Type::Builtin(span, BuiltinType::Bool),
+			Self::KnownString => Type::Builtin(span, BuiltinType::String),
+			Self::KnownChar => Type::Builtin(span, BuiltinType::Char),
+			// TODO: mutability in type inference
+			Self::Ref(x) => Type::Ref(span.clone(), Box::new(helper(x)), false),
+			Self::Generic(x) => Type::BareType(
+				span.clone(),
+				BareType {
+					ident: ident!(span, x.clone()),
+					generics: vec![],
+				},
+			),
+			Self::UnknownGeneric(_) => error_ty,
+			Self::Bottom => error_ty,
+		}
+	}
 }
 
 fn collect_inner(
@@ -111,13 +164,13 @@ fn collect_inner(
 	engine: &InferEngine,
 	idents: &HashMap<String, InferTypeId>,
 ) -> CollectedScope {
-	let collected = CollectedScope {
+	let mut collected = CollectedScope {
 		stmts: vec![],
 		data: CollectedScopeData::default(),
 	};
 
 	let data = scope.data.borrow();
-	for ((name, span), (_, _mutable)) in data.var_spans.iter().zip(data.var_mutabilities.iter()) {
+	for ((name, span), (_, mutable)) in data.var_spans.iter().zip(data.var_mutabilities.iter()) {
 		let engine_ty = match idents.get(name) {
 			None => todo!("ident {name} not found"),
 			Some(x) => match engine.tys.get(x) {
@@ -133,6 +186,8 @@ fn collect_inner(
 						.with_message("could not infer type of variable")]),
 			);
 		}
+		let ty = engine_ty.collect(engine, span.clone());
+		collected.data.vars.insert(name.clone(), CollectedVar { name: name.clone(), ty, mutable: *mutable, value: None });
 		//todo!("turn infer type info to actual type")
 	}
 

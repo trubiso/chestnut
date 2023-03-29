@@ -11,8 +11,8 @@ macro_rules! token_parser {
 
 #[macro_export]
 macro_rules! ident {
-	($str:expr) => {
-		Ident::Named($str.to_string())
+	($span:expr, $str:expr) => {
+		$crate::parser::types::Ident::Named($span, $str.to_string())
 	};
 }
 
