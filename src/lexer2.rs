@@ -61,8 +61,8 @@ Token! {
 	Ident(String), // anything starting with a-zA-Z
 }
 
-pub struct Lexer {
-	data: String,
+pub struct Lexer<'a> {
+	data: &'a [char],
 	cursor: usize,
 	file_id: usize,
 }
@@ -94,10 +94,10 @@ pub enum LexError {
 }
 
 // basic lex functions
-impl Lexer {
+impl Lexer<'_> {
 	/// Returns the current character, returning ' ' if the end was reached.
 	fn peek(&self) -> char {
-		self.data.chars().skip(self.cursor).next().unwrap_or(' ')
+		self.data.get(self.cursor).map(|x| *x).unwrap_or_else(|| ' ')
 	}
 
 	/// Returns the current character, and advances the cursor past it. If the
@@ -156,7 +156,7 @@ impl Lexer {
 }
 
 // make tokens and spans
-impl Lexer {
+impl Lexer<'_> {
 	fn span(&self, n: usize) -> Span {
 		Span::new(self.file_id, self.cursor - n..self.cursor)
 	}
@@ -197,8 +197,8 @@ fn is_lexable(x: char) -> bool {
 }
 
 // actual lexing
-impl Lexer {
-	pub fn new(data: String, file_id: usize) -> Lexer {
+impl Lexer<'_> {
+	pub fn new(data: &[char], file_id: usize) -> Lexer {
 		Lexer {
 			data,
 			cursor: 0,
@@ -327,9 +327,9 @@ impl Lexer {
 	}
 }
 
-pub fn lex(data: String, file_id: usize) -> (Vec<Token>, Vec<Diagnostic<usize>>) {
+pub fn lex(data: &str, file_id: usize) -> (Vec<Token>, Vec<Diagnostic<usize>>) {
 	let mut lexer = Lexer {
-		data,
+		data: &data.chars().collect::<Vec<char>>(),
 		cursor: 0,
 		file_id,
 	};

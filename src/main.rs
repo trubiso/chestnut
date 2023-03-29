@@ -121,7 +121,7 @@ fn main() {
 		};
 
 		let (_lexed2, lex_diagnostics) = time(should_time, "lexer2", || {
-			lexer2::lex(files.get(file_id).unwrap().source().to_string(), file_id)
+			lexer2::lex(files.get(file_id).unwrap().source(), file_id)
 		});
 
 		for diagnostic in lex_diagnostics {
