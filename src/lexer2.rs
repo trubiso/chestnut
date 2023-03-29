@@ -1,3 +1,5 @@
+use std::{str::Chars, iter::Peekable};
+
 use crate::span::Span;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
@@ -62,7 +64,7 @@ Token! {
 }
 
 pub struct Lexer<'a> {
-	data: &'a [char],
+	data: Peekable<Chars<'a>>,
 	cursor: usize,
 	file_id: usize,
 }
@@ -96,31 +98,38 @@ pub enum LexError {
 // basic lex functions
 impl Lexer<'_> {
 	/// Returns the current character, returning ' ' if the end was reached.
-	fn peek(&self) -> char {
-		self.data.get(self.cursor).map(|x| *x).unwrap_or_else(|| ' ')
+	fn peek(&mut self) -> char {
+		self.data.peek().map(|x| *x).unwrap_or('\u{fffff}')
 	}
 
 	/// Returns the current character, and advances the cursor past it. If the
 	/// cursor points more than 1 past the end of the data (i.e. past EOF),
 	/// LexError::UnexpectedEOF will be returned instead.
 	fn consume(&mut self) -> Result<char, LexError> {
-		let peek = self.peek();
+		let data = self.peek();
 		self.advance()?;
-		Ok(peek)
+		Ok(data)
 	}
 
 	/// Returns whether the cursor points past the end of the data. The cursor
 	/// may point 1 past the end to signal that it has finished lexing, but
 	/// pointing further than this only happens when the end wasn't expected.
-	fn eof(&self) -> bool {
-		self.cursor >= self.data.len()
+	fn eof(&mut self) -> bool {
+		self.data.peek().is_none()
+	}
+
+	fn next_eof(&self) -> bool {
+		let mut cloned = self.data.clone();
+		cloned.next();
+		cloned.peek().is_none()
 	}
 
 	/// Advances the cursor once. Returns LexError::UnexpectedEOF if the cursor
 	/// points past EOF (1 past the end).
 	fn advance(&mut self) -> Result<(), LexError> {
 		self.cursor += 1;
-		if self.cursor > self.data.len() {
+		self.data.next();
+		if self.next_eof() {
 			Err(LexError::UnexpectedEOF)
 		} else {
 			Ok(())
@@ -142,7 +151,7 @@ impl Lexer<'_> {
 	/// function should never error).
 	fn skip_whitespace(&mut self) {
 		while !self.eof() && is_whitespace(self.peek()) {
-			self.cursor += 1; // avoid using self.advance() which may throw
+			self.advance();
 		}
 	}
 
@@ -198,7 +207,7 @@ fn is_lexable(x: char) -> bool {
 
 // actual lexing
 impl Lexer<'_> {
-	pub fn new(data: &[char], file_id: usize) -> Lexer {
+	pub fn new(data: Peekable<Chars<'_>>, file_id: usize) -> Lexer {
 		Lexer {
 			data,
 			cursor: 0,
@@ -329,7 +338,7 @@ impl Lexer<'_> {
 
 pub fn lex(data: &str, file_id: usize) -> (Vec<Token>, Vec<Diagnostic<usize>>) {
 	let mut lexer = Lexer {
-		data: &data.chars().collect::<Vec<char>>(),
+		data: data.chars().peekable(),
 		cursor: 0,
 		file_id,
 	};
