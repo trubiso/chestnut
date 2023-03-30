@@ -1,8 +1,7 @@
-use std::{iter::Peekable, str::Chars};
-
 use crate::span::Span;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
+use std::str::Chars;
 
 macro_rules! Token {
 	($($ident:ident$(($($field:ty),*))?,)*) => {
@@ -64,24 +63,21 @@ Token! {
 }
 
 pub struct Lexer<'a> {
-	data: Peekable<Chars<'a>>,
+	data: Chars<'a>,
 	cursor: usize,
 	file_id: usize,
 }
 
 #[derive(Display)]
 pub enum LexError {
-	/// Unexpected end of file
+	/// Unexpected end of file.
 	#[display(fmt = "unexpected end of file")]
 	UnexpectedEOF,
-	/// Unexpected start of file (this should probably never happen)
-	#[display(fmt = "unexpected start of file")]
-	UnexpectedSOF,
-	/// Found a character that didn't match any token rules
+	/// Found a character that didn't match any token rules.
 	#[display(fmt = "unknown token")]
 	UnknownToken,
 	/// Found a non-existing escape sequence in a char/string literal, or simply
-	/// an invalid one (e.g. unicode codepoints with more than 5 hex digits)
+	/// an invalid one (e.g. unicode codepoints with more than 5 hex digits).
 	#[display(fmt = "invalid escape sequence")]
 	InvalidEscapeSequence,
 	/// Found a char literal that does not have a matching closing quote.
@@ -99,7 +95,18 @@ pub enum LexError {
 impl Lexer<'_> {
 	/// Returns the current character, returning ' ' if the end was reached.
 	fn peek(&mut self) -> char {
-		self.data.peek().map(|x| *x).unwrap_or('\u{fffff}')
+		// whatever uh
+		// self.data[self.data.len] => EOF (you may get here but not advance past here)
+		// self.data[self.data.len + 1..] => illegal LOL
+		// the EOF function matches self.data.len.. and next_eof matches self.data.len+1..
+		// so it works with a regular array but the iterator doesn't let me do it this way
+		// can we just do it normally
+		// this is pretty normal
+		// idk what youre doing but like can we do it in a way that works with iteratsors
+		// that's what i'm trying to do
+		// ok lexer3.rs then
+		// sure
+		self.data.clone().next().unwrap_or('\u{fffff}')
 	}
 
 	/// Returns the current character, and advances the cursor past it. If the
@@ -115,13 +122,13 @@ impl Lexer<'_> {
 	/// may point 1 past the end to signal that it has finished lexing, but
 	/// pointing further than this only happens when the end wasn't expected.
 	fn eof(&mut self) -> bool {
-		self.data.peek().is_none()
+		self.data.clone().next().is_none()
 	}
 
 	fn next_eof(&self) -> bool {
 		let mut cloned = self.data.clone();
 		cloned.next();
-		cloned.peek().is_none()
+		cloned.clone().next().is_none()
 	}
 
 	/// Advances the cursor once. Returns LexError::UnexpectedEOF if the cursor
@@ -134,17 +141,6 @@ impl Lexer<'_> {
 		} else {
 			Ok(())
 		}
-	}
-
-	/// Moves the cursor back once. Returns LexError::UnexpectedEOS if this
-	/// movement would imply overflowing the usize back to its maximum, although
-	/// this situation is highly unlikely.
-	fn backtrace(&mut self) -> Result<(), LexError> {
-		if self.cursor == 0 {
-			return Err(LexError::UnexpectedSOF);
-		}
-		self.cursor -= 1;
-		Ok(())
 	}
 
 	/// Skips whitespace characters as long as EOF isn't reached (hence this
@@ -207,7 +203,7 @@ fn is_lexable(x: char) -> bool {
 
 // actual lexing
 impl Lexer<'_> {
-	pub fn new(data: Peekable<Chars<'_>>, file_id: usize) -> Lexer {
+	pub fn new(data: Chars<'_>, file_id: usize) -> Lexer {
 		Lexer {
 			data,
 			cursor: 0,
@@ -264,9 +260,9 @@ impl Lexer<'_> {
 		return Ok(skipped);
 	}
 
-	fn ident(&mut self) -> Result<Option<Token>, LexError> {
-		self.backtrace()?;
-		let data = self.skip_until_lexable()?;
+	fn ident(&mut self, first_char: char) -> Result<Option<Token>, LexError> {
+		let mut data = first_char.to_string();
+		data += &self.skip_until_lexable()?;
 		Ok(Some(Token::Ident(self.span(data.len()), data)))
 	}
 
@@ -305,7 +301,7 @@ impl Lexer<'_> {
 
 			'"' => self.string_literal(),
 
-			'a'..='z' | 'A'..='Z' | '_' => self.ident(),
+			'a'..='z' | 'A'..='Z' | '_' => self.ident(current),
 
 			_ => Err(LexError::UnknownToken),
 		}
@@ -338,7 +334,7 @@ impl Lexer<'_> {
 
 pub fn lex(data: &str, file_id: usize) -> (Vec<Token>, Vec<Diagnostic<usize>>) {
 	let mut lexer = Lexer {
-		data: data.chars().peekable(),
+		data: data.chars(),
 		cursor: 0,
 		file_id,
 	};

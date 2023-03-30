@@ -1,5 +1,6 @@
 #![feature(let_chains)]
 #![feature(thread_local)]
+#![feature(iter_advance_by)]
 
 use chumsky::Stream;
 use codespan_reporting::diagnostic::{Diagnostic, Severity};
@@ -19,6 +20,7 @@ pub mod hoister;
 pub mod infer;
 pub mod lexer;
 pub mod lexer2;
+pub mod lexer3;
 pub mod parser;
 pub mod span;
 
@@ -124,6 +126,10 @@ fn main() {
 			lexer2::lex(files.get(file_id).unwrap().source(), file_id)
 		});
 
+		time(should_time, "lexer3", || {
+			lexer3::lex(files.get(file_id).unwrap().source(), file_id)
+		});
+
 		for diagnostic in lex_diagnostics {
 			all_diagnostics.push(diagnostic);
 		}
@@ -154,12 +160,15 @@ fn main() {
 			all_diagnostics.push(diagnostic);
 		}
 
-		let (infer_idents, infer_diagnostics) = time(should_time, "infer", || infer::infer(hoisted.clone()));
+		let (infer_idents, infer_diagnostics) =
+			time(should_time, "infer", || infer::infer(hoisted.clone()));
 		for diagnostic in infer_diagnostics {
 			all_diagnostics.push(diagnostic);
 		}
 
-		let (_collected, collect_diagnostics) = time(should_time, "collector", || collector::collect(hoisted, &infer::engine(), &infer_idents));
+		let (_collected, collect_diagnostics) = time(should_time, "collector", || {
+			collector::collect(hoisted, &infer::engine(), &infer_idents)
+		});
 		for diagnostic in collect_diagnostics {
 			all_diagnostics.push(diagnostic);
 		}
