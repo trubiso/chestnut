@@ -1,4 +1,4 @@
-use std::{str::Chars, iter::Peekable};
+use std::{iter::Peekable, str::Chars};
 
 use crate::span::Span;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -10,8 +10,8 @@ macro_rules! Token {
 			$($ident(Span$($(,$field)*)?),)*
 		}
 
-		impl Token {
-			pub fn span(&self) -> Span {
+		impl $crate::span::IntoSpan for Token {
+			fn span(&self) -> Span {
 				match self {
 					$(Token::$ident(x, ..) => x,)*
 				}.clone()
@@ -151,7 +151,7 @@ impl Lexer<'_> {
 	/// function should never error).
 	fn skip_whitespace(&mut self) {
 		while !self.eof() && is_whitespace(self.peek()) {
-			self.advance();
+			_ = self.advance();
 		}
 	}
 

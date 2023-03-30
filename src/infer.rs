@@ -5,7 +5,7 @@ use crate::{
 	},
 	hoister::{HoistedExpr, HoistedScope},
 	lexer::NumberLiteralKind,
-	span::Span,
+	span::{IntoSpan, Span},
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use lazy_static::lazy_static;

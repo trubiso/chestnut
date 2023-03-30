@@ -1,7 +1,7 @@
 use crate::{
 	lexer::{NumberLiteral, NumberLiteralKind, Operator},
 	parser::types::Ident,
-	span::Span,
+	span::{IntoSpan, Span},
 };
 use derive_more::Display;
 use std::{collections::HashMap, fmt, marker::PhantomData};
@@ -176,13 +176,13 @@ impl<Sc: Scope<Self> + Clone + fmt::Display> fmt::Display for Expr<Sc> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			Self::Lambda(_, func) => f.write_fmt(format_args!("lambda {func}")),
-			other => other.clone().unscoped().unwrap().fmt(f),
+			other => other.clone().unscoped().unwrap().fmt(f), // FIXME: this is wrong
 		}
 	}
 }
 
-impl UnscopedExpr {
-	pub fn span(&self) -> Span {
+impl IntoSpan for UnscopedExpr {
+	fn span(&self) -> Span {
 		match self {
 			Self::CharLiteral(x, ..)
 			| Self::StringLiteral(x, ..)
@@ -196,11 +196,11 @@ impl UnscopedExpr {
 	}
 }
 
-impl<S: Scope<Self> + Clone + fmt::Display> Expr<S> {
-	pub fn span(&self) -> Span {
+impl<S: Scope<Self> + Clone + fmt::Display> IntoSpan for Expr<S> {
+	fn span(&self) -> Span {
 		match self {
 			Self::Lambda(x, ..) => x.clone(),
-			other => other.clone().unscoped().unwrap().span(),
+			other => other.clone().unscoped().unwrap().span(), // FIXME: this is wrong
 		}
 	}
 }
@@ -304,8 +304,8 @@ pub enum Stmt<Expr: fmt::Display, Fn, Sc: Scope<Expr>> {
 	Cpp(Span, String),
 }
 
-impl<E: fmt::Display, F, S: Scope<E>> Stmt<E, F, S> {
-	pub fn span(&self) -> Span {
+impl<E: fmt::Display, F, S: Scope<E>> IntoSpan for Stmt<E, F, S> {
+	fn span(&self) -> Span {
 		match self {
 			Self::Create(x, ..)
 			| Self::Declare(x, ..)
@@ -319,7 +319,9 @@ impl<E: fmt::Display, F, S: Scope<E>> Stmt<E, F, S> {
 			| Self::Cpp(x, ..) => x.clone(),
 		}
 	}
+}
 
+impl<E: fmt::Display, F, S: Scope<E>> Stmt<E, F, S> {
 	pub fn variant(&self) -> String {
 		match self {
 			Self::Create(..) => "creation".into(),
@@ -593,8 +595,8 @@ impl PartialEq for Type {
 
 impl Eq for Type {}
 
-impl Type {
-	pub fn span(&self) -> Span {
+impl IntoSpan for Type {
+	fn span(&self) -> Span {
 		match self {
 			Self::BareType(x, ..)
 			| Self::Builtin(x, ..)
@@ -605,7 +607,9 @@ impl Type {
 			| Self::Inferred(x, ..) => x.clone(),
 		}
 	}
+}
 
+impl Type {
 	pub fn is_void(&self) -> bool {
 		let Self::Builtin(_, x) = self else { return false; };
 		*x == BuiltinType::Void
@@ -648,17 +652,19 @@ pub enum Privacy {
 	Default,
 }
 
-impl Privacy {
-	pub fn span(&self) -> Option<Span> {
+impl IntoSpan for Privacy {
+	fn span(&self) -> Span {
 		match self {
 			Privacy::Private(x)
 			| Privacy::Protected(x)
 			| Privacy::Public(x)
-			| Privacy::Export(x) => Some(x.clone()),
-			Privacy::Default => None,
+			| Privacy::Export(x) => x.clone(),
+			Privacy::Default => panic!("accessed span of default privacy"),
 		}
 	}
+}
 
+impl Privacy {
 	pub fn is_private(&self) -> bool {
 		matches!(self, Privacy::Private(_))
 	}

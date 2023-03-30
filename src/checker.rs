@@ -1,16 +1,16 @@
 //! Checks whether statements and their privacy are correct according to the
 //! context, as well as the casing of variable and type names.
 
+use self::case::{check_case_ident, Case};
 use crate::{
 	common::{Privacy, Stmt},
 	parser::types::{ParserScope, ParserStmt},
+	span::IntoSpan,
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
-
-use self::case::{check_case_ident, Case};
 
 pub mod case;
 
@@ -78,7 +78,7 @@ fn check_privacy(privacy: &Privacy, context: &Context) {
 			Context::Unsafe | Context::LimitedUnsafe => false,
 		};
 	if !is_valid {
-		let span = privacy.span().unwrap(); // never Default => never None
+		let span = privacy.span(); // never Default => never None
 		add_diagnostic(
 			Diagnostic::error()
 				.with_message(format!(

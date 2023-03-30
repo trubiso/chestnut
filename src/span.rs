@@ -77,3 +77,7 @@ impl chumsky::Span for Span {
 		self.end
 	}
 }
+
+pub trait IntoSpan {
+	fn span(&self) -> Span;
+}

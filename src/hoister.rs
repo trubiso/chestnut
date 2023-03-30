@@ -1,7 +1,7 @@
 use crate::{
 	common::{Expr, Func, FuncSignature, Scope, ScopeFmt, Stmt, Type, TypeSignature},
 	parser::types::{ParserExpr, ParserFunc, ParserScope, ParserStmt},
-	span::Span,
+	span::{IntoSpan, Span},
 };
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use lazy_static::lazy_static;

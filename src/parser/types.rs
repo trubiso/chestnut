@@ -1,6 +1,6 @@
 use crate::common::{Expr, Func, Scope, ScopeFmt, Stmt, Type, TypedIdent};
 use crate::lexer::Token;
-use crate::span::Span;
+use crate::span::{IntoSpan, Span};
 use chumsky::prelude::*;
 use std::fmt;
 
@@ -60,15 +60,17 @@ impl PartialEq for Ident {
 
 impl Eq for Ident {}
 
-impl Ident {
-	pub fn span(&self) -> Span {
+impl IntoSpan for Ident {
+	fn span(&self) -> Span {
 		match self.clone() {
 			Self::Named(x, _) => x,
 			Self::Qualified(x, _) => x,
 			Self::Discarded(x) => x,
 		}
 	}
+}
 
+impl Ident {
 	pub fn infer_type(&self) -> TypedIdent {
 		TypedIdent {
 			span: self.span(),

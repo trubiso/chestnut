@@ -1,5 +1,6 @@
 use crate::parser::expr::expr;
 use crate::parser::types::{ParserExpr, ParserStmt};
+use crate::span::IntoSpan;
 use chumsky::prelude::*;
 
 macro_rules! assg_stmt {

@@ -3,7 +3,7 @@ use super::ty::ty;
 use super::ty_ident::ty_ident;
 use super::types::{ParserExpr, ParserFunc, ParserScope, ParserStmt};
 use crate::common::{Expr, FuncAttribs, Type};
-use crate::span::Span;
+use crate::span::{IntoSpan, Span};
 use chumsky::error::Simple;
 use chumsky::prelude::*;
 

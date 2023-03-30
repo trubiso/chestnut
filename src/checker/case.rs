@@ -1,5 +1,8 @@
 use super::add_diagnostic;
-use crate::{parser::types::Ident, span::Span};
+use crate::{
+	parser::types::Ident,
+	span::{IntoSpan, Span},
+};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use derive_more::Display;
 
