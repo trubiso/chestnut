@@ -19,8 +19,6 @@ pub mod common;
 pub mod hoister;
 pub mod infer;
 pub mod lexer;
-pub mod lexer2;
-pub mod lexer3;
 pub mod parser;
 pub mod span;
 
@@ -121,19 +119,7 @@ fn main() {
 				x
 			}
 		};
-
-		let (_lexed2, lex_diagnostics) = time(should_time, "lexer2", || {
-			lexer2::lex(files.get(file_id).unwrap().source(), file_id)
-		});
-
-		time(should_time, "lexer3", || {
-			lexer3::lex(files.get(file_id).unwrap().source(), file_id)
-		});
-
-		for diagnostic in lex_diagnostics {
-			all_diagnostics.push(diagnostic);
-		}
-
+		
 		let code_len = files.get(file_id).unwrap().source().len();
 
 		// TODO: figure out chumsky error recovery strategies
