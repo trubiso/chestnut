@@ -1,0 +1,134 @@
+AccessModifierOffset: -8
+AlignAfterOpenBracket: BlockIndent
+AlignArrayOfStructures: Right
+AlignConsecutiveAssignments:
+  Enabled: True
+  AcrossEmptyLines: False
+  AcrossComments: False
+  AlignCompound: True
+  PadOperators: False
+AlignConsecutiveBitFields: Consecutive
+AlignConsecutiveDeclarations:
+  Enabled: True
+  AcrossEmptyLines: False
+  AcrossComments: False
+  AlignFunctionDeclarations: True
+  AlignFunctionPointers: False
+AlignConsecutiveMacros: Consecutive
+AlignConsecutiveShortCaseStatements:
+  Enabled: True
+  AcrossEmptyLines: False
+  AcrossComments: False
+  AlignCaseArrows: True
+  AlignCaseColons: False
+AlignEscapedNewlines: LeftWithLastLine
+AlignOperands: AlignAfterOperator
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+AllowAllArgumentsOnNextLine: False
+AllowAllParametersOfDeclarationOnNextLine: False
+AllowBreakBeforeNoexceptSpecifier: OnlyWithParen
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseExpressionOnASingleLine: True
+AllowShortCaseLabelsOnASingleLine: True
+AllowShortCompoundRequirementOnASingleLine: True
+AllowShortEnumsOnASingleLine: True
+AllowShortFunctionsOnASingleLine: Inline  
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLambdasOnASingleLine: All  
+AllowShortLoopsOnASingleLine: True  
+AllowShortNamespacesOnASingleLine: False  
+AlwaysBreakBeforeMultilineStrings: True
+BinPackArguments: False
+BinPackLongBracedList: True  
+BinPackParameters: OnePerLine
+BitFieldColonSpacing: Both
+BreakAdjacentStringLiterals: False
+BreakAfterAttributes: Leave
+BreakAfterReturnType: ExceptShortType
+BreakBeforeBinaryOperators: All
+BreakBeforeBraces: Attach
+BreakBeforeConceptDeclarations: Always
+BreakBeforeInlineASMColon: OnlyMultiline
+BreakBeforeTemplateCloser: True
+BreakBeforeTernaryOperators: True
+BreakBinaryOperations: RespectPrecedence
+BreakConstructorInitializers: BeforeComma  
+BreakFunctionDefinitionParameters: False
+BreakInheritanceList: BeforeComma
+BreakStringLiterals: False
+BreakTemplateDeclarations: Yes
+ColumnLimit: 120
+CompactNamespaces: False
+ConstructorInitializerIndentWidth: 8
+ContinuationIndentWidth: 8
+DerivePointerAlignment: False
+DisableFormat: False
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: Always
+EnumTrailingComma: Leave
+FixNamespaceComments: True
+IncludeBlocks: Regroup
+IndentAccessModifiers: False
+IndentCaseBlocks: False
+IndentCaseLabels: False
+IndentExternBlock: Indent
+IndentGotoLabels: True
+IndentPPDirectives: None
+IndentRequiresClause: False
+IndentWidth: 8
+IndentWrappedFunctionNames: False
+InsertBraces: False
+InsertNewlineAtEOF: True
+KeepEmptyLines:
+  AtEndOfFile: False
+  AtStartOfBlock: False
+  AtStartOfFile: False
+LambdaBodyIndentation: Signature
+Language: Cpp
+LineEnding: LF
+MainIncludeChar: Quote
+MaxEmptyLinesToKeep: 1
+NamespaceIndentation: None
+PackConstructorInitializers: CurrentLine
+PointerAlignment: Left
+QualifierAlignment: Right
+ReflowComments: Always
+RemoveBracesLLVM: False
+RemoveEmptyLinesInUnwrappedLines: True
+RemoveParentheses: ReturnStatement
+RemoveSemicolon: True
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: OuterScope
+SeparateDefinitionBlocks: Always
+ShortNamespaceLines: 1
+SortIncludes:
+  Enabled: True
+  IgnoreCase: True
+SortUsingDeclarations: LexicographicNumeric
+SpaceAfterCStyleCast: True
+SpaceAfterLogicalNot: False
+SpaceAfterOperatorKeyword: False
+SpaceAfterTemplateKeyword: True
+SpaceAroundPointerQualifiers: Before
+SpaceBeforeAssignmentOperators: True
+SpaceBeforeCaseColon: False
+SpaceBeforeCpp11BracedList: True
+SpaceBeforeCtorInitializerColon: True
+SpaceBeforeInheritanceColon: True
+SpaceBeforeParens: ControlStatementsExceptControlMacros
+SpaceBeforeRangeBasedForLoopColon: True
+SpaceBeforeSquareBrackets: False
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: Never
+SpacesInContainerLiterals: False
+SpacesInLineCommentPrefix:
+  Minimum: 1
+  Maximum: 1
+SpacesInParens: Never
+SpacesInSquareBrackets: False
+Standard: Latest
+TabWidth: 8
+UseTab: AlignWithSpaces
+WrapNamespaceBodyWithEmptyLines: Always

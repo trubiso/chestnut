@@ -1,0 +1,35 @@
+func main() { aavs /*
+	mut a = 3 + 3
+}
+
+func silly() void {
+	const e = 30
+	mut abc = 48
+	const a = 3 + 4 * -5 - 8 + 7
+	      + e
+	      - (3 + 4) * 5 + abc + "hey" - 'h'
+	mut b = 28
+	const k i32 = 2
+	mut y i32
+}
+
+func silly(a i32, b i32, c char) void {}
+
+func other() void {
+	const pure = 37
+	const mut = pure
+	const union = mut
+	const john = 19
+	john + pure = union
+	silly + john
+	silly(3, 4, 'a' - 'b')
+/* } */
+
+/*
+func potato<T>(a: T, b: V) T {}
+*/ +("")
+"a" + 3
+''
+*/
+'\v' 'a' 'b
+0b1
