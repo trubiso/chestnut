@@ -1,4 +1,5 @@
 #pragma once
+#include "diagnostic.hpp"
 #include "stream.hpp"
 #include "token.hpp"
 
@@ -9,13 +10,17 @@
 
 class Lexer {
 public:
-	explicit Lexer(std::string_view source) : stream_(source) {}
+	explicit Lexer(std::string_view source) : stream_(source), tokens_(), loc_ {0} {}
 
 	bool advance();
 
+	inline Stream<char>& stream() { return stream_; }
+
 	inline std::vector<Token>& tokens() { return tokens_; }
 
-	inline Stream<char>& stream() { return stream_; }
+	inline std::vector<size_t>& loc() { return loc_; }
+
+	inline std::vector<Diagnostic>& diagnostics() { return diagnostics_; }
 
 	inline void consume_while(std::predicate<char> auto condition) {
 		for (auto current = stream_.peek(); current.has_value() && condition(current.value());
@@ -86,6 +91,8 @@ private:
 	/// If a comment is encountered, returns one of the special comment symbols.
 	Token::Symbol consume_symbol();
 
-	Stream<char>       stream_;
-	std::vector<Token> tokens_;
+	Stream<char>            stream_;
+	std::vector<Token>      tokens_;
+	std::vector<size_t>     loc_;
+	std::vector<Diagnostic> diagnostics_;
 };

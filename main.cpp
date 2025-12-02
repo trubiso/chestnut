@@ -16,11 +16,18 @@ int main(void) {
 
 	Lexer lexer(source);
 
+	Diagnostic diag(Diagnostic::Severity::Note, "died", "mingle", {Diagnostic::Label(Span(15, 43), "not ok")});
+
 	while (lexer.advance());
 
 	for (auto const& token : lexer.tokens()) {
 		std::cout << token << std::endl;
 	}
 
+	for (auto const& diagnostic : lexer.diagnostics()) {
+		diagnostic.print(lexer.loc(), source);
+	}
 	std::cout << lexer.tokens().size() << std::endl;
+	for (auto const loc : lexer.loc()) std::cout << loc << " ";
+	std::cout << std::endl;
 }

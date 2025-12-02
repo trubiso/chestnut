@@ -3,7 +3,7 @@
 #include <cassert>
 #include <concepts>
 #include <cstdio>
-#include <iostream>
+#include <format>
 #include <string_view>
 #include <utility>
 
@@ -15,9 +15,13 @@ bool Lexer::advance() {
 
 	bool should_attempt_semicolon = current.value() == '\n';
 	bool insert_semicolon         = true;
-	consume_while([](char const& x) { return x == '\n' || is_whitespace(x); });
 
-	current = stream_.peek();
+	for (current = stream_.peek();
+	     current.has_value() && (current.value() == '\n' || is_whitespace(current.value()));
+	     stream_.advance(), current = stream_.peek()) {
+		if (current.value() == '\n') loc_.push_back(stream_.index() + 1);
+	}
+
 	if (!current.has_value()) return false;
 	char   current_value = current.value();
 	size_t begin         = stream_.index();
@@ -49,8 +53,17 @@ bool Lexer::advance() {
 		else if (s == Token::Symbol::CommentMultilineStart) return true;
 		token = Token::make_symbol(begin, s);
 	} else {
-		// TODO: throw diagnostic
-		fprintf(stderr, "[lexer] unknown character 0x%02X (%c)\n", current_value, current_value);
+		diagnostics_.push_back(Diagnostic(
+			Diagnostic::Severity::Error,
+			"unknown/unsupported character",
+			std::format("found unknown/unsupported character 0x{:X}", current_value),
+			{Diagnostic::Label(Span(stream_.index()))}
+		));
+		// we have to push a line, otherwise the diagnostics glitch
+		for (current = stream_.peek(); current.has_value() && current.value() != '\n';
+		     stream_.advance(), current = stream_.peek());
+		if (current.has_value()) loc_.push_back(stream_.index() + 1);
+		else loc_.push_back(stream_.index());
 		// TODO: skip until next parsable character
 		return false;
 	}
@@ -165,6 +178,7 @@ std::optional<char> Lexer::lookup_escaped(char x) {
 }
 
 void Lexer::consume_string_literal() {
+	size_t string_begin = stream_.index();
 	stream_.advance();  // consume opening quote
 	bool                     found_closing_quote = false;
 	decltype(stream_.peek()) current;
@@ -173,17 +187,24 @@ void Lexer::consume_string_literal() {
 		if (!escape) switch (current.value()) {
 			case '\\': escape = true; break;
 			case '"':  found_closing_quote = true; break;
+			case '\n': loc_.push_back(stream_.index() + 1);
 			default:   break;
 			}
 		else escape = false;
 	}
-	if (!found_closing_quote) {
-		// TODO: throw diagnostic
-		std::cerr << "[lexer] unterminated string" << std::endl;
-	}
+	if (!found_closing_quote)
+		// we only push the beginning quote because otherwise the diagnostic would
+		// be huge
+		diagnostics_.push_back(Diagnostic(
+			Diagnostic::Severity::Error,
+			"unterminated string literal",
+			{},
+			{Diagnostic::Label(Span(string_begin))}
+		));
 }
 
 char Lexer::consume_char_literal() {
+	size_t char_begin = stream_.index();
 	stream_.advance();  // consume opening quote
 	char                c = '\0';
 	std::optional<char> e;
@@ -193,20 +214,30 @@ char Lexer::consume_char_literal() {
 	case '\'':
 		// we got '', which is an invalid literal.
 		// the closing quote is already consumed.
-		// TODO: diagnostic
-		std::cerr << "[lexer] empty character" << std::endl;
+		diagnostics_.push_back(Diagnostic(
+			Diagnostic::Severity::Error,
+			"empty character literal",
+			{},
+			{Diagnostic::Label(Span(stream_.index() - 2, stream_.index()))}
+		));
 		goto ret;
 	case '\\':
 		current = stream_.consume();  // escaped character
 		if (!current.has_value()) goto unclosed_literal;
+		// TODO: support \xFF sequences
 		e = lookup_escaped(current.value());
 		if (e.has_value()) {
 			c = e.value();
 		} else {
 			// the escape sequence does not exist
-			// TODO: diagnostic
-			std::cerr << "[lexer] invalid escape" << std::endl;
+			// fallback strategy: use the character
 			c = current.value();
+			diagnostics_.push_back(Diagnostic(
+				Diagnostic::Severity::Error,
+				"invalid escape sequence",
+				std::format("found invalid sequence \\{}", c),
+				{Diagnostic::Label(Span(stream_.index() - 2, stream_.index()))}
+			));
 		}
 		break;
 	default:
@@ -215,15 +246,20 @@ char Lexer::consume_char_literal() {
 	}
 
 	// find closing quote
-	current = stream_.consume();  // consume supposed closing quote
+	current = stream_.peek();  // consume supposed closing quote
 	if (!current.has_value()) goto unclosed_literal;
 	if (current.value() != '\'') goto unclosed_literal;
+	stream_.advance();
 ret:
 	return c;
 
 unclosed_literal:
-	// TODO: diagnostic
-	std::cerr << "[lexer] unclosed char literal" << std::endl;
+	diagnostics_.push_back(Diagnostic(
+		Diagnostic::Severity::Error,
+		"unclosed character literal",
+		{},
+		{Diagnostic::Label(Span(char_begin, stream_.index()))}
+	));
 	goto ret;
 }
 
@@ -295,7 +331,8 @@ Token::Symbol Lexer::consume_symbol() {
 		// inserted
 		return Symbol::CommentStart;
 	} else if (partial_symbol == Symbol::CommentMultilineStart) {
-		size_t nesting     = 1;
+		size_t comment_begin = stream_.index() - 2;
+		size_t nesting       = 1;
 		bool   found_slash = false, found_star = false;
 		while (stream_.has_value() && nesting > 0) {
 			char value = stream_.consume().value();
@@ -314,10 +351,17 @@ Token::Symbol Lexer::consume_symbol() {
 				found_star  = false;
 				found_slash = false;
 			}
+			if (value == '\n') loc_.push_back(stream_.index() + 1);
 		}
-		// TODO: throw diagnostic if nesting > 0, as that indicates a comment is
-		// unterminated
-		if (nesting > 0) std::cerr << "[lexer] unterminated comment" << std::endl;
+		if (nesting > 0)
+			// we only push the beginning because otherwise the diagnostic would be
+			// huge
+			diagnostics_.push_back(Diagnostic(
+				Diagnostic::Severity::Error,
+				"unterminated multiline comment",
+				{},
+				{Diagnostic::Label(Span(comment_begin, comment_begin + 2))}
+			));
 		return Symbol::CommentMultilineStart;
 	}
 
