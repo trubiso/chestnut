@@ -10,9 +10,14 @@
 
 class Lexer {
 public:
-	explicit Lexer(std::string_view source) : stream_(source), tokens_(), loc_ {0} {}
+	explicit Lexer(std::string_view source) : stream_(std::move(source)), tokens_(), loc_ {0} {}
 
 	bool advance();
+
+	inline std::vector<Token>& collect_all() {
+		while (advance()) {}
+		return tokens();
+	}
 
 	inline Stream<char>& stream() { return stream_; }
 
@@ -22,6 +27,7 @@ public:
 
 	inline std::vector<Diagnostic>& diagnostics() { return diagnostics_; }
 
+	// TODO: get rid of this
 	inline void consume_while(std::predicate<char> auto condition) {
 		for (auto current = stream_.peek(); current.has_value() && condition(current.value());
 		     stream_.advance(), current = stream_.peek());

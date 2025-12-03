@@ -7,6 +7,9 @@
 #include <string_view>
 #include <vector>
 
+// TODO: rework this such that labels trigger code sample display and are
+// grouped under the title (and potential subtitle) of the diagnostic
+
 struct Diagnostic {
 public:
 	enum class Severity { Error, Warning, Note };

@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++23 -Wall -Wpedantic -g -O3
 
-OBJS = diagnostic.o lexer.o main.o out_fmt.o token.o
+OBJS = diagnostic.o lexer.o main.o out_fmt.o parser.o token.o
 
 ./out: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o ./out

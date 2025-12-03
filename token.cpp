@@ -69,50 +69,54 @@ std::ostream& operator<<(std::ostream& os, Token const& token) {
 #undef VISIT
 }
 
-std::ostream& operator<<(std::ostream& os, Token::Symbol const& symbol) {
+char const* get_variant_name(Token::Symbol symbol) {
 	switch (symbol) {
-	case Token::Symbol::Plus:                  return os << "+";
-	case Token::Symbol::Minus:                 return os << "-";
-	case Token::Symbol::Star:                  return os << "*";
-	case Token::Symbol::Div:                   return os << "/";
-	case Token::Symbol::Amp:                   return os << "&";
-	case Token::Symbol::Bar:                   return os << "|";
-	case Token::Symbol::Xor:                   return os << "^";
-	case Token::Symbol::Tilde:                 return os << "~";
-	case Token::Symbol::Eq:                    return os << "=";
-	case Token::Symbol::EqEq:                  return os << "==";
-	case Token::Symbol::Lt:                    return os << "<";
-	case Token::Symbol::Le:                    return os << "<=";
-	case Token::Symbol::Gt:                    return os << ">";
-	case Token::Symbol::Ge:                    return os << ">=";
-	case Token::Symbol::LtGt:                  return os << "<>";
-	case Token::Symbol::Ne:                    return os << "!=";
-	case Token::Symbol::Bang:                  return os << "!";
-	case Token::Symbol::Maybe:                 return os << "?";
-	case Token::Symbol::MaybeMaybe:            return os << "??";
-	case Token::Symbol::MaybeDot:              return os << "??";
-	case Token::Symbol::Percent:               return os << "%";
-	case Token::Symbol::At:                    return os << "@";
-	case Token::Symbol::Dot:                   return os << ".";
-	case Token::Symbol::DotDot:                return os << "..";
-	case Token::Symbol::DotDotLt:              return os << "..<";
-	case Token::Symbol::DotDotEq:              return os << "..=";
-	case Token::Symbol::LeftArrow:             return os << "<-";
-	case Token::Symbol::LParen:                return os << "(";
-	case Token::Symbol::RParen:                return os << ")";
-	case Token::Symbol::LBracket:              return os << "[";
-	case Token::Symbol::RBracket:              return os << "]";
-	case Token::Symbol::LBrace:                return os << "{";
-	case Token::Symbol::RBrace:                return os << "}";
-	case Token::Symbol::Comma:                 return os << ",";
-	case Token::Symbol::Colon:                 return os << ":";
-	case Token::Symbol::ColonColon:            return os << "::";
-	case Token::Symbol::Semicolon:             return os << ";";
-	case Token::Symbol::DotDotDot:             return os << "...";
-	case Token::Symbol::Arrow:                 return os << "->";
-	case Token::Symbol::FatArrow:              return os << "=>";
-	case Token::Symbol::CommentStart:          return os << "//";
-	case Token::Symbol::CommentMultilineStart: return os << "/*";
+	case Token::Symbol::Plus:                  return "+";
+	case Token::Symbol::Minus:                 return "-";
+	case Token::Symbol::Star:                  return "*";
+	case Token::Symbol::Div:                   return "/";
+	case Token::Symbol::Amp:                   return "&";
+	case Token::Symbol::Bar:                   return "|";
+	case Token::Symbol::Xor:                   return "^";
+	case Token::Symbol::Tilde:                 return "~";
+	case Token::Symbol::Eq:                    return "=";
+	case Token::Symbol::EqEq:                  return "==";
+	case Token::Symbol::Lt:                    return "<";
+	case Token::Symbol::Le:                    return "<=";
+	case Token::Symbol::Gt:                    return ">";
+	case Token::Symbol::Ge:                    return ">=";
+	case Token::Symbol::LtGt:                  return "<>";
+	case Token::Symbol::Ne:                    return "!=";
+	case Token::Symbol::Bang:                  return "!";
+	case Token::Symbol::Maybe:                 return "?";
+	case Token::Symbol::MaybeMaybe:            return "??";
+	case Token::Symbol::MaybeDot:              return "??";
+	case Token::Symbol::Percent:               return "%";
+	case Token::Symbol::At:                    return "@";
+	case Token::Symbol::Dot:                   return ".";
+	case Token::Symbol::DotDot:                return "..";
+	case Token::Symbol::DotDotLt:              return "..<";
+	case Token::Symbol::DotDotEq:              return "..=";
+	case Token::Symbol::LeftArrow:             return "<-";
+	case Token::Symbol::LParen:                return "(";
+	case Token::Symbol::RParen:                return ")";
+	case Token::Symbol::LBracket:              return "[";
+	case Token::Symbol::RBracket:              return "]";
+	case Token::Symbol::LBrace:                return "{";
+	case Token::Symbol::RBrace:                return "}";
+	case Token::Symbol::Comma:                 return ",";
+	case Token::Symbol::Colon:                 return ":";
+	case Token::Symbol::ColonColon:            return "::";
+	case Token::Symbol::Semicolon:             return ";";
+	case Token::Symbol::DotDotDot:             return "...";
+	case Token::Symbol::Arrow:                 return "->";
+	case Token::Symbol::FatArrow:              return "=>";
+	case Token::Symbol::CommentStart:          return "//";
+	case Token::Symbol::CommentMultilineStart: return "/*";
 	}
 	[[assume(false)]];
+}
+
+std::ostream& operator<<(std::ostream& os, Token::Symbol const& symbol) {
+	return os << get_variant_name(symbol);
 }

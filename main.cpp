@@ -1,4 +1,5 @@
 #include "lexer.hpp"
+#include "parser.hpp"
 
 #include <cerrno>
 #include <fstream>
@@ -18,16 +19,15 @@ int main(void) {
 
 	Diagnostic diag(Diagnostic::Severity::Note, "died", "mingle", {Diagnostic::Label(Span(15, 43), "not ok")});
 
-	while (lexer.advance());
+	Stream<Token> tokens {std::move(lexer.collect_all())};
 
-	for (auto const& token : lexer.tokens()) {
-		std::cout << token << std::endl;
-	}
+	for (auto const& diagnostic : lexer.diagnostics()) { diagnostic.print(lexer.loc(), source); }
 
-	for (auto const& diagnostic : lexer.diagnostics()) {
-		diagnostic.print(lexer.loc(), source);
-	}
-	std::cout << lexer.tokens().size() << std::endl;
-	for (auto const loc : lexer.loc()) std::cout << loc << " ";
+	AST::Parser parser {std::move(tokens)};
+
+	while (parser.advance());
+	
+	for (auto const& diagnostic : parser.diagnostics()) { diagnostic.print(lexer.loc(), source); }
+
 	std::cout << std::endl;
 }

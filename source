@@ -1,3 +1,27 @@
+module hello {
+	module world {}
+	module whats {
+		module up {}
+	}
+}
+
+module yo {
+	module hi {}
+}
+
+/*
+module jogram {}
+
+module program {
+
+module john {}
+
+module pupil {
+	module tutil {
+		func bello() {}
+	}
+}
+
 func main() { aavs /*
 	mut a = 3 + 3
 }
@@ -31,5 +55,7 @@ func potato<T>(a: T, b: V) T {}
 "a" + 3
 ''
 */
-'\v' 'a' 'b
+'\v' 'a' 'b'
 0b1
+
+} module bogram {}

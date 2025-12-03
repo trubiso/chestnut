@@ -1,4 +1,5 @@
 #pragma once
+#include "span.hpp"
 #include <cstddef>
 #include <ostream>
 #include <string_view>
@@ -104,7 +105,31 @@ struct Token {
 	inline static Token make_symbol(size_t begin, Symbol symbol) {
 		return Token(begin, value_t {std::in_place_index<(size_t) Kind::Symbol>, symbol});
 	}
+
+	inline bool is_identifier() const { return value.index() == (size_t) Kind::Identifier; }
+
+	inline bool is_number_literal() const { return value.index() == (size_t) Kind::NumberLiteral; }
+
+	inline bool is_string_literal() const { return value.index() == (size_t) Kind::StringLiteral; }
+
+	inline bool is_char_literal() const { return value.index() == (size_t) Kind::CharLiteral; }
+
+	inline bool is_symbol() const { return value.index() == (size_t) Kind::Symbol; }
+
+	inline std::string_view get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
+
+	inline std::string_view get_number_literal() const { return std::get<(size_t) Kind::NumberLiteral>(value); }
+
+	inline std::string_view get_string_literal() const { return std::get<(size_t) Kind::StringLiteral>(value); }
+
+	inline char get_char_literal() const { return std::get<(size_t) Kind::CharLiteral>(value); }
+
+	inline Symbol get_symbol() const { return std::get<(size_t) Kind::Symbol>(value); }
+
+	inline Span span() const { return Span(begin, end()); }
 };
 
 std::ostream& operator<<(std::ostream&, Token const&);
 std::ostream& operator<<(std::ostream&, Token::Symbol const&);
+
+char const* get_variant_name(Token::Symbol);

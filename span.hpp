@@ -1,3 +1,4 @@
+#pragma once
 #include <cassert>
 #include <cstddef>
 
@@ -7,4 +8,10 @@ struct Span {
 	explicit Span(size_t start, size_t end) : start(start), end(end) { assert(start <= end); }
 
 	explicit Span(size_t pos) : start(pos), end(pos + 1) {}
+};
+
+template <typename T>
+struct Spanned {
+	Span span;
+	T value;
 };

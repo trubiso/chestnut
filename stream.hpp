@@ -1,11 +1,16 @@
 #pragma once
+#include <cwchar>
 #include <optional>
 #include <string_view>
+#include <type_traits>
+#include <vector>
 
 template <typename T>
 class Stream {
 public:
-	explicit Stream(std::basic_string_view<T> data) : data_(data), index_(0) {}
+	using container_t = std::conditional_t<std::is_same_v<T, char>, std::string_view, std::vector<T>>;
+
+	explicit Stream(container_t&& data) : data_(data), index_(0) {}
 
 	/// Returns the item at a particular position if it exists.
 	inline std::optional<T> at(size_t index) const noexcept {
@@ -16,7 +21,7 @@ public:
 	inline std::optional<T> peek() const noexcept { return at(index_); }
 
 	/// Returns the last item in the stream, throwing if the stream is empty.
-	inline T const& last() const noexcept(!empty()) { return data_.at(size() - 1); }
+	inline T const& last() const { return data_.at(size() - 1); }
 
 	/// Return the result of peek(), advancing if it is nonnull.
 	inline std::optional<T> consume() {
@@ -42,6 +47,12 @@ public:
 		return has_value();
 	}
 
+	/// Consumes while the predicate returns true for the current value.
+	inline void consume_while(std::predicate<T> auto condition) {
+		for (auto current = peek(); current.has_value() && condition(current.value());
+		     advance(), current = peek());
+	}
+
 	/// Returns whether the stream has a value at the provided index.
 	inline bool reaches(size_t index) const { return index < size(); }
 
@@ -55,12 +66,12 @@ public:
 	inline size_t size() const { return data_.size(); }
 
 	/// Returns whether the stream is empty.
-	constexpr inline bool empty() const { return size() == 0; }
+	inline bool empty() const { return size() == 0; }
 
 	/// Returns the inner data.
 	inline std::basic_string_view<T> const& data() const { return data_; }
 
 private:
-	std::basic_string_view<T> data_;
-	size_t                    index_;
+	container_t data_;
+	size_t      index_;
 };
