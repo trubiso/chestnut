@@ -107,7 +107,7 @@ void consume_base_number_lit_after_zero(Lexer& lexer, std::predicate<char> auto 
 		return;
 	}
 	// consume any combination of base digits and padding underscores
-	lexer.consume_while([is_base_digit](char x) { return is_base_digit(x) || x == '_'; });
+	lexer.stream().consume_while([is_base_digit](char x) { return is_base_digit(x) || x == '_'; });
 }
 
 void Lexer::consume_number_literal() {
@@ -134,7 +134,7 @@ void Lexer::consume_number_literal() {
 		}
 	// this must be a decimal integer or floating point literal
 	// consume all decimal digits and padding underscores
-	consume_while([](char x) { return is_digit(x) || x == '_'; });
+	stream_.consume_while([](char x) { return is_digit(x) || x == '_'; });
 	current = stream_.peek();
 	if (!current.has_value()) return;  // program ends with a number literal
 	// current value cannot be a digit, otherwise it would have been detected
@@ -156,7 +156,7 @@ void Lexer::consume_number_literal() {
 			return;
 		}
 		// otherwise, parse all numbers
-		consume_while([](char x) { return is_digit(x) || x == '_'; });
+		stream_.consume_while([](char x) { return is_digit(x) || x == '_'; });
 	}
 }
 
@@ -326,7 +326,7 @@ Token::Symbol Lexer::consume_symbol() {
 	}
 
 	if (partial_symbol == Symbol::CommentStart) {
-		consume_while([](char x) { return x != '\n'; });
+		stream_.consume_while([](char x) { return x != '\n'; });
 		// we are at the newline; it is not consumed so that a semicolon may be
 		// inserted
 		return Symbol::CommentStart;

@@ -27,12 +27,6 @@ public:
 
 	inline std::vector<Diagnostic>& diagnostics() { return diagnostics_; }
 
-	// TODO: get rid of this
-	inline void consume_while(std::predicate<char> auto condition) {
-		for (auto current = stream_.peek(); current.has_value() && condition(current.value());
-		     stream_.advance(), current = stream_.peek());
-	}
-
 private:
 	static inline bool is_whitespace(char x) { return x == ' ' || x == '\t' || x == '\r'; }
 
@@ -87,9 +81,9 @@ private:
 
 	static std::optional<char> lookup_escaped(char x);
 
-	inline void consume_whitespace() { consume_while(is_whitespace); }
+	inline void consume_whitespace() { stream_.consume_while(is_whitespace); }
 
-	inline void consume_identifier() { consume_while(is_id_continue); }
+	inline void consume_identifier() { stream_.consume_while(is_id_continue); }
 
 	void consume_number_literal();
 	void consume_string_literal();
