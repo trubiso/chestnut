@@ -5,6 +5,7 @@
 #include <cassert>
 #include <format>
 #include <iostream>
+#include <string_view>
 
 namespace AST {
 
@@ -44,11 +45,12 @@ bool Parser::peek_symbol(Token::Symbol symbol) {
 bool Parser::expect_symbol(Token::Symbol symbol) {
 	if (consume_symbol(symbol)) return true;
 	// TODO: add symbol to diagnostic
-	Token last_token = tokens_.peek().value_or(tokens_.last());
+	Token       last_token = tokens_.peek().value_or(tokens_.last());
+	std::string subtitle   = std::format("expected '{}'", get_variant_name(symbol));
 	diagnostics_.push_back(Diagnostic(
 		Diagnostic::Severity::Error,
 		"expected symbol",
-		std::format("expected '{}'", get_variant_name(symbol)),
+		subtitle,
 		{Diagnostic::Label(last_token.span())}
 	));
 	return false;
