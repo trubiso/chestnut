@@ -2,7 +2,15 @@ module hello {
 	module world {}
 	module whats {
 		module up {}
+
+		func main() void
+
+		func john(k: int16)
+
+		func lets_do_this(name: string, age: uint) bool
 	}
+
+	func greet()
 }
 
 module yo {
@@ -59,3 +67,4 @@ func potato<T>(a: T, b: V) T {}
 0b1
 
 } module bogram {}
+*/

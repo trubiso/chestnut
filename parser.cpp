@@ -9,12 +9,8 @@
 
 namespace AST {
 
-bool Parser::consume_identifier(std::string_view name) {
-	auto maybe_token = tokens_.peek();
-	if (!maybe_token.has_value()) return false;
-	Token token = maybe_token.value();
-	if (!token.is_identifier()) return false;
-	if (token.get_identifier() != name) return false;
+bool Parser::consume_identifier(std::string_view identifier) {
+	if (!peek_identifier(identifier)) return false;
 	tokens_.advance();
 	return true;
 }
@@ -42,9 +38,16 @@ bool Parser::peek_symbol(Token::Symbol symbol) {
 	return token.get_symbol() == symbol;
 }
 
+bool Parser::peek_identifier(std::string_view identifier) {
+	auto maybe_token = tokens_.peek();
+	if (!maybe_token.has_value()) return false;
+	Token token = maybe_token.value();
+	if (!token.is_identifier()) return false;
+	return token.get_identifier() == identifier;
+}
+
 bool Parser::expect_symbol(Token::Symbol symbol) {
 	if (consume_symbol(symbol)) return true;
-	// TODO: add symbol to diagnostic
 	Token       last_token = tokens_.peek().value_or(tokens_.last());
 	std::string subtitle   = std::format("expected '{}'", get_variant_name(symbol));
 	diagnostics_.push_back(Diagnostic(
@@ -54,6 +57,19 @@ bool Parser::expect_symbol(Token::Symbol symbol) {
 		{Diagnostic::Label(last_token.span())}
 	));
 	return false;
+}
+
+std::optional<std::string_view> Parser::expect_identifier() {
+	auto identifier = consume_identifier();
+	if (identifier.has_value()) return identifier;
+	Token last_token = tokens_.peek().value_or(tokens_.last());
+	diagnostics_.push_back(Diagnostic(
+		Diagnostic::Severity::Error,
+		"expected identifier",
+		{},
+		{Diagnostic::Label(last_token.span())}
+	));
+	return {};
 }
 
 void Parser::skip_semis() {
@@ -66,6 +82,7 @@ void Parser::skip_semis() {
 
 std::optional<Module> Parser::parse_module() {
 	if (!consume_identifier("module")) return {};
+	// TODO: expect everything from here on out
 	std::optional<Spanned<std::string_view>> name = SPANNED(consume_identifier);
 	if (!name.has_value()) return {};
 	std::optional<Module::Body> body = parse_module_body();
@@ -74,24 +91,62 @@ std::optional<Module> Parser::parse_module() {
 		<< "found module with name "
 		<< name.value().value
 		<< " and "
-		<< body.value().submodules.size()
-		<< " submodules"
+		<< body.value().items.size()
+		<< " items"
 		<< std::endl;
 	return Module {name, body.value()};
+}
+
+std::optional<Module::Item> Parser::parse_module_item() {
+	// TODO: visibility qualifiers
+	std::optional<Module::Item> item;
+	if (peek_identifier("module")) {
+		item = parse_module();
+	} else if (peek_identifier("func")) {
+		item = parse_function();
+	}
+	if (item.has_value()) return item.value();
+	else return {};
 }
 
 std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 	if (!bare)
 		if (!expect_symbol(Token::Symbol::LBrace)) return {};
 	skip_semis();
-	std::vector<Module> submodules {};
-	for (auto submodule = parse_module(); submodule.has_value(); submodule = parse_module()) {
-		submodules.push_back(submodule.value());
+	std::vector<Module::Item> items {};
+	for (auto item = parse_module_item(); item.has_value(); item = parse_module_item()) {
+		items.push_back(item.value());
 		skip_semis();
 	}
 	skip_semis();
 	if (!bare) expect_symbol(Token::Symbol::RBrace);
-	return Module::Body {submodules};
+	return Module::Body {items};
+}
+
+std::optional<Function> Parser::parse_function() {
+	if (!consume_identifier("func")) return {};
+	auto name = SPANNED(expect_identifier);
+	if (!name.has_value()) return {};
+	if (!expect_symbol(Token::Symbol::LParen)) return {};
+	// parse args
+	std::vector<Function::Argument> arguments {};
+	while (true) {
+		auto argument_name = SPANNED(consume_identifier);
+		if (!argument_name.has_value()) break;
+		if (!expect_symbol(Token::Symbol::Colon)) return {};
+		auto argument_type = SPANNED(expect_identifier);
+		if (!argument_type.has_value()) return {};
+		arguments.emplace_back(argument_name.value(), argument_type.value());
+		while (peek_symbol(Token::Symbol::Comma)) tokens_.advance();
+	}
+	if (!expect_symbol(Token::Symbol::RParen)) return {};
+	auto return_type = SPANNED(consume_identifier);  // TODO: type
+	std::cout << "found function with name " << name.value().value << ", " << arguments.size() << " arguments: ";
+	for (Function::Argument const& argument : arguments) {
+		std::cout << argument.name.value << " of type " << argument.type.value << ", ";
+	}
+	std::cout << std::endl;
+	return Function {name.value(), arguments, return_type};
 }
 
 bool Parser::advance() {

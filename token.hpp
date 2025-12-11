@@ -67,6 +67,8 @@ struct Token {
 		Return,
 	};
 
+	// TODO: make special case for the _ identifier which is treated as discard/nothing.
+
 	enum class Kind {
 		Identifier    = 0,
 		NumberLiteral = 1,
