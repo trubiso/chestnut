@@ -87,10 +87,9 @@ private:
 	bool peek_identifier(std::string_view);
 
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
-	// upon failure.
-	// TODO: provide some sort of reason (e.g. expected : to denote type)
-	bool                            expect_symbol(Token::Symbol);
-	std::optional<std::string_view> expect_identifier();
+	// upon failure. The reason string is only copied if a diagnostic is thrown.
+	bool                            expect_symbol(std::string_view reason, Token::Symbol);
+	std::optional<std::string_view> expect_identifier(std::string_view reason);
 
 	// skip semicolons
 	void skip_semis();

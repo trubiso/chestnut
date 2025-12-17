@@ -46,27 +46,29 @@ bool Parser::peek_identifier(std::string_view identifier) {
 	return token.get_identifier() == identifier;
 }
 
-bool Parser::expect_symbol(Token::Symbol symbol) {
+bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
 	if (consume_symbol(symbol)) return true;
-	Token       last_token = tokens_.peek().value_or(tokens_.last());
-	std::string subtitle   = std::format("expected '{}'", get_variant_name(symbol));
+	Token last_token = tokens_.peek().value_or(tokens_.last());
+
+	std::string title = std::format("expected symbol '{}'", get_variant_name(symbol));
+
 	diagnostics_.push_back(Diagnostic(
 		Diagnostic::Severity::Error,
-		"expected symbol",
-		subtitle,
+		title,
+		std::string(reason),
 		{Diagnostic::Label(last_token.span())}
 	));
 	return false;
 }
 
-std::optional<std::string_view> Parser::expect_identifier() {
+std::optional<std::string_view> Parser::expect_identifier(std::string_view reason) {
 	auto identifier = consume_identifier();
 	if (identifier.has_value()) return identifier;
 	Token last_token = tokens_.peek().value_or(tokens_.last());
 	diagnostics_.push_back(Diagnostic(
 		Diagnostic::Severity::Error,
 		"expected identifier",
-		{},
+		std::string(reason),
 		{Diagnostic::Label(last_token.span())}
 	));
 	return {};
@@ -79,6 +81,7 @@ void Parser::skip_semis() {
 }
 
 #define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
+#define SPANNED_REASON(fn, reason) spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
 
 std::optional<Module> Parser::parse_module() {
 	if (!consume_identifier("module")) return {};
@@ -111,7 +114,7 @@ std::optional<Module::Item> Parser::parse_module_item() {
 
 std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 	if (!bare)
-		if (!expect_symbol(Token::Symbol::LBrace)) return {};
+		if (!expect_symbol("expected opening brace to begin module body", Token::Symbol::LBrace)) return {};
 	skip_semis();
 	std::vector<Module::Item> items {};
 	for (auto item = parse_module_item(); item.has_value(); item = parse_module_item()) {
@@ -119,27 +122,27 @@ std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 		skip_semis();
 	}
 	skip_semis();
-	if (!bare) expect_symbol(Token::Symbol::RBrace);
+	if (!bare) expect_symbol("expected closing brace to end module body", Token::Symbol::RBrace);
 	return Module::Body {items};
 }
 
 std::optional<Function> Parser::parse_function() {
 	if (!consume_identifier("func")) return {};
-	auto name = SPANNED(expect_identifier);
+	auto name = SPANNED_REASON(expect_identifier, "expected function name");
 	if (!name.has_value()) return {};
-	if (!expect_symbol(Token::Symbol::LParen)) return {};
+	if (!expect_symbol("expected opening parenthesis to begin argument list", Token::Symbol::LParen)) return {};
 	// parse args
 	std::vector<Function::Argument> arguments {};
 	while (true) {
 		auto argument_name = SPANNED(consume_identifier);
 		if (!argument_name.has_value()) break;
-		if (!expect_symbol(Token::Symbol::Colon)) return {};
-		auto argument_type = SPANNED(expect_identifier);
+		if (!expect_symbol("expected ':' to specify argument type", Token::Symbol::Colon)) return {};
+		auto argument_type = SPANNED_REASON(expect_identifier, "expected argument type");
 		if (!argument_type.has_value()) return {};
 		arguments.emplace_back(argument_name.value(), argument_type.value());
 		while (peek_symbol(Token::Symbol::Comma)) tokens_.advance();
 	}
-	if (!expect_symbol(Token::Symbol::RParen)) return {};
+	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};
 	auto return_type = SPANNED(consume_identifier);  // TODO: type
 	std::cout << "found function with name " << name.value().value << ", " << arguments.size() << " arguments: ";
 	for (Function::Argument const& argument : arguments) {

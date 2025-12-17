@@ -2,7 +2,6 @@
 
 #include "out_fmt.hpp"
 
-#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
@@ -124,7 +123,5 @@ void Diagnostic::print(std::vector<size_t> const& loc, std::string_view code) co
 		putchar('\n');
 		print_loc_line(loc_pad);
 		puts("\n");
-
-		printf("%zu, %zu, %zu, %zu, %zu\n", number_size(end_index), loc_start, start_index, loc_end, end_index);
 	}
 }
