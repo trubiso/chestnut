@@ -55,6 +55,15 @@ public:
 	inline std::vector<Diagnostic>& diagnostics() { return diagnostics_; }
 
 private:
+	enum class Keyword {
+		Import,
+		Module,
+		Const,
+		Mut,
+		Func,
+		Return,
+	};
+
 	Stream<Token>           tokens_;
 	std::vector<Diagnostic> diagnostics_;
 
@@ -75,7 +84,7 @@ private:
 
 	// consume_ methods return a non-null/false value if they found a token
 	// abiding by the specified criteria and increment the index
-	bool                            consume_identifier(std::string_view);
+	bool consume_keyword(Keyword);
 	std::optional<std::string_view> consume_identifier();
 	bool                            consume_symbol(Token::Symbol);
 
@@ -84,7 +93,7 @@ private:
 
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol);
-	bool peek_identifier(std::string_view);
+	bool peek_keyword(Keyword);
 
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
 	// upon failure. The reason string is only copied if a diagnostic is thrown.

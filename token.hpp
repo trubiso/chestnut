@@ -58,15 +58,6 @@ struct Token {
 		CommentMultilineStart,
 	};
 
-	enum class Keyword {
-		Import,
-		Module,
-		Const,
-		Mut,
-		Func,
-		Return,
-	};
-
 	// TODO: make special case for the _ identifier which is treated as discard/nothing.
 
 	enum class Kind {

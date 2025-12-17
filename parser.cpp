@@ -9,8 +9,8 @@
 
 namespace AST {
 
-bool Parser::consume_identifier(std::string_view identifier) {
-	if (!peek_identifier(identifier)) return false;
+bool Parser::consume_keyword(Keyword keyword) {
+	if (!peek_keyword(keyword)) return false;
 	tokens_.advance();
 	return true;
 }
@@ -38,12 +38,21 @@ bool Parser::peek_symbol(Token::Symbol symbol) {
 	return token.get_symbol() == symbol;
 }
 
-bool Parser::peek_identifier(std::string_view identifier) {
+bool Parser::peek_keyword(Keyword keyword) {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return false;
 	Token token = maybe_token.value();
 	if (!token.is_identifier()) return false;
-	return token.get_identifier() == identifier;
+	switch (keyword) {
+	case Keyword::Import: return token.get_identifier() == "import";
+	case Keyword::Module: return token.get_identifier() == "module";
+	case Keyword::Const:  return token.get_identifier() == "const";
+	case Keyword::Mut:    return token.get_identifier() == "mut";
+	case Keyword::Func:   return token.get_identifier() == "func";
+	case Keyword::Return: return token.get_identifier() == "return";
+	}
+	[[assume(false)]];
+	return false;
 }
 
 bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
@@ -81,10 +90,11 @@ void Parser::skip_semis() {
 }
 
 #define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
-#define SPANNED_REASON(fn, reason) spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
+#define SPANNED_REASON(fn, reason)                                                                               \
+	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
 
 std::optional<Module> Parser::parse_module() {
-	if (!consume_identifier("module")) return {};
+	if (!consume_keyword(Keyword::Module)) return {};
 	// TODO: expect everything from here on out
 	std::optional<Spanned<std::string_view>> name = SPANNED(consume_identifier);
 	if (!name.has_value()) return {};
@@ -103,9 +113,9 @@ std::optional<Module> Parser::parse_module() {
 std::optional<Module::Item> Parser::parse_module_item() {
 	// TODO: visibility qualifiers
 	std::optional<Module::Item> item;
-	if (peek_identifier("module")) {
+	if (peek_keyword(Keyword::Module)) {
 		item = parse_module();
-	} else if (peek_identifier("func")) {
+	} else if (peek_keyword(Keyword::Func)) {
 		item = parse_function();
 	}
 	if (item.has_value()) return item.value();
@@ -127,7 +137,7 @@ std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 }
 
 std::optional<Function> Parser::parse_function() {
-	if (!consume_identifier("func")) return {};
+	if (!consume_keyword(Keyword::Func)) return {};
 	auto name = SPANNED_REASON(expect_identifier, "expected function name");
 	if (!name.has_value()) return {};
 	if (!expect_symbol("expected opening parenthesis to begin argument list", Token::Symbol::LParen)) return {};
