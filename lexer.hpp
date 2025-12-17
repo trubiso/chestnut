@@ -3,7 +3,6 @@
 #include "stream.hpp"
 #include "token.hpp"
 
-#include <concepts>
 #include <optional>
 #include <string_view>
 #include <vector>

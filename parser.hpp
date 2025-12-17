@@ -108,9 +108,6 @@ private:
 	std::optional<Module::Body> parse_module_body(bool bare = false);
 
 	std::optional<Function> parse_function();
-
-	// TODO: parse_item which parses a module item (submmodule, function, in the future also structs and global
-	// vars)
 };
 
 }  // namespace AST
