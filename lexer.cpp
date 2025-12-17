@@ -13,9 +13,6 @@ bool Lexer::advance() {
 	auto current = stream_.peek();
 	if (!current.has_value()) return false;
 
-	bool should_attempt_semicolon = current.value() == '\n';
-	bool insert_semicolon         = true;
-
 	for (current = stream_.peek();
 	     current.has_value() && (current.value() == '\n' || is_whitespace(current.value()));
 	     stream_.advance(), current = stream_.peek()) {
@@ -49,8 +46,7 @@ bool Lexer::advance() {
 		token = Token::make_char_literal(begin, consume_char_literal());
 	} else if (is_symbol_start(current_value)) {
 		s = consume_symbol();
-		if (s == Token::Symbol::CommentStart) goto semicolon;
-		else if (s == Token::Symbol::CommentMultilineStart) return true;
+		if (s == Token::Symbol::CommentStart || s == Token::Symbol::CommentMultilineStart) return true;
 		token = Token::make_symbol(begin, s);
 	} else {
 		diagnostics_.push_back(Diagnostic(
@@ -66,21 +62,6 @@ bool Lexer::advance() {
 		else loc_.push_back(stream_.index());
 		// TODO: skip until next parsable character
 		return false;
-	}
-
-	if (should_attempt_semicolon) {
-		// TODO: revise, and maybe make this depend on the last token instead
-		if (!token.has_value()
-		    || (token.value().value.index() == (size_t) Token::Kind::Symbol
-		        && (s < Token::Symbol::LParen || s > Token::Symbol::RBrace)))
-			insert_semicolon = false;
-		if (insert_semicolon) {
-		semicolon:
-			// begin > 0 must be true because we must have skipped at least one
-			// newline
-			assert(begin > 0);
-			tokens_.push_back(Token::make_symbol(begin - 1, Token::Symbol::Semicolon));
-		}
 	}
 
 	if (token.has_value()) tokens_.push_back(token.value());

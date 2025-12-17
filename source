@@ -3,11 +3,22 @@ module hello {
 	module whats {
 		module up {}
 
-		func main() void
+		func main() void;
 
-		func john(k: int16)
+		func hey(cool: bool) uint;
 
-		func lets_do_this(name: string, age: uint) bool
+/*
+		func john(k: int16) {
+			const a = 30;
+			mut b: uint;
+			const d: int;
+			mut u: char = 'u';
+		}
+
+		func lets_do_this(name: string, age: uint) bool {
+			const return_value: bool = false;
+		}
+*/
 	}
 
 	func greet()
