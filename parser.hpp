@@ -13,6 +13,12 @@ namespace AST {
 
 // TODO: create a StringInterner to avoid moving around string views constantly
 
+struct QualifiedIdentifier {
+	bool absolute;
+	// FIXME: this should absolutely be a SmallVec to avoid heap allocs
+	std::vector<Spanned<std::string_view>> path;
+};
+
 // TODO: type
 typedef std::string_view Type;
 
@@ -80,24 +86,22 @@ private:
 		return Spanned<T> {Span(begin, end), value.value()};
 	}
 
-	// TODO: introduce qualified identifiers
-
-	// consume_ methods return a non-null/false value if they found a token
+	// consume_ methods return a non-null/true value if they found a token
 	// abiding by the specified criteria and increment the index
 	bool consume_keyword(Keyword);
-	std::optional<std::string_view> consume_identifier();
-	bool                            consume_symbol(Token::Symbol);
-
-	// consume_spanned_ methods do the same, but return a spanned value.
-	std::optional<Spanned<std::string_view>> consume_spanned_identifier();
+	bool consume_symbol(Token::Symbol);
+	
+	std::optional<std::string_view>    consume_identifier();
+	std::optional<QualifiedIdentifier> consume_qualified_identifier();
 
 	// peek_ methods do not increment the index.
-	bool peek_symbol(Token::Symbol);
-	bool peek_keyword(Keyword);
+	bool peek_symbol(Token::Symbol) const;
+	bool peek_keyword(Keyword) const;
 
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
 	// upon failure. The reason string is only copied if a diagnostic is thrown.
-	bool                            expect_symbol(std::string_view reason, Token::Symbol);
+	bool expect_symbol(std::string_view reason, Token::Symbol);
+
 	std::optional<std::string_view> expect_identifier(std::string_view reason);
 
 	// skip semicolons

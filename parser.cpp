@@ -9,8 +9,18 @@
 
 namespace AST {
 
+#define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
+#define SPANNED_REASON(fn, reason)                                                                               \
+	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
+
 bool Parser::consume_keyword(Keyword keyword) {
 	if (!peek_keyword(keyword)) return false;
+	tokens_.advance();
+	return true;
+}
+
+bool Parser::consume_symbol(Token::Symbol symbol) {
+	if (!peek_symbol(symbol)) return false;
 	tokens_.advance();
 	return true;
 }
@@ -24,13 +34,35 @@ std::optional<std::string_view> Parser::consume_identifier() {
 	return token.get_identifier();
 }
 
-bool Parser::consume_symbol(Token::Symbol symbol) {
-	if (!peek_symbol(symbol)) return false;
-	tokens_.advance();
-	return true;
+std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
+	// NOTE: in the future, we will have to account for static members (T::a) and potentially discarded identifiers
+	// at the beginning (_::a)
+
+	// if a :: can be consumed before the qualified identifier, it will be consumed and will turn the qualified
+	// identifier absolute
+	bool absolute = consume_symbol(Token::Symbol::ColonColon);
+	// if :: was consumed, that means this is definitely and unambiguously a qualified identifier now
+	std::optional<Spanned<std::string_view>> root
+		= absolute ? SPANNED_REASON(
+				     expect_identifier,
+				     "expected an identifier (`::` starts an absolute qualified identifier)"
+			     )
+	                   : SPANNED(consume_identifier);
+	// now if we didn't find the root we can safely return because, if :: has been parsed, we'll have skipped it :-)
+	if (!root.has_value()) return {};
+	std::vector<Spanned<std::string_view>> path {root.value()};
+	while (consume_symbol(Token::Symbol::ColonColon)) {
+		std::optional<Spanned<std::string_view>> piece = SPANNED_REASON(
+			expect_identifier,
+			"expected an identifier (there is a trailing `::` in a preceding qualified identifier)"
+		);
+		if (!piece.has_value()) return QualifiedIdentifier {absolute, path};
+		path.push_back(piece.value());
+	}
+	return QualifiedIdentifier {absolute, path};
 }
 
-bool Parser::peek_symbol(Token::Symbol symbol) {
+bool Parser::peek_symbol(Token::Symbol symbol) const {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return false;
 	Token token = maybe_token.value();
@@ -38,7 +70,7 @@ bool Parser::peek_symbol(Token::Symbol symbol) {
 	return token.get_symbol() == symbol;
 }
 
-bool Parser::peek_keyword(Keyword keyword) {
+bool Parser::peek_keyword(Keyword keyword) const {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return false;
 	Token token = maybe_token.value();
@@ -88,10 +120,6 @@ void Parser::skip_semis() {
 		return token.is_symbol() && token.get_symbol() == Token::Symbol::Semicolon;
 	});
 }
-
-#define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
-#define SPANNED_REASON(fn, reason)                                                                               \
-	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
 
 std::optional<Module> Parser::parse_module() {
 	if (!consume_keyword(Keyword::Module)) return {};
