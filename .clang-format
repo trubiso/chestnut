@@ -41,7 +41,7 @@ AllowShortLoopsOnASingleLine: True
 AllowShortNamespacesOnASingleLine: False  
 AlwaysBreakBeforeMultilineStrings: True
 BinPackArguments: False
-BinPackLongBracedList: True  
+# BinPackLongBracedList: True  
 BinPackParameters: OnePerLine
 BitFieldColonSpacing: Both
 BreakAdjacentStringLiterals: False
@@ -51,7 +51,7 @@ BreakBeforeBinaryOperators: All
 BreakBeforeBraces: Attach
 BreakBeforeConceptDeclarations: Always
 BreakBeforeInlineASMColon: OnlyMultiline
-BreakBeforeTemplateCloser: True
+# BreakBeforeTemplateCloser: True
 BreakBeforeTernaryOperators: True
 BreakBinaryOperations: RespectPrecedence
 BreakConstructorInitializers: BeforeComma  
@@ -67,7 +67,7 @@ DerivePointerAlignment: False
 DisableFormat: False
 EmptyLineAfterAccessModifier: Never
 EmptyLineBeforeAccessModifier: Always
-EnumTrailingComma: Leave
+# EnumTrailingComma: Leave
 FixNamespaceComments: True
 IncludeBlocks: Regroup
 IndentAccessModifiers: False
@@ -103,13 +103,13 @@ RequiresClausePosition: OwnLine
 RequiresExpressionIndentation: OuterScope
 SeparateDefinitionBlocks: Always
 ShortNamespaceLines: 1
-SortIncludes:
-  Enabled: True
-  IgnoreCase: True
+# SortIncludes:
+#  Enabled: True
+#  IgnoreCase: True
 SortUsingDeclarations: LexicographicNumeric
 SpaceAfterCStyleCast: True
 SpaceAfterLogicalNot: False
-SpaceAfterOperatorKeyword: False
+# SpaceAfterOperatorKeyword: False
 SpaceAfterTemplateKeyword: True
 SpaceAroundPointerQualifiers: Before
 SpaceBeforeAssignmentOperators: True
