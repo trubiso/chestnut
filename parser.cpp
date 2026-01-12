@@ -87,17 +87,18 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	return false;
 }
 
+// TODO: merge expected diagnoses
+
 bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
 	if (consume_symbol(symbol)) return true;
 	Token last_token = tokens_.peek().value_or(tokens_.last());
 
 	std::string title = std::format("expected symbol '{}'", get_variant_name(symbol));
 
-	diagnostics_.push_back(Diagnostic(
-		Diagnostic::Severity::Error,
-		title,
+	diagnostics_.push_back(Diagnostic::error(
+		std::move(title),
 		std::string(reason),
-		{Diagnostic::Label(last_token.span())}
+		{Diagnostic::Sample(last_token.span())}
 	));
 	return false;
 }
@@ -106,11 +107,10 @@ std::optional<std::string_view> Parser::expect_identifier(std::string_view reaso
 	auto identifier = consume_identifier();
 	if (identifier.has_value()) return identifier;
 	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(Diagnostic(
-		Diagnostic::Severity::Error,
+	diagnostics_.push_back(Diagnostic::error(
 		"expected identifier",
 		std::string(reason),
-		{Diagnostic::Label(last_token.span())}
+		{Diagnostic::Sample(last_token.span())}
 	));
 	return {};
 }

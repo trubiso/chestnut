@@ -17,7 +17,7 @@ int main(void) {
 
 	Lexer lexer(source);
 
-	Diagnostic diag(Diagnostic::Severity::Note, "died", "mingle", {Diagnostic::Label(Span(15, 43), "not ok")});
+	Diagnostic diag(Diagnostic::Severity::Warning, "died", "mingle", {Diagnostic::Sample({Diagnostic::Sample::Label(Span(15, 43), "not ok", OutFmt::Color::Red)})});
 
 	Stream<Token> tokens {std::move(lexer.collect_all())};
 

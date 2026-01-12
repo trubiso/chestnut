@@ -1,53 +1,84 @@
+#include "out_fmt.hpp"
 #include "span.hpp"
 
-#include <cstddef>
 #include <initializer_list>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
-// TODO: rework this such that labels trigger code sample display and are
-// grouped under the title (and potential subtitle) of the diagnostic
-
 struct Diagnostic {
-public:
-	enum class Severity { Error, Warning, Note };
+	struct Sample {
+		struct Label {
+			Span                       span;
+			std::optional<std::string> label;
+			OutFmt::Color              color;
 
-	struct Label {
-		Span                       span;
-		std::optional<std::string> label;
-		std::optional<Severity>    color_override = {};
+			explicit Label(Span span, std::string&& label, OutFmt::Color color)
+				: span {span}
+				, label {label}
+				, color {color} {}
 
-		explicit Label(
-			Span                       span,
-			std::optional<std::string> label          = {},
-			std::optional<Severity>    color_override = {}
-		)
-			: span(span)
-			, label(label)
-			, color_override(color_override) {}
+			explicit Label(Span span, OutFmt::Color color) : span {span}, label {}, color {color} {}
+		};
+
+		/// All titles will be prefixed with "note:".
+		std::optional<std::string> title;
+		/// There must be at least one label!!!
+		std::vector<Label> labels;
+
+		explicit Sample(std::initializer_list<Label> labels) : title {}, labels {labels} {}
+
+		explicit Sample(std::string&& title, std::initializer_list<Label> labels)
+			: title {title}
+			, labels {labels} {}
+
+		explicit Sample(Span span, OutFmt::Color color)
+			: Sample {
+				  Label {span, color}
+                } {}
+
+		explicit Sample(Span span) : Sample {span, OutFmt::Color::Red} {}
+
+		Span span() const;
+		void print(std::vector<size_t> const& loc, std::string_view code) const;
 	};
 
-	Severity                   severity;
+	enum class Severity { Error, Warning } severity;
 	std::string                title;
-	std::optional<std::string> subtitle = {};
-	std::vector<Label>         labels;
+	std::optional<std::string> subtitle;
+	std::vector<Sample>        samples;
 
 	explicit Diagnostic(
-		Severity                     severity,
-		std::string                  title,
-		std::optional<std::string>   subtitle = {},
-		std::initializer_list<Label> labels   = {}
+		Severity                      severity,
+		std::string&&                 title,
+		std::optional<std::string>    subtitle = {},
+		std::initializer_list<Sample> samples  = {}
 	)
-		: severity(severity)
-		, title(title)
-		, subtitle(subtitle)
-		, labels(labels) {}
+		: severity {severity}
+		, title {title}
+		, subtitle {subtitle}
+		, samples {samples} {}
 
-	inline Diagnostic& add_label(Label&& label) {
-		labels.push_back(label);
-		return *this;
+	static inline Diagnostic
+	error(std::string&&                 title,
+	      std::optional<std::string>    subtitle = {},
+	      std::initializer_list<Sample> samples  = {}) {
+		return Diagnostic(Severity::Error, std::move(title), subtitle, samples);
+	}
+
+	static inline Diagnostic error(std::string&& title, std::initializer_list<Sample> samples) {
+		return Diagnostic(Severity::Error, std::move(title), {}, samples);
+	}
+
+	static inline Diagnostic
+	warning(std::string&&                 title,
+	        std::optional<std::string>    subtitle = {},
+	        std::initializer_list<Sample> samples  = {}) {
+		return Diagnostic(Severity::Warning, std::move(title), subtitle, samples);
+	}
+
+	static inline Diagnostic warning(std::string&& title, std::initializer_list<Sample> samples) {
+		return Diagnostic(Severity::Warning, std::move(title), {}, samples);
 	}
 
 	void print(std::vector<size_t> const& loc, std::string_view code) const;

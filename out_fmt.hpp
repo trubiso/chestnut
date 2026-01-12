@@ -2,6 +2,8 @@
 
 namespace OutFmt {
 
+// TODO: explicitly define which output stream to use
+
 enum class Color {
 	Black,
 	Red,

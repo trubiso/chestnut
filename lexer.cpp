@@ -49,11 +49,10 @@ bool Lexer::advance() {
 		if (s == Token::Symbol::CommentStart || s == Token::Symbol::CommentMultilineStart) return true;
 		token = Token::make_symbol(begin, s);
 	} else {
-		diagnostics_.push_back(Diagnostic(
-			Diagnostic::Severity::Error,
+		diagnostics_.push_back(Diagnostic::error(
 			"unknown/unsupported character",
 			std::format("found unknown/unsupported character 0x{:X}", current_value),
-			{Diagnostic::Label(Span(stream_.index()))}
+			{Diagnostic::Sample(Span(stream_.index()))}
 		));
 		// we have to push a line, otherwise the diagnostics glitch
 		for (current = stream_.peek(); current.has_value() && current.value() != '\n';
@@ -176,11 +175,9 @@ void Lexer::consume_string_literal() {
 	if (!found_closing_quote)
 		// we only push the beginning quote because otherwise the diagnostic would
 		// be huge
-		diagnostics_.push_back(Diagnostic(
-			Diagnostic::Severity::Error,
+		diagnostics_.push_back(Diagnostic::error(
 			"unterminated string literal",
-			{},
-			{Diagnostic::Label(Span(string_begin))}
+			{Diagnostic::Sample(Span(string_begin))}
 		));
 }
 
@@ -195,11 +192,9 @@ char Lexer::consume_char_literal() {
 	case '\'':
 		// we got '', which is an invalid literal.
 		// the closing quote is already consumed.
-		diagnostics_.push_back(Diagnostic(
-			Diagnostic::Severity::Error,
+		diagnostics_.push_back(Diagnostic::error(
 			"empty character literal",
-			{},
-			{Diagnostic::Label(Span(stream_.index() - 2, stream_.index()))}
+			{Diagnostic::Sample(Span(stream_.index() - 2, stream_.index()))}
 		));
 		goto ret;
 	case '\\':
@@ -213,11 +208,10 @@ char Lexer::consume_char_literal() {
 			// the escape sequence does not exist
 			// fallback strategy: use the character
 			c = current.value();
-			diagnostics_.push_back(Diagnostic(
-				Diagnostic::Severity::Error,
+			diagnostics_.push_back(Diagnostic::error(
 				"invalid escape sequence",
 				std::format("found invalid sequence \\{}", c),
-				{Diagnostic::Label(Span(stream_.index() - 2, stream_.index()))}
+				{Diagnostic::Sample(Span(stream_.index() - 2, stream_.index()))}
 			));
 		}
 		break;
@@ -235,11 +229,9 @@ ret:
 	return c;
 
 unclosed_literal:
-	diagnostics_.push_back(Diagnostic(
-		Diagnostic::Severity::Error,
+	diagnostics_.push_back(Diagnostic::error(
 		"unclosed character literal",
-		{},
-		{Diagnostic::Label(Span(char_begin, stream_.index()))}
+		{Diagnostic::Sample(Span(char_begin, stream_.index()))}
 	));
 	goto ret;
 }
@@ -337,11 +329,9 @@ Token::Symbol Lexer::consume_symbol() {
 		if (nesting > 0)
 			// we only push the beginning because otherwise the diagnostic would be
 			// huge
-			diagnostics_.push_back(Diagnostic(
-				Diagnostic::Severity::Error,
+			diagnostics_.push_back(Diagnostic::error(
 				"unterminated multiline comment",
-				{},
-				{Diagnostic::Label(Span(comment_begin, comment_begin + 2))}
+				{Diagnostic::Sample(Span(comment_begin, comment_begin + 2))}
 			));
 		return Symbol::CommentMultilineStart;
 	}
