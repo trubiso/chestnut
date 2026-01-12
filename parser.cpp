@@ -34,6 +34,13 @@ std::optional<std::string_view> Parser::consume_identifier() {
 	return token.get_identifier();
 }
 
+std::optional<std::string_view> Parser::consume_tag() {
+	if (!consume_symbol(Token::Symbol::At)) return {};
+	std::optional<std::string_view> name = expect_identifier("expected an identifier (`@` starts a tag)");
+	if (!name.has_value()) return {};
+	return name;
+}
+
 std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
 	// NOTE: in the future, we will have to account for static members (T::a) and potentially discarded identifiers
 	// at the beginning (_::a)

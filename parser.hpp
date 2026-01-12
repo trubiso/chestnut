@@ -90,8 +90,9 @@ private:
 	// abiding by the specified criteria and increment the index
 	bool consume_keyword(Keyword);
 	bool consume_symbol(Token::Symbol);
-	
+
 	std::optional<std::string_view>    consume_identifier();
+	std::optional<std::string_view>    consume_tag();
 	std::optional<QualifiedIdentifier> consume_qualified_identifier();
 
 	// peek_ methods do not increment the index.
