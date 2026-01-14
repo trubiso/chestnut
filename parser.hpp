@@ -21,7 +21,6 @@ struct QualifiedIdentifier {
 
 struct Type {
 	// TODO: eventually support types which are identifiers. for now, we won't, as there is no way to create them.
-	// TODO: add bool!
 
 	enum class Kind {
 		Integer = 0,
