@@ -3,8 +3,10 @@
 #include "lexer.hpp"
 
 #include <cassert>
+#include <charconv>
 #include <format>
 #include <iostream>
+#include <string>
 #include <string_view>
 
 namespace AST {
@@ -67,6 +69,56 @@ std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
 		path.push_back(piece.value());
 	}
 	return QualifiedIdentifier {absolute, path};
+}
+
+std::optional<NewType> Parser::consume_type() {
+	// in the future, this will require atoms and operators just like expression.
+	// for now, we're only doing built-in types, so it's much easier for us!
+	std::optional<std::string_view> maybe_name = consume_identifier();  // all built-ins are just identifiers
+	if (!maybe_name.has_value()) return {};
+	std::string_view name = maybe_name.value();
+
+	// variables have to declared at the top so c++ won't wail
+	bool starts_with_u, starts_with_i;
+	uint32_t width;
+	std::from_chars_result res;
+	std::optional<NewType::Integer> int_{};
+	size_t base_length = 0;
+
+	// "easy" types
+	if (name == "void") return NewType::make_void();
+	if (name == "char") return NewType::make_char();
+
+	// float types (can be bruteforced)
+	if (name.starts_with("float")) {
+		// TODO: support arbitrary sized floats (should we?)
+		if (name == "float16") return NewType::make_float(NewType::Float::Width::F16);
+		if (name == "float32") return NewType::make_float(NewType::Float::Width::F32);
+		if (name == "float64") return NewType::make_float(NewType::Float::Width::F64);
+		if (name == "float128") return NewType::make_float(NewType::Float::Width::F128);
+		goto none_match;
+	}
+
+	// just the integer types left
+	starts_with_u = name.starts_with("uint");
+	starts_with_i = name.starts_with("int");
+	if (!starts_with_u && !starts_with_i) goto none_match;
+	// get rid of the easy cases
+	base_length = starts_with_u ? 4 : 3;
+	if (name.length() == base_length) return NewType::make_integer(NewType::Integer::any(starts_with_i));
+	if (name.length() == base_length + 3 && name.ends_with("ptr")) return NewType::make_integer(NewType::Integer::ptr(starts_with_i));
+	if (name.length() == base_length + 4 && name.ends_with("size")) return NewType::make_integer(NewType::Integer::size(starts_with_i));
+	// we know the name is at least base_length long, so the following is valid
+	res = std::from_chars(name.data() + base_length, name.data() + name.size(), width);
+	if (res.ec != std::errc() || res.ptr != name.data() + name.size()) goto none_match;
+	int_ = NewType::Integer::with_width(width, starts_with_i);
+	if (!int_.has_value()) goto none_match;
+	return NewType::make_integer(std::move(int_.value()));
+
+none_match:
+	// we need to un-consume the identifier
+	tokens_.retreat();
+	return {};
 }
 
 bool Parser::peek_symbol(Token::Symbol symbol) const {

@@ -87,9 +87,25 @@ struct NewType {
 		enum class Width { F16, F32, F64, F128 } width;
 	};
 
-	typedef std::variant<Integer, Float, std::monostate, char> value_t;
+	typedef std::variant<Integer, Float, std::monostate, std::monostate> value_t;
 
 	value_t value;
+
+	inline static NewType make_integer(Integer&& integer) {
+		return NewType(value_t {std::in_place_index<(size_t) Kind::Integer>, integer});
+	}
+
+	inline static NewType make_float(Float::Width width) {
+		return NewType(value_t {std::in_place_index<(size_t) Kind::Float>, Float {width}});
+	}
+
+	inline static NewType make_void() {
+		return NewType(value_t {std::in_place_index<(size_t) Kind::Void>, std::monostate {}});
+	}
+
+	inline static NewType make_char() {
+		return NewType(value_t {std::in_place_index<(size_t) Kind::Char>, std::monostate {}});
+	}
 };
 
 struct Function {
@@ -164,6 +180,8 @@ private:
 	std::optional<std::string_view>    consume_identifier();
 	std::optional<std::string_view>    consume_tag();
 	std::optional<QualifiedIdentifier> consume_qualified_identifier();
+
+	std::optional<NewType> consume_type();
 
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;
