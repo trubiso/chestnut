@@ -7,6 +7,8 @@ module hello {
 
 		func hey(cool: uintptr) uint;
 
+		func lets_do_this1(name: bool, age: intsize, what: float128) uint1382;
+
 /*
 		func john(k: int16) {
 			const a = 30;

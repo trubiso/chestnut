@@ -28,11 +28,12 @@ struct Type {
 		Float   = 1,
 		Void    = 2,
 		Char    = 3,
+		Bool    = 4,
 	};
 
 	class Integer {
 		uint32_t width;
-		bool     signed_; // TODO: maybe express this as a bit in width, although that's kinda ridiculous
+		bool     signed_;  // TODO: maybe express this as a bit in width, although that's kinda ridiculous
 
 		static uint32_t const ANY  = (1 << 23) + 1;
 		static uint32_t const PTR  = (1 << 23) + 2;
@@ -94,7 +95,7 @@ struct Type {
 		}
 	};
 
-	typedef std::variant<Integer, Float, std::monostate, std::monostate> value_t;
+	typedef std::variant<Integer, Float, std::monostate, std::monostate, std::monostate> value_t;
 
 	value_t value;
 
@@ -112,6 +113,10 @@ struct Type {
 
 	inline static Type make_char() {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Char>, std::monostate {}});
+	}
+
+	inline static Type make_bool() {
+		return Type(value_t {std::in_place_index<(size_t) Kind::Bool>, std::monostate {}});
 	}
 
 	inline Integer get_integer() const { return std::get<(size_t) Kind::Integer>(value); }

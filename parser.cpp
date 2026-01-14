@@ -14,9 +14,10 @@ namespace AST {
 std::ostream& operator<<(std::ostream& os, Type const& type) {
 	switch ((Type::Kind) type.value.index()) {
 	case Type::Kind::Integer: break;
-	case Type::Kind::Float:   return os << "float" << type.get_float().width_value();
+	case Type::Kind::Float:   return os << "float" << (uint32_t) type.get_float().width_value();
 	case Type::Kind::Void:    return os << "void";
 	case Type::Kind::Char:    return os << "char";
+	case Type::Kind::Bool:    return os << "bool";
 	}
 
 	// we know it's an integer now
@@ -111,6 +112,7 @@ std::optional<Type> Parser::consume_type() {
 	// "easy" types
 	if (name == "void") return Type::make_void();
 	if (name == "char") return Type::make_char();
+	if (name == "bool") return Type::make_bool();
 
 	// float types (can be bruteforced)
 	if (name.starts_with("float")) {
