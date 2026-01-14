@@ -49,6 +49,33 @@ bool Parser::consume_symbol(Token::Symbol symbol) {
 	return true;
 }
 
+std::optional<std::string_view> Parser::consume_number_literal() {
+	auto maybe_token = tokens_.peek();
+	if (!maybe_token.has_value()) return {};
+	Token token = maybe_token.value();
+	if (!token.is_number_literal()) return {};
+	tokens_.advance();
+	return token.get_number_literal();
+}
+
+std::optional<std::string_view> Parser::consume_string_literal() {
+	auto maybe_token = tokens_.peek();
+	if (!maybe_token.has_value()) return {};
+	Token token = maybe_token.value();
+	if (!token.is_string_literal()) return {};
+	tokens_.advance();
+	return token.get_string_literal();
+}
+
+std::optional<char> Parser::consume_char_literal() {
+	auto maybe_token = tokens_.peek();
+	if (!maybe_token.has_value()) return {};
+	Token token = maybe_token.value();
+	if (!token.is_char_literal()) return {};
+	tokens_.advance();
+	return token.get_char_literal();
+}
+
 std::optional<std::string_view> Parser::consume_identifier() {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return {};
@@ -149,8 +176,30 @@ none_match:
 }
 
 std::optional<Expression::Atom> Parser::consume_expression_atom() {
+	// it could be a potentially qualified identifier
 	std::optional<QualifiedIdentifier> identifier = consume_qualified_identifier();
 	if (identifier.has_value()) return Expression::Atom::make_identifier(std::move(identifier.value()));
+
+	// since it's not an identifier, it has to be a literal
+	std::optional<std::string_view> sv;
+	std::optional<std::string_view> suffix;  // we always try to consume an extra suffix
+
+	if (sv = consume_number_literal(), sv.has_value()) {
+		suffix = consume_identifier();
+		return Expression::Atom::make_number_literal(sv.value(), suffix);
+	}
+	
+	if (sv = consume_string_literal(), sv.has_value()) {
+		suffix = consume_identifier();
+		return Expression::Atom::make_string_literal(sv.value(), suffix);
+	}
+
+	std::optional<char> c;
+
+	if (c = consume_char_literal(), c.has_value()) {
+		suffix = consume_identifier();
+		return Expression::Atom::make_char_literal(c.value(), suffix);
+	}
 
 	return {};
 }

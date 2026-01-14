@@ -23,15 +23,62 @@ struct QualifiedIdentifier {
 struct Expression {
 	struct Atom {
 		enum class Kind {
-			Identifier = 0,
+			Identifier    = 0,
+			NumberLiteral = 1,
+			StringLiteral = 2,
+			CharLiteral   = 3,
 		};
 
-		typedef std::variant<QualifiedIdentifier> value_t;
+		struct NumberLiteral {
+			std::string_view                literal;
+			std::optional<std::string_view> suffix;
+		};
+
+		struct StringLiteral {
+			std::string_view                literal;
+			std::optional<std::string_view> suffix;
+		};
+
+		struct CharLiteral {
+			char                            literal;
+			std::optional<std::string_view> suffix;
+		};
+
+		typedef std::variant<QualifiedIdentifier, NumberLiteral, StringLiteral, CharLiteral> value_t;
 
 		value_t value;
 
 		inline static Atom make_identifier(QualifiedIdentifier&& identifier) {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
+		}
+
+		inline static Atom
+		make_number_literal(std::string_view literal, std::optional<std::string_view> suffix) {
+			return Atom(
+				value_t {
+					std::in_place_index<(size_t) Kind::NumberLiteral>,
+					NumberLiteral {literal, suffix}
+                        }
+			);
+		}
+
+		inline static Atom
+		make_string_literal(std::string_view literal, std::optional<std::string_view> suffix) {
+			return Atom(
+				value_t {
+					std::in_place_index<(size_t) Kind::StringLiteral>,
+					StringLiteral {literal, suffix}
+                        }
+			);
+		}
+
+		inline static Atom make_char_literal(char literal, std::optional<std::string_view> suffix) {
+			return Atom(
+				value_t {
+					std::in_place_index<(size_t) Kind::CharLiteral>,
+					CharLiteral {literal, suffix}
+                        }
+			);
 		}
 	};
 
@@ -224,6 +271,10 @@ private:
 	// abiding by the specified criteria and increment the index
 	bool consume_keyword(Keyword);
 	bool consume_symbol(Token::Symbol);
+
+	std::optional<std::string_view> consume_number_literal();
+	std::optional<std::string_view> consume_string_literal();
+	std::optional<char>             consume_char_literal();
 
 	std::optional<std::string_view>    consume_identifier();
 	std::optional<std::string_view>    consume_tag();
