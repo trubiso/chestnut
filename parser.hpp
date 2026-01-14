@@ -84,6 +84,11 @@ struct Expression {
 		}
 	};
 
+	struct UnaryOperation {
+		std::unique_ptr<Spanned<Expression>> operand;
+		Token::Symbol                        operation;
+	};
+
 	struct BinaryOperation {
 		std::unique_ptr<Spanned<Expression>> lhs;
 		std::unique_ptr<Spanned<Expression>> rhs;
@@ -92,15 +97,26 @@ struct Expression {
 
 	enum class Kind {
 		Atom            = 0,
-		BinaryOperation = 1,
+		UnaryOperation  = 1,
+		BinaryOperation = 2,
 	};
 
-	typedef std::variant<Atom, BinaryOperation> value_t;
+	typedef std::variant<Atom, UnaryOperation, BinaryOperation> value_t;
 
 	value_t value;
 
 	inline static Expression make_atom(Atom&& atom) {
 		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, atom});
+	}
+
+	inline static Expression
+	make_unary_operation(std::unique_ptr<Spanned<Expression>>&& operand, Token::Symbol operation) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::UnaryOperation>,
+				UnaryOperation {std::move(operand), operation}
+                }
+		);
 	}
 
 	inline static Expression make_binary_operation(
@@ -305,6 +321,7 @@ private:
 	std::optional<Type> consume_type();
 
 	std::optional<Expression::Atom> consume_expression_atom();
+	std::optional<Expression>       consume_expression_unary_l1();
 	std::optional<Expression>       consume_expression_binop_l1();
 	std::optional<Expression>       consume_expression();
 
@@ -321,6 +338,7 @@ private:
 	std::optional<Type> expect_type(std::string_view reason);
 
 	std::optional<Expression::Atom> expect_expression_atom(std::string_view reason);
+	std::optional<Expression>       expect_expression_unary_l1(std::string_view reason);
 	std::optional<Expression>       expect_expression_binop_l1(std::string_view reason);
 	std::optional<Expression>       expect_expression(std::string_view reason);
 

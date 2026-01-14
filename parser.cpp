@@ -206,14 +206,34 @@ std::optional<Expression::Atom> Parser::consume_expression_atom() {
 
 // TODO: greatly improve this code with macros or some system that doesn't require this much repetition
 
+std::optional<Expression> Parser::consume_expression_unary_l1() {
+	// this refers to unary negation. this code is really ugly
+	size_t negations = 0;
+	while (consume_symbol(Token::Symbol::Minus)) negations++;
+	std::optional<Spanned<Expression::Atom>> should_operand
+		= negations ? SPANNED_REASON(expect_expression_atom, "expected expression after unary operator")
+	                    : SPANNED(consume_expression_atom);
+	if (!should_operand.has_value()) return {};
+	Spanned<Expression> operand = Spanned<Expression> {
+		should_operand.value().span,
+		Expression::make_atom(std::move(should_operand.value().value))
+	};
+	while (negations--)
+		operand = Spanned<Expression> {
+			Span(operand.span.start - 1, operand.span.end),
+			Expression::make_unary_operation(
+				std::make_unique<Spanned<Expression>>(std::move(operand)),
+				Token::Symbol::Minus
+			)
+		};
+	return std::move(operand.value);
+}
+
 std::optional<Expression> Parser::consume_expression_binop_l1() {
 	// highest precedence will be mul/div
-	std::optional<Spanned<Expression::Atom>> maybe_lhs = SPANNED(consume_expression_atom);
+	std::optional<Spanned<Expression>> maybe_lhs = SPANNED(consume_expression_unary_l1);
 	if (!maybe_lhs.has_value()) return {};
-	Spanned<Expression> lhs = Spanned<Expression> {
-		maybe_lhs.value().span,
-		Expression::make_atom(std::move(maybe_lhs.value().value))
-	};
+	Spanned<Expression> lhs = std::move(maybe_lhs.value());
 
 	bool has_star = false, has_div = false;
 	while ((has_star = peek_symbol(Token::Symbol::Star)) || (has_div = peek_symbol(Token::Symbol::Div))) {
@@ -221,13 +241,10 @@ std::optional<Expression> Parser::consume_expression_binop_l1() {
 		Token::Symbol operation = has_star ? Token::Symbol::Star : Token::Symbol::Div;
 		tokens_.advance();
 
-		std::optional<Spanned<Expression::Atom>> should_rhs
-			= SPANNED_REASON(expect_expression_atom, "expected expression after binary operator");
+		std::optional<Spanned<Expression>> should_rhs
+			= SPANNED_REASON(expect_expression_unary_l1, "expected expression after binary operator");
 		if (!should_rhs.has_value()) return std::move(lhs.value);  // error recovery
-		Spanned<Expression> rhs = Spanned<Expression> {
-			should_rhs.value().span,
-			Expression::make_atom(std::move(should_rhs.value().value))
-		};
+		Spanned<Expression> rhs = std::move(should_rhs.value());
 
 		lhs = Spanned<Expression> {
 			Span(lhs.span.start, rhs.span.end),
@@ -335,6 +352,16 @@ std::optional<Type> Parser::expect_type(std::string_view reason) {
 
 std::optional<Expression::Atom> Parser::expect_expression_atom(std::string_view reason) {
 	auto expression = consume_expression_atom();
+	if (expression.has_value()) return expression;
+	Token last_token = tokens_.peek().value_or(tokens_.last());
+	diagnostics_.push_back(
+		Diagnostic::error("expected expression", std::string(reason), {Diagnostic::Sample(last_token.span())})
+	);
+	return {};
+}
+
+std::optional<Expression> Parser::expect_expression_unary_l1(std::string_view reason) {
+	auto expression = consume_expression_unary_l1();
 	if (expression.has_value()) return expression;
 	Token last_token = tokens_.peek().value_or(tokens_.last());
 	diagnostics_.push_back(
