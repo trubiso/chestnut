@@ -11,6 +11,65 @@
 
 namespace AST {
 
+std::ostream& operator<<(std::ostream& os, QualifiedIdentifier const& identifier) {
+	if (identifier.absolute) os << "::";
+	for (size_t i = 0; i < identifier.path.size(); ++i) {
+		os << identifier.path[i].value;
+		if (i + 1 < identifier.path.size()) os << "::";
+	}
+	return os;
+}
+
+std::ostream& operator<<(std::ostream& os, Expression::Atom::NumberLiteral const& literal) {
+	if (literal.suffix.has_value()) {
+		return os << '[' << literal.literal << " w/ suffix " << literal.suffix.value() << ']';
+	} else {
+		return os << literal.literal;
+	}
+}
+
+std::ostream& operator<<(std::ostream& os, Expression::Atom::StringLiteral const& literal) {
+	if (literal.suffix.has_value()) {
+		return os << '[' << literal.literal << " w/ suffix " << literal.suffix.value() << ']';
+	} else {
+		return os << literal.literal;
+	}
+}
+
+std::ostream& operator<<(std::ostream& os, Expression::Atom::CharLiteral const& literal) {
+	// FIXME: we must escape the char
+	if (literal.suffix.has_value()) {
+		return os << "['" << literal.literal << "' w/ suffix " << literal.suffix.value() << ']';
+	} else {
+		return os << '\'' << literal.literal << '\'';
+	}
+}
+
+std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
+	switch ((Expression::Atom::Kind) atom.value.index()) {
+	case Expression::Atom::Kind::Identifier:    return os << atom.get_identifier();
+	case Expression::Atom::Kind::NumberLiteral: return os << atom.get_number_literal();
+	case Expression::Atom::Kind::StringLiteral: return os << atom.get_string_literal();
+	case Expression::Atom::Kind::CharLiteral:   return os << atom.get_char_literal();
+	}
+}
+
+std::ostream& operator<<(std::ostream& os, Expression::UnaryOperation const& operation) {
+	return os << '(' << operation.operation << operation.operand->value << ')';
+}
+
+std::ostream& operator<<(std::ostream& os, Expression::BinaryOperation const& operation) {
+	return os << '(' << operation.lhs->value << ' ' << operation.operation << ' ' << operation.rhs->value << ')';
+}
+
+std::ostream& operator<<(std::ostream& os, Expression const& expression) {
+	switch ((Expression::Kind) expression.value.index()) {
+	case Expression::Kind::Atom:            return os << expression.get_atom();
+	case Expression::Kind::UnaryOperation:  return os << expression.get_unary_operation();
+	case Expression::Kind::BinaryOperation: return os << expression.get_binary_operation();
+	}
+}
+
 std::ostream& operator<<(std::ostream& os, Type const& type) {
 	switch ((Type::Kind) type.value.index()) {
 	case Type::Kind::Integer: break;

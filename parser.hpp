@@ -21,6 +21,8 @@ struct QualifiedIdentifier {
 	std::vector<Spanned<std::string_view>> path;
 };
 
+std::ostream& operator<<(std::ostream&, QualifiedIdentifier const&);
+
 struct Expression {
 	struct Atom {
 		// TODO: add parenthesized expression to atom
@@ -82,6 +84,18 @@ struct Expression {
                         }
 			);
 		}
+
+		inline QualifiedIdentifier const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
+
+		inline NumberLiteral const& get_number_literal() const {
+			return std::get<(size_t) Kind::NumberLiteral>(value);
+		}
+
+		inline StringLiteral const& get_string_literal() const {
+			return std::get<(size_t) Kind::StringLiteral>(value);
+		}
+
+		inline CharLiteral const& get_char_literal() const { return std::get<(size_t) Kind::CharLiteral>(value); }
 	};
 
 	struct UnaryOperation {
@@ -131,7 +145,25 @@ struct Expression {
                 }
 		);
 	}
+
+	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
+
+	inline UnaryOperation const& get_unary_operation() const {
+		return std::get<(size_t) Kind::UnaryOperation>(value);
+	}
+
+	inline BinaryOperation const& get_binary_operation() const {
+		return std::get<(size_t) Kind::BinaryOperation>(value);
+	}
 };
+
+std::ostream& operator<<(std::ostream&, Expression::Atom::NumberLiteral const&);
+std::ostream& operator<<(std::ostream&, Expression::Atom::StringLiteral const&);
+std::ostream& operator<<(std::ostream&, Expression::Atom::CharLiteral const&);
+std::ostream& operator<<(std::ostream&, Expression::Atom const&);
+std::ostream& operator<<(std::ostream&, Expression::UnaryOperation const&);
+std::ostream& operator<<(std::ostream&, Expression::BinaryOperation const&);
+std::ostream& operator<<(std::ostream&, Expression const&);
 
 struct Type {
 	// TODO: eventually support types which are identifiers. for now, we won't, as there is no way to create them.
