@@ -13,10 +13,39 @@ namespace AST {
 
 // TODO: create a StringInterner to avoid moving around string views constantly
 
+// this is a superset of unqualified identifiers, as .absolute = false, .path = [<id>] is an unqualified identifier
 struct QualifiedIdentifier {
 	bool absolute;
 	// FIXME: this should absolutely be a SmallVec to avoid heap allocs
 	std::vector<Spanned<std::string_view>> path;
+};
+
+struct Expression {
+	struct Atom {
+		enum class Kind {
+			Identifier = 0,
+		};
+
+		typedef std::variant<QualifiedIdentifier> value_t;
+
+		value_t value;
+
+		inline static Atom make_identifier(QualifiedIdentifier&& identifier) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
+		}
+	};
+
+	enum class Kind {
+		Atom = 0,
+	};
+
+	typedef std::variant<Atom> value_t;
+
+	value_t value;
+
+	inline static Expression make_atom(Atom&& atom) {
+		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, atom});
+	}
 };
 
 struct Type {
@@ -97,6 +126,8 @@ struct Type {
 	typedef std::variant<Integer, Float, std::monostate, std::monostate, std::monostate> value_t;
 
 	value_t value;
+
+	// NOTE: would be beautiful to codegen all of this boilerplate, but alas,
 
 	inline static Type make_integer(Integer&& integer) {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Integer>, integer});
@@ -199,6 +230,9 @@ private:
 	std::optional<QualifiedIdentifier> consume_qualified_identifier();
 
 	std::optional<Type> consume_type();
+
+	std::optional<Expression::Atom> consume_expression_atom();
+	std::optional<Expression>       consume_expression();
 
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;

@@ -148,6 +148,19 @@ none_match:
 	return {};
 }
 
+std::optional<Expression::Atom> Parser::consume_expression_atom() {
+	std::optional<QualifiedIdentifier> identifier = consume_qualified_identifier();
+	if (identifier.has_value()) return Expression::Atom::make_identifier(std::move(identifier.value()));
+
+	return {};
+}
+
+std::optional<Expression> Parser::consume_expression() {
+	return consume_expression_atom().transform([](Expression::Atom&& atom) {
+		return Expression::make_atom(std::move(atom));
+	});
+}
+
 bool Parser::peek_symbol(Token::Symbol symbol) const {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return false;
