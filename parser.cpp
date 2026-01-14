@@ -51,6 +51,7 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	case Expression::Atom::Kind::NumberLiteral: return os << atom.get_number_literal();
 	case Expression::Atom::Kind::StringLiteral: return os << atom.get_string_literal();
 	case Expression::Atom::Kind::CharLiteral:   return os << atom.get_char_literal();
+	case Expression::Atom::Kind::Expression:    return os << '(' << *atom.get_expression() << ')';
 	}
 }
 
@@ -234,10 +235,11 @@ none_match:
 	return {};
 }
 
-std::optional<Expression::Atom> Parser::consume_expression_atom() {
+std::optional<Expression> Parser::consume_expression_atom() {
 	// it could be a potentially qualified identifier
 	std::optional<QualifiedIdentifier> identifier = consume_qualified_identifier();
-	if (identifier.has_value()) return Expression::Atom::make_identifier(std::move(identifier.value()));
+	if (identifier.has_value())
+		return Expression::make_atom(Expression::Atom::make_identifier(std::move(identifier.value())));
 
 	// since it's not an identifier, it has to be a literal
 	std::optional<std::string_view> sv;
@@ -245,19 +247,31 @@ std::optional<Expression::Atom> Parser::consume_expression_atom() {
 
 	if (sv = consume_number_literal(), sv.has_value()) {
 		suffix = consume_identifier();
-		return Expression::Atom::make_number_literal(sv.value(), suffix);
+		return Expression::make_atom(Expression::Atom::make_number_literal(sv.value(), suffix));
 	}
 
 	if (sv = consume_string_literal(), sv.has_value()) {
 		suffix = consume_identifier();
-		return Expression::Atom::make_string_literal(sv.value(), suffix);
+		return Expression::make_atom(Expression::Atom::make_string_literal(sv.value(), suffix));
 	}
 
 	std::optional<char> c;
 
 	if (c = consume_char_literal(), c.has_value()) {
 		suffix = consume_identifier();
-		return Expression::Atom::make_char_literal(c.value(), suffix);
+		return Expression::make_atom(Expression::Atom::make_char_literal(c.value(), suffix));
+	}
+
+	if (consume_symbol(Token::Symbol::LParen)) {
+		// TODO: review error handling here
+		std::optional<Expression> expression = expect_expression("expected expression inside parentheses");
+		if (!expression.has_value()) return {};
+		if (!expect_symbol(
+			    "expected closing parenthesis to end parenthesized expression",
+			    Token::Symbol::RParen
+		    ))
+			return expression;
+		return expression;
 	}
 
 	return {};
@@ -269,14 +283,11 @@ std::optional<Expression> Parser::consume_expression_unary_l1() {
 	// this refers to unary negation. this code is really ugly
 	size_t negations = 0;
 	while (consume_symbol(Token::Symbol::Minus)) negations++;
-	std::optional<Spanned<Expression::Atom>> should_operand
+	std::optional<Spanned<Expression>> should_operand
 		= negations ? SPANNED_REASON(expect_expression_atom, "expected expression after unary operator")
 	                    : SPANNED(consume_expression_atom);
 	if (!should_operand.has_value()) return {};
-	Spanned<Expression> operand = Spanned<Expression> {
-		should_operand.value().span,
-		Expression::make_atom(std::move(should_operand.value().value))
-	};
+	Spanned<Expression> operand = std::move(should_operand.value());
 	while (negations--)
 		operand = Spanned<Expression> {
 			Span(operand.span.start - 1, operand.span.end),
@@ -409,7 +420,7 @@ std::optional<Type> Parser::expect_type(std::string_view reason) {
 	return {};
 }
 
-std::optional<Expression::Atom> Parser::expect_expression_atom(std::string_view reason) {
+std::optional<Expression> Parser::expect_expression_atom(std::string_view reason) {
 	auto expression = consume_expression_atom();
 	if (expression.has_value()) return expression;
 	Token last_token = tokens_.peek().value_or(tokens_.last());

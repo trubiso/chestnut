@@ -25,12 +25,12 @@ std::ostream& operator<<(std::ostream&, QualifiedIdentifier const&);
 
 struct Expression {
 	struct Atom {
-		// TODO: add parenthesized expression to atom
 		enum class Kind {
 			Identifier    = 0,
 			NumberLiteral = 1,
 			StringLiteral = 2,
 			CharLiteral   = 3,
+			Expression    = 4,
 		};
 
 		struct NumberLiteral {
@@ -48,7 +48,13 @@ struct Expression {
 			std::optional<std::string_view> suffix;
 		};
 
-		typedef std::variant<QualifiedIdentifier, NumberLiteral, StringLiteral, CharLiteral> value_t;
+		typedef std::variant<
+			QualifiedIdentifier,
+			NumberLiteral,
+			StringLiteral,
+			CharLiteral,
+			std::unique_ptr<Expression>>
+			value_t;
 
 		value_t value;
 
@@ -85,7 +91,13 @@ struct Expression {
 			);
 		}
 
-		inline QualifiedIdentifier const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
+		inline static Atom make_expression(std::unique_ptr<Expression>&& expression) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
+		}
+
+		inline QualifiedIdentifier const& get_identifier() const {
+			return std::get<(size_t) Kind::Identifier>(value);
+		}
 
 		inline NumberLiteral const& get_number_literal() const {
 			return std::get<(size_t) Kind::NumberLiteral>(value);
@@ -95,7 +107,13 @@ struct Expression {
 			return std::get<(size_t) Kind::StringLiteral>(value);
 		}
 
-		inline CharLiteral const& get_char_literal() const { return std::get<(size_t) Kind::CharLiteral>(value); }
+		inline CharLiteral const& get_char_literal() const {
+			return std::get<(size_t) Kind::CharLiteral>(value);
+		}
+
+		inline std::unique_ptr<Expression> const& get_expression() const {
+			return std::get<(size_t) Kind::Expression>(value);
+		}
 	};
 
 	struct UnaryOperation {
@@ -120,7 +138,7 @@ struct Expression {
 	value_t value;
 
 	inline static Expression make_atom(Atom&& atom) {
-		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, atom});
+		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, std::move(atom)});
 	}
 
 	inline static Expression
@@ -352,10 +370,10 @@ private:
 
 	std::optional<Type> consume_type();
 
-	std::optional<Expression::Atom> consume_expression_atom();
-	std::optional<Expression>       consume_expression_unary_l1();
-	std::optional<Expression>       consume_expression_binop_l1();
-	std::optional<Expression>       consume_expression();
+	std::optional<Expression> consume_expression_atom();
+	std::optional<Expression> consume_expression_unary_l1();
+	std::optional<Expression> consume_expression_binop_l1();
+	std::optional<Expression> consume_expression();
 
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;
@@ -369,10 +387,10 @@ private:
 
 	std::optional<Type> expect_type(std::string_view reason);
 
-	std::optional<Expression::Atom> expect_expression_atom(std::string_view reason);
-	std::optional<Expression>       expect_expression_unary_l1(std::string_view reason);
-	std::optional<Expression>       expect_expression_binop_l1(std::string_view reason);
-	std::optional<Expression>       expect_expression(std::string_view reason);
+	std::optional<Expression> expect_expression_atom(std::string_view reason);
+	std::optional<Expression> expect_expression_unary_l1(std::string_view reason);
+	std::optional<Expression> expect_expression_binop_l1(std::string_view reason);
+	std::optional<Expression> expect_expression(std::string_view reason);
 
 	// skip semicolons
 	void skip_semis();
