@@ -19,11 +19,9 @@ struct QualifiedIdentifier {
 	std::vector<Spanned<std::string_view>> path;
 };
 
-// TODO: type
-typedef std::string_view Type;
-
-struct NewType {
+struct Type {
 	// TODO: eventually support types which are identifiers. for now, we won't, as there is no way to create them.
+	// TODO: add bool!
 
 	enum class Kind {
 		Integer = 0,
@@ -33,8 +31,8 @@ struct NewType {
 	};
 
 	class Integer {
-		uint32_t width : 3;
-		bool     signed_;
+		uint32_t width;
+		bool     signed_; // TODO: maybe express this as a bit in width, although that's kinda ridiculous
 
 		static uint32_t const ANY  = (1 << 23) + 1;
 		static uint32_t const PTR  = (1 << 23) + 2;
@@ -85,28 +83,43 @@ struct NewType {
 
 	struct Float {
 		enum class Width { F16, F32, F64, F128 } width;
+
+		inline constexpr uint8_t width_value() const {
+			switch (width) {
+			case Width::F16:  return 16;
+			case Width::F32:  return 32;
+			case Width::F64:  return 64;
+			case Width::F128: return 128;
+			}
+		}
 	};
 
 	typedef std::variant<Integer, Float, std::monostate, std::monostate> value_t;
 
 	value_t value;
 
-	inline static NewType make_integer(Integer&& integer) {
-		return NewType(value_t {std::in_place_index<(size_t) Kind::Integer>, integer});
+	inline static Type make_integer(Integer&& integer) {
+		return Type(value_t {std::in_place_index<(size_t) Kind::Integer>, integer});
 	}
 
-	inline static NewType make_float(Float::Width width) {
-		return NewType(value_t {std::in_place_index<(size_t) Kind::Float>, Float {width}});
+	inline static Type make_float(Float::Width width) {
+		return Type(value_t {std::in_place_index<(size_t) Kind::Float>, Float {width}});
 	}
 
-	inline static NewType make_void() {
-		return NewType(value_t {std::in_place_index<(size_t) Kind::Void>, std::monostate {}});
+	inline static Type make_void() {
+		return Type(value_t {std::in_place_index<(size_t) Kind::Void>, std::monostate {}});
 	}
 
-	inline static NewType make_char() {
-		return NewType(value_t {std::in_place_index<(size_t) Kind::Char>, std::monostate {}});
+	inline static Type make_char() {
+		return Type(value_t {std::in_place_index<(size_t) Kind::Char>, std::monostate {}});
 	}
+
+	inline Integer get_integer() const { return std::get<(size_t) Kind::Integer>(value); }
+
+	inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
 };
+
+std::ostream& operator<<(std::ostream&, Type const&);
 
 struct Function {
 	struct Argument {
@@ -181,7 +194,7 @@ private:
 	std::optional<std::string_view>    consume_tag();
 	std::optional<QualifiedIdentifier> consume_qualified_identifier();
 
-	std::optional<NewType> consume_type();
+	std::optional<Type> consume_type();
 
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;
@@ -192,6 +205,8 @@ private:
 	bool expect_symbol(std::string_view reason, Token::Symbol);
 
 	std::optional<std::string_view> expect_identifier(std::string_view reason);
+
+	std::optional<Type> expect_type(std::string_view reason);
 
 	// skip semicolons
 	void skip_semis();

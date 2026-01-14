@@ -11,6 +11,27 @@
 
 namespace AST {
 
+std::ostream& operator<<(std::ostream& os, Type const& type) {
+	switch ((Type::Kind) type.value.index()) {
+	case Type::Kind::Integer: break;
+	case Type::Kind::Float:   return os << "float" << type.get_float().width_value();
+	case Type::Kind::Void:    return os << "void";
+	case Type::Kind::Char:    return os << "char";
+	}
+
+	// we know it's an integer now
+	Type::Integer int_ = type.get_integer();
+	os << (int_.is_signed() ? "int" : "uint");
+	Type::Integer::WidthType width_type = int_.width_type();
+
+	switch (width_type) {
+	case Type::Integer::WidthType::Fixed: return os << int_.bit_width().value();
+	case Type::Integer::WidthType::Any:   return os;
+	case Type::Integer::WidthType::Ptr:   return os << "ptr";
+	case Type::Integer::WidthType::Size:  return os << "size";
+	}
+}
+
 #define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
 #define SPANNED_REASON(fn, reason)                                                                               \
 	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
@@ -71,31 +92,33 @@ std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
 	return QualifiedIdentifier {absolute, path};
 }
 
-std::optional<NewType> Parser::consume_type() {
+std::optional<Type> Parser::consume_type() {
 	// in the future, this will require atoms and operators just like expression.
 	// for now, we're only doing built-in types, so it's much easier for us!
+	// that's also why we're so harsh on retroceding instead of expecting.
+
 	std::optional<std::string_view> maybe_name = consume_identifier();  // all built-ins are just identifiers
 	if (!maybe_name.has_value()) return {};
 	std::string_view name = maybe_name.value();
 
 	// variables have to declared at the top so c++ won't wail
-	bool starts_with_u, starts_with_i;
-	uint32_t width;
-	std::from_chars_result res;
-	std::optional<NewType::Integer> int_{};
-	size_t base_length = 0;
+	bool                         starts_with_u, starts_with_i;
+	uint32_t                     width;
+	std::from_chars_result       res;
+	std::optional<Type::Integer> int_ {};
+	size_t                       base_length = 0;
 
 	// "easy" types
-	if (name == "void") return NewType::make_void();
-	if (name == "char") return NewType::make_char();
+	if (name == "void") return Type::make_void();
+	if (name == "char") return Type::make_char();
 
 	// float types (can be bruteforced)
 	if (name.starts_with("float")) {
 		// TODO: support arbitrary sized floats (should we?)
-		if (name == "float16") return NewType::make_float(NewType::Float::Width::F16);
-		if (name == "float32") return NewType::make_float(NewType::Float::Width::F32);
-		if (name == "float64") return NewType::make_float(NewType::Float::Width::F64);
-		if (name == "float128") return NewType::make_float(NewType::Float::Width::F128);
+		if (name == "float16") return Type::make_float(Type::Float::Width::F16);
+		if (name == "float32") return Type::make_float(Type::Float::Width::F32);
+		if (name == "float64") return Type::make_float(Type::Float::Width::F64);
+		if (name == "float128") return Type::make_float(Type::Float::Width::F128);
 		goto none_match;
 	}
 
@@ -105,15 +128,17 @@ std::optional<NewType> Parser::consume_type() {
 	if (!starts_with_u && !starts_with_i) goto none_match;
 	// get rid of the easy cases
 	base_length = starts_with_u ? 4 : 3;
-	if (name.length() == base_length) return NewType::make_integer(NewType::Integer::any(starts_with_i));
-	if (name.length() == base_length + 3 && name.ends_with("ptr")) return NewType::make_integer(NewType::Integer::ptr(starts_with_i));
-	if (name.length() == base_length + 4 && name.ends_with("size")) return NewType::make_integer(NewType::Integer::size(starts_with_i));
+	if (name.length() == base_length) return Type::make_integer(Type::Integer::any(starts_with_i));
+	if (name.length() == base_length + 3 && name.ends_with("ptr"))
+		return Type::make_integer(Type::Integer::ptr(starts_with_i));
+	if (name.length() == base_length + 4 && name.ends_with("size"))
+		return Type::make_integer(Type::Integer::size(starts_with_i));
 	// we know the name is at least base_length long, so the following is valid
 	res = std::from_chars(name.data() + base_length, name.data() + name.size(), width);
 	if (res.ec != std::errc() || res.ptr != name.data() + name.size()) goto none_match;
-	int_ = NewType::Integer::with_width(width, starts_with_i);
+	int_ = Type::Integer::with_width(width, starts_with_i);
 	if (!int_.has_value()) goto none_match;
-	return NewType::make_integer(std::move(int_.value()));
+	return Type::make_integer(std::move(int_.value()));
 
 none_match:
 	// we need to un-consume the identifier
@@ -154,11 +179,9 @@ bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
 
 	std::string title = std::format("expected symbol '{}'", get_variant_name(symbol));
 
-	diagnostics_.push_back(Diagnostic::error(
-		std::move(title),
-		std::string(reason),
-		{Diagnostic::Sample(last_token.span())}
-	));
+	diagnostics_.push_back(
+		Diagnostic::error(std::move(title), std::string(reason), {Diagnostic::Sample(last_token.span())})
+	);
 	return false;
 }
 
@@ -166,11 +189,19 @@ std::optional<std::string_view> Parser::expect_identifier(std::string_view reaso
 	auto identifier = consume_identifier();
 	if (identifier.has_value()) return identifier;
 	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(Diagnostic::error(
-		"expected identifier",
-		std::string(reason),
-		{Diagnostic::Sample(last_token.span())}
-	));
+	diagnostics_.push_back(
+		Diagnostic::error("expected identifier", std::string(reason), {Diagnostic::Sample(last_token.span())})
+	);
+	return {};
+}
+
+std::optional<Type> Parser::expect_type(std::string_view reason) {
+	auto type = consume_type();
+	if (type.has_value()) return type;
+	Token last_token = tokens_.peek().value_or(tokens_.last());
+	diagnostics_.push_back(
+		Diagnostic::error("expected type", std::string(reason), {Diagnostic::Sample(last_token.span())})
+	);
 	return {};
 }
 
@@ -234,13 +265,13 @@ std::optional<Function> Parser::parse_function() {
 		auto argument_name = SPANNED(consume_identifier);
 		if (!argument_name.has_value()) break;
 		if (!expect_symbol("expected ':' to specify argument type", Token::Symbol::Colon)) return {};
-		auto argument_type = SPANNED_REASON(expect_identifier, "expected argument type");
+		auto argument_type = SPANNED_REASON(expect_type, "expected argument type");
 		if (!argument_type.has_value()) return {};
 		arguments.emplace_back(argument_name.value(), argument_type.value());
 		while (peek_symbol(Token::Symbol::Comma)) tokens_.advance();
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};
-	auto return_type = SPANNED(consume_identifier);  // TODO: type
+	auto return_type = SPANNED(consume_type);
 	std::cout << "found function with name " << name.value().value << ", " << arguments.size() << " arguments: ";
 	for (Function::Argument const& argument : arguments) {
 		std::cout << argument.name.value << " of type " << argument.type.value << ", ";

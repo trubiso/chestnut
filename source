@@ -5,7 +5,7 @@ module hello {
 
 		func main() void;
 
-		func hey(cool: bool) uint;
+		func hey(cool: uintptr) uint;
 
 /*
 		func john(k: int16) {
