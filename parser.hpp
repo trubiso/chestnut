@@ -22,6 +22,76 @@ struct QualifiedIdentifier {
 // TODO: type
 typedef std::string_view Type;
 
+struct NewType {
+	// TODO: eventually support types which are identifiers. for now, we won't, as there is no way to create them.
+
+	enum class Kind {
+		Integer = 0,
+		Float   = 1,
+		Void    = 2,
+		Char    = 3,
+	};
+
+	class Integer {
+		uint32_t width : 3;
+		bool     signed_;
+
+		static uint32_t const ANY  = (1 << 23) + 1;
+		static uint32_t const PTR  = (1 << 23) + 2;
+		static uint32_t const SIZE = (1 << 23) + 3;
+
+		explicit Integer(uint32_t width, bool signed_) : width {width}, signed_ {signed_} {}
+
+		static inline constexpr bool is_valid_user_width(uint32_t w) { return w < (1 << 23); }
+
+		static inline constexpr bool is_valid_width(uint32_t w) {
+			return is_valid_user_width(w) || w == ANY || w == PTR || w == SIZE;
+		}
+
+	public:
+		enum class WidthType {
+			Fixed,
+			Any,
+			Ptr,
+			Size,
+		};
+
+		static inline std::optional<Integer> with_width(uint32_t width, bool signed_) {
+			if (!is_valid_width(width)) return {};
+			else return Integer {width, signed_};
+		}
+
+		static inline Integer any(bool signed_) { return Integer {ANY, signed_}; }
+
+		static inline Integer ptr(bool signed_) { return Integer {PTR, signed_}; }
+
+		static inline Integer size(bool signed_) { return Integer {SIZE, signed_}; }
+
+		inline WidthType width_type() const {
+			switch (width) {
+			case ANY:  return WidthType::Any;
+			case PTR:  return WidthType::Ptr;
+			case SIZE: return WidthType::Size;
+			default:   return WidthType::Fixed;
+			}
+		}
+
+		inline bool is_signed() const { return signed_; }
+
+		inline std::optional<uint32_t> bit_width() const {
+			return width_type() == WidthType::Fixed ? std::optional {width} : std::nullopt;
+		}
+	};
+
+	struct Float {
+		enum class Width { F16, F32, F64, F128 } width;
+	};
+
+	typedef std::variant<Integer, Float, std::monostate, char> value_t;
+
+	value_t value;
+};
+
 struct Function {
 	struct Argument {
 		Spanned<std::string_view> name;
