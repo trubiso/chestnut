@@ -4,6 +4,7 @@
 #include "token.hpp"
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string_view>
 #include <variant>
@@ -22,6 +23,7 @@ struct QualifiedIdentifier {
 
 struct Expression {
 	struct Atom {
+		// TODO: add parenthesized expression to atom
 		enum class Kind {
 			Identifier    = 0,
 			NumberLiteral = 1,
@@ -82,16 +84,36 @@ struct Expression {
 		}
 	};
 
-	enum class Kind {
-		Atom = 0,
+	struct BinaryOperation {
+		std::unique_ptr<Spanned<Expression>> lhs;
+		std::unique_ptr<Spanned<Expression>> rhs;
+		Token::Symbol                        operation;
 	};
 
-	typedef std::variant<Atom> value_t;
+	enum class Kind {
+		Atom            = 0,
+		BinaryOperation = 1,
+	};
+
+	typedef std::variant<Atom, BinaryOperation> value_t;
 
 	value_t value;
 
 	inline static Expression make_atom(Atom&& atom) {
 		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, atom});
+	}
+
+	inline static Expression make_binary_operation(
+		std::unique_ptr<Spanned<Expression>>&& lhs,
+		std::unique_ptr<Spanned<Expression>>&& rhs,
+		Token::Symbol                          operation
+	) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::BinaryOperation>,
+				BinaryOperation {std::move(lhs), std::move(rhs), operation}
+                }
+		);
 	}
 };
 
@@ -264,7 +286,7 @@ private:
 
 		size_t end = tokens_.peek().value_or(tokens_.last()).begin;
 
-		return Spanned<T> {Span(begin, end), value.value()};
+		return Spanned<T> {Span(begin, end), std::move(value.value())};
 	}
 
 	// consume_ methods return a non-null/true value if they found a token
@@ -283,6 +305,7 @@ private:
 	std::optional<Type> consume_type();
 
 	std::optional<Expression::Atom> consume_expression_atom();
+	std::optional<Expression>       consume_expression_binop_l1();
 	std::optional<Expression>       consume_expression();
 
 	// peek_ methods do not increment the index.
@@ -296,6 +319,10 @@ private:
 	std::optional<std::string_view> expect_identifier(std::string_view reason);
 
 	std::optional<Type> expect_type(std::string_view reason);
+
+	std::optional<Expression::Atom> expect_expression_atom(std::string_view reason);
+	std::optional<Expression>       expect_expression_binop_l1(std::string_view reason);
+	std::optional<Expression>       expect_expression(std::string_view reason);
 
 	// skip semicolons
 	void skip_semis();
