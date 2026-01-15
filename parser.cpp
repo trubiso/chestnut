@@ -375,6 +375,7 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	switch (keyword) {
 	case Keyword::Import: return token.get_identifier() == "import";
 	case Keyword::Module: return token.get_identifier() == "module";
+	case Keyword::Export: return token.get_identifier() == "export";
 	case Keyword::Const:  return token.get_identifier() == "const";
 	case Keyword::Mut:    return token.get_identifier() == "mut";
 	case Keyword::Func:   return token.get_identifier() == "func";
@@ -484,23 +485,25 @@ std::optional<Module> Parser::parse_module() {
 }
 
 std::optional<Module::Item> Parser::parse_module_item() {
-	// TODO: visibility qualifiers
+	// if we find export, we consume it
+	bool exported = consume_keyword(Keyword::Export);
+
 	std::optional<Module::Item> item;
 	if (peek_keyword(Keyword::Module)) {
-		item = parse_module();
+		item = parse_module().transform([exported](auto&& value) { return Module::Item {exported, value}; });
 	} else if (peek_keyword(Keyword::Func)) {
-		item = parse_function();
+		item = parse_function().transform([exported](auto&& value) { return Module::Item {exported, value}; });
 	}
-	if (item.has_value()) return item.value();
-	else return {};
+
+	return item;
 }
 
 std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 	if (!bare)
 		if (!expect_symbol("expected opening brace to begin module body", Token::Symbol::LBrace)) return {};
 	skip_semis();
-	std::vector<Module::Item> items {};
-	for (auto item = parse_module_item(); item.has_value(); item = parse_module_item()) {
+	std::vector<Spanned<Module::Item>> items {};
+	for (auto item = SPANNED(parse_module_item); item.has_value(); item = SPANNED(parse_module_item)) {
 		items.push_back(item.value());
 		skip_semis();
 	}
@@ -538,7 +541,7 @@ std::optional<Function> Parser::parse_function() {
 bool Parser::advance() {
 	if (!tokens_.has_value()) return false;  // EOF
 	skip_semis();
-	return parse_module().has_value();
+	return parse_module_body(true).has_value();
 }
 
 }  // namespace AST

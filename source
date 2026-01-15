@@ -1,13 +1,13 @@
-module hello {
+export module hello {
 	module world {}
-	module whats {
+	export module whats {
 		module up {}
 
-		func main() void;
+		export func main() void;
 
 		func hey(cool: uintptr) uint;
 
-		func lets_do_this1(name: bool, age: intsize, what: float128) uint1382;
+		export func lets_do_this1(name: bool, age: intsize, what: float128) uint1382;
 
 /*
 		func john(k: int16) {

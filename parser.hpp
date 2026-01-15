@@ -309,10 +309,11 @@ struct Module {
 
 	// we cannot make this a struct, because C++ does not allow incomplete types in variants (which is fair, but we
 	// know this will be on the heap anyways).
-	using Item = std::variant<Function, Module>;
+	// the boolean means whether this item is exported or not.
+	using Item = std::tuple<bool, std::variant<Function, Module>>;
 
 	struct Body {
-		std::vector<Item> items;
+		std::vector<Spanned<Item>> items;
 	} body;
 };
 
@@ -333,6 +334,7 @@ private:
 	enum class Keyword {
 		Import,
 		Module,
+		Export,
 		Const,
 		Mut,
 		Func,
