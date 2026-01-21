@@ -12,6 +12,8 @@
 
 namespace AST {
 
+// TODO: make .kind() methods for all of these Kind/variant types
+
 // TODO: create a StringInterner to avoid moving around string views constantly
 
 // this is a superset of unqualified identifiers, as .absolute = false, .path = [<id>] is an unqualified identifier
@@ -284,12 +286,53 @@ struct Type {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Bool>, std::monostate {}});
 	}
 
+	// FIXME: return a reference
 	inline Integer get_integer() const { return std::get<(size_t) Kind::Integer>(value); }
 
 	inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Type const&);
+
+struct Statement {
+	struct Declare {
+		Spanned<std::string_view>          name;
+		std::optional<Spanned<Type>>       type;
+		std::optional<Spanned<Expression>> value;
+
+		bool mutable_;
+	};
+
+	struct Set {
+		Spanned<Expression> lhs;
+		Spanned<Expression> rhs;
+	};
+
+	enum class Kind {
+		Declare,
+		Set,
+	};
+
+	typedef std::variant<Declare, Set> value_t;
+
+	value_t value;
+
+	inline static Statement make_declare(Declare&& declare) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Declare>, std::move(declare)});
+	}
+
+	inline static Statement make_set(Set&& set) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Set>, std::move(set)});
+	}
+
+	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
+
+	inline Set const& get_set() const { return std::get<(size_t) Kind::Set>(value); }
+};
+
+std::ostream& operator<<(std::ostream&, Statement::Declare const&);
+std::ostream& operator<<(std::ostream&, Statement::Set const&);
+std::ostream& operator<<(std::ostream&, Statement const&);
 
 struct Function {
 	struct Argument {
@@ -376,6 +419,10 @@ private:
 	std::optional<Expression> consume_expression_unary_l1();
 	std::optional<Expression> consume_expression_binop_l1();
 	std::optional<Expression> consume_expression();
+
+	std::optional<Statement> consume_statement_declare();
+	std::optional<Statement> consume_statement_set();
+	std::optional<Statement> consume_statement();
 
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;

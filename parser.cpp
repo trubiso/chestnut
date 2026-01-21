@@ -93,6 +93,27 @@ std::ostream& operator<<(std::ostream& os, Type const& type) {
 	}
 }
 
+std::ostream& operator<<(std::ostream& os, Statement::Declare const& declare) {
+	os << "[declare stmt: ";
+	os << (declare.mutable_ ? "mut" : "const") << " " << declare.name.value;
+	if (declare.type.has_value()) os << ": " << declare.type.value().value;
+	if (declare.value.has_value()) os << " = " << declare.value.value().value;
+	return os << ";]";
+}
+
+std::ostream& operator<<(std::ostream& os, Statement::Set const& set) {
+	os << "[set stmt: ";
+	os << set.lhs.value << " = " << set.rhs.value;
+	return os << ";]";
+}
+
+std::ostream& operator<<(std::ostream& os, Statement const& statement) {
+	switch ((Statement::Kind) statement.value.index()) {
+	case Statement::Kind::Declare: return os << statement.get_declare();
+	case Statement::Kind::Set:     return os << statement.get_set();
+	}
+}
+
 #define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
 #define SPANNED_REASON(fn, reason)                                                                               \
 	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
@@ -359,6 +380,71 @@ std::optional<Expression> Parser::consume_expression() {
 	return std::move(lhs.value);
 }
 
+std::optional<Statement> Parser::consume_statement_declare() {
+	// <const/mut> <name> [: <type>] [= <expr>];
+
+	// we know we had to peek mut or const to get here
+	bool mutable_ = peek_keyword(Keyword::Mut);
+	tokens_.advance();
+
+	auto maybe_name = SPANNED_REASON(
+		expect_identifier,
+		"expected variable name after mutability qualifier to begin variable declaration"
+	);
+	if (!maybe_name.has_value()) return {};
+	Spanned<std::string_view> name = maybe_name.value();
+
+	std::optional<Spanned<Type>> type;
+	if (consume_symbol(Token::Symbol::Colon)) {
+		type = SPANNED_REASON(expect_type, "expected type after colon in variable declaration");
+		if (!type.has_value()) return {};  // we don't want to keep parsing after that
+	}
+
+	std::optional<Spanned<Expression>> value;
+	if (consume_symbol(Token::Symbol::Eq)) {
+		value = SPANNED_REASON(
+			expect_expression,
+			"expected expression after equals sign in variable declaration"
+		);
+		// if there is no possible expression (perhaps a semicolon instead), a valueless stmt will be emitted as
+		// fallback
+	}
+
+	expect_symbol("expected semicolon after variable declaration", Token::Symbol::Semicolon);
+
+	return Statement::make_declare(
+		Statement::Declare {std::move(name), std::move(type), std::move(value), mutable_}
+	);
+}
+
+std::optional<Statement> Parser::consume_statement_set() {
+	// <(lvalue) expr> = <expr>;
+
+	// TODO: check that the lhs expression could reasonably be an lvalue (aka it can only be an identifier for now)
+
+	auto maybe_lhs = SPANNED(consume_expression);
+	if (!maybe_lhs.has_value()) return {};
+	Spanned<Expression> lhs = std::move(maybe_lhs.value());
+
+	// TODO: once we implement expression statements, we have to deflect all of these other cases to them
+	if (!consume_symbol(Token::Symbol::Eq)) return {};
+
+	auto maybe_rhs = SPANNED_REASON(expect_expression, "expected expression after equals sign in set statement");
+	if (!maybe_rhs.has_value()) return {};  // there is no reasonable fallback statement to emit
+	Spanned<Expression> rhs = std::move(maybe_rhs.value());
+
+	expect_symbol("expected semicolon after variable declaration", Token::Symbol::Semicolon);
+
+	return Statement::make_set(Statement::Set {std::move(lhs), std::move(rhs)});
+}
+
+std::optional<Statement> Parser::consume_statement() {
+	// FIXME: if someone had a function or variable called const/mut, this would break!
+	if (peek_keyword(Keyword::Const) || peek_keyword(Keyword::Mut)) { return consume_statement_declare(); }
+
+	return consume_statement_set();
+}
+
 bool Parser::peek_symbol(Token::Symbol symbol) const {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return false;
@@ -539,6 +625,7 @@ std::optional<Function> Parser::parse_function() {
 }
 
 bool Parser::advance() {
+	// FIXME: if some statement is misparsed, it keeps trying to advance and hangs
 	if (!tokens_.has_value()) return false;  // EOF
 	skip_semis();
 	return parse_module_body(true).has_value();
