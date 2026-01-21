@@ -95,7 +95,7 @@ std::ostream& operator<<(std::ostream& os, Type const& type) {
 
 std::ostream& operator<<(std::ostream& os, Statement::Declare const& declare) {
 	os << "[declare stmt: ";
-	os << (declare.mutable_ ? "mut" : "const") << " " << declare.name.value;
+	os << (declare.mutable_.value ? "mut" : "const") << " " << declare.name.value;
 	if (declare.type.has_value()) os << ": " << declare.type.value().value;
 	if (declare.value.has_value()) os << " = " << declare.value.value().value;
 	return os << ";]";
@@ -402,7 +402,10 @@ std::optional<Statement> Parser::consume_statement_declare() {
 	// TODO: should we do something different for the "undefined" case?
 
 	// we know we had to peek mut or const to get here
-	bool mutable_ = peek_keyword(Keyword::Mut);
+	bool mutable_value = peek_keyword(Keyword::Mut);
+	Span mutable_span  = tokens_.peek().value().span();
+
+	Spanned<bool> mutable_ {mutable_span, mutable_value};
 	tokens_.advance();
 
 	auto maybe_name = SPANNED_REASON(

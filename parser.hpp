@@ -302,8 +302,7 @@ struct Statement {
 		std::optional<Spanned<Type>>       type;
 		std::optional<Spanned<Expression>> value;
 
-		// TODO: add a span to the mutability qualifier to be able to pinpoint it in diagnostics
-		bool mutable_;
+		Spanned<bool> mutable_;
 	};
 
 	struct Set {
