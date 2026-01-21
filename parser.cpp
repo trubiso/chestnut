@@ -123,6 +123,13 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	}
 }
 
+bool Expression::can_be_lhs() const {
+	// TODO: change this once deref, member access, function calls exist
+
+	if ((Kind) value.index() != Kind::Atom) return false;
+	return (Atom::Kind) get_atom().value.index() == Atom::Kind::Identifier;
+}
+
 #define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
 #define SPANNED_REASON(fn, reason)                                                                               \
 	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
@@ -431,11 +438,17 @@ std::optional<Statement> Parser::consume_statement_declare() {
 std::optional<Statement> Parser::consume_statement_set() {
 	// <(lvalue) expr> = <expr>;
 
-	// TODO: check that the lhs expression could reasonably be an lvalue (aka it can only be an identifier for now)
-
 	auto maybe_lhs = SPANNED(consume_expression);
 	if (!maybe_lhs.has_value()) return {};
 	Spanned<Expression> lhs = std::move(maybe_lhs.value());
+	if (!lhs.value.can_be_lhs())
+		diagnostics_.push_back(
+			Diagnostic::error(
+				"invalid left-hand side for set statement",
+				"set statements can only take lvalues (identifiers, function calls, dereferences and access expressions) in their left-hand side",
+				{Diagnostic::Sample(lhs.span)}
+			)
+		);
 
 	if (!consume_symbol(Token::Symbol::Eq)) return consume_statement_expression(std::move(lhs.value));
 

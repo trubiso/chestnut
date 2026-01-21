@@ -175,6 +175,8 @@ struct Expression {
 	inline BinaryOperation const& get_binary_operation() const {
 		return std::get<(size_t) Kind::BinaryOperation>(value);
 	}
+
+	bool can_be_lhs() const;
 };
 
 std::ostream& operator<<(std::ostream&, Expression::Atom::NumberLiteral const&);
