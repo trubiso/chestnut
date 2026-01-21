@@ -421,7 +421,7 @@ std::optional<Statement> Parser::consume_statement_declare() {
 		// fallback
 	}
 
-	expect_symbol("expected semicolon after variable declaration", Token::Symbol::Semicolon);
+	expect_semicolon("expected semicolon after variable declaration");
 
 	return Statement::make_declare(
 		Statement::Declare {std::move(name), std::move(type), std::move(value), mutable_}
@@ -443,14 +443,14 @@ std::optional<Statement> Parser::consume_statement_set() {
 	if (!maybe_rhs.has_value()) return {};  // there is no reasonable fallback statement to emit
 	Spanned<Expression> rhs = std::move(maybe_rhs.value());
 
-	expect_symbol("expected semicolon after variable declaration", Token::Symbol::Semicolon);
+	expect_semicolon("expected semicolon after variable declaration");
 
 	return Statement::make_set(Statement::Set {std::move(lhs), std::move(rhs)});
 }
 
 std::optional<Statement> Parser::consume_statement_expression(Expression&& expression) {
 	// <expr>;
-	expect_symbol("expected semicolon after expression statement", Token::Symbol::Semicolon);
+	expect_semicolon("expected semicolon after expression statement");
 	return Statement::make_expression(std::move(expression));
 }
 
@@ -460,7 +460,7 @@ std::optional<Statement> Parser::consume_statement_return() {
 	// we start after the "return" keyword
 	auto value = SPANNED(consume_expression);
 
-	expect_symbol("expected semicolon after return statement", Token::Symbol::Semicolon);
+	expect_semicolon("expected semicolon after return statement");
 
 	return Statement::make_return(Statement::Return {std::move(value)});
 }
