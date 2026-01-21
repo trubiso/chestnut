@@ -1,7 +1,7 @@
 #include "token.hpp"
 
 size_t Token::size() const {
-	switch ((Token::Kind) value.index()) {
+	switch (kind()) {
 	case Kind::Identifier:    return std::get<(size_t) Kind::Identifier>(value).size();
 	case Kind::NumberLiteral: return std::get<(size_t) Kind::NumberLiteral>(value).size();
 	case Kind::StringLiteral: return std::get<(size_t) Kind::StringLiteral>(value).size() + 2;
@@ -56,9 +56,10 @@ size_t Token::size() const {
 }
 
 std::ostream& operator<<(std::ostream& os, Token const& token) {
-#define VISIT(kind, l, r)                                                               \
-	case (size_t) kind: return os << l << std::get<(size_t) kind>(token.value) << r
-	switch (token.value.index()) {
+#define VISIT(kind, l, r)                                                      \
+	case kind: return os << l << std::get<(size_t) kind>(token.value) << r
+
+	switch (token.kind()) {
 		VISIT(Token::Kind::Identifier, "[id ", "]");
 		VISIT(Token::Kind::NumberLiteral, "[num ", "]");
 		VISIT(Token::Kind::StringLiteral, "[string ", "]");

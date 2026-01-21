@@ -1,5 +1,6 @@
 #pragma once
 #include "span.hpp"
+
 #include <cstddef>
 #include <ostream>
 #include <string_view>
@@ -73,6 +74,8 @@ struct Token {
 	size_t  begin;
 	value_t value;
 
+	inline constexpr Kind kind() const { return (Kind) value.index(); }
+
 	size_t size() const;
 
 	inline size_t end() const { return begin + size(); }
@@ -99,15 +102,15 @@ struct Token {
 		return Token(begin, value_t {std::in_place_index<(size_t) Kind::Symbol>, symbol});
 	}
 
-	inline bool is_identifier() const { return value.index() == (size_t) Kind::Identifier; }
+	inline bool is_identifier() const { return kind() == Kind::Identifier; }
 
-	inline bool is_number_literal() const { return value.index() == (size_t) Kind::NumberLiteral; }
+	inline bool is_number_literal() const { return kind() == Kind::NumberLiteral; }
 
-	inline bool is_string_literal() const { return value.index() == (size_t) Kind::StringLiteral; }
+	inline bool is_string_literal() const { return kind() == Kind::StringLiteral; }
 
-	inline bool is_char_literal() const { return value.index() == (size_t) Kind::CharLiteral; }
+	inline bool is_char_literal() const { return kind() == Kind::CharLiteral; }
 
-	inline bool is_symbol() const { return value.index() == (size_t) Kind::Symbol; }
+	inline bool is_symbol() const { return kind() == Kind::Symbol; }
 
 	inline std::string_view get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 

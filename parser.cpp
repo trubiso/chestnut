@@ -46,7 +46,7 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom::CharLiteral const& 
 }
 
 std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
-	switch ((Expression::Atom::Kind) atom.value.index()) {
+	switch (atom.kind()) {
 	case Expression::Atom::Kind::Identifier:    return os << atom.get_identifier();
 	case Expression::Atom::Kind::NumberLiteral: return os << atom.get_number_literal();
 	case Expression::Atom::Kind::StringLiteral: return os << atom.get_string_literal();
@@ -64,7 +64,7 @@ std::ostream& operator<<(std::ostream& os, Expression::BinaryOperation const& op
 }
 
 std::ostream& operator<<(std::ostream& os, Expression const& expression) {
-	switch ((Expression::Kind) expression.value.index()) {
+	switch (expression.kind()) {
 	case Expression::Kind::Atom:            return os << expression.get_atom();
 	case Expression::Kind::UnaryOperation:  return os << expression.get_unary_operation();
 	case Expression::Kind::BinaryOperation: return os << expression.get_binary_operation();
@@ -72,7 +72,7 @@ std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 }
 
 std::ostream& operator<<(std::ostream& os, Type const& type) {
-	switch ((Type::Kind) type.value.index()) {
+	switch (type.kind()) {
 	case Type::Kind::Integer: break;
 	case Type::Kind::Float:   return os << "float" << (uint32_t) type.get_float().width_value();
 	case Type::Kind::Void:    return os << "void";
@@ -115,7 +115,7 @@ std::ostream& operator<<(std::ostream& os, Statement::Return const& return_) {
 }
 
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
-	switch ((Statement::Kind) statement.value.index()) {
+	switch (statement.kind()) {
 	case Statement::Kind::Declare:    return os << statement.get_declare();
 	case Statement::Kind::Set:        return os << statement.get_set();
 	case Statement::Kind::Expression: return os << "[expr stmt: " << statement.get_expression() << ";]";
@@ -126,8 +126,8 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 bool Expression::can_be_lhs() const {
 	// TODO: change this once deref, member access, function calls exist
 
-	if ((Kind) value.index() != Kind::Atom) return false;
-	return (Atom::Kind) get_atom().value.index() == Atom::Kind::Identifier;
+	if (kind() != Kind::Atom) return false;
+	return get_atom().kind() == Atom::Kind::Identifier;
 }
 
 #define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })

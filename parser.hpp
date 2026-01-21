@@ -12,8 +12,6 @@
 
 namespace AST {
 
-// TODO: make .kind() methods for all of these Kind/variant types
-
 // TODO: create a StringInterner to avoid moving around string views constantly
 
 // this is a superset of unqualified identifiers, as .absolute = false, .path = [<id>] is an unqualified identifier
@@ -59,6 +57,8 @@ struct Expression {
 			value_t;
 
 		value_t value;
+
+		inline constexpr Kind kind() const { return (Kind) value.index(); }
 
 		inline static Atom make_identifier(QualifiedIdentifier&& identifier) {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
@@ -138,6 +138,8 @@ struct Expression {
 	typedef std::variant<Atom, UnaryOperation, BinaryOperation> value_t;
 
 	value_t value;
+
+	inline constexpr Kind kind() const { return (Kind) value.index(); }
 
 	inline static Expression make_atom(Atom&& atom) {
 		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, std::move(atom)});
@@ -266,7 +268,9 @@ struct Type {
 
 	value_t value;
 
-	// NOTE: would be beautiful to codegen all of this boilerplate, but alas,
+	inline constexpr Kind kind() const { return (Kind) value.index(); }
+
+	// TODO: would be beautiful to codegen all of this boilerplate, but alas,
 
 	inline static Type make_integer(Integer&& integer) {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Integer>, integer});
@@ -325,6 +329,8 @@ struct Statement {
 	typedef std::variant<Declare, Set, Expression, Return> value_t;
 
 	value_t value;
+
+	inline constexpr Kind kind() const { return (Kind) value.index(); }
 
 	inline static Statement make_declare(Declare&& declare) {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Declare>, std::move(declare)});
