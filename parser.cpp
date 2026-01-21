@@ -107,11 +107,19 @@ std::ostream& operator<<(std::ostream& os, Statement::Set const& set) {
 	return os << ";]";
 }
 
+std::ostream& operator<<(std::ostream& os, Statement::Return const& return_) {
+	os << "[return stmt: ";
+	if (return_.value.has_value()) os << return_.value.value().value;
+	else os << "(no value)";
+	return os << ";]";
+}
+
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	switch ((Statement::Kind) statement.value.index()) {
 	case Statement::Kind::Declare:    return os << statement.get_declare();
 	case Statement::Kind::Set:        return os << statement.get_set();
 	case Statement::Kind::Expression: return os << "[expr stmt: " << statement.get_expression() << ";]";
+	case Statement::Kind::Return:     return os << statement.get_return();
 	}
 }
 
@@ -382,7 +390,9 @@ std::optional<Expression> Parser::consume_expression() {
 }
 
 std::optional<Statement> Parser::consume_statement_declare() {
-	// <const/mut> <name> [: <type>] [= <expr>];
+	// <"const"|"mut"> <name> [: <type>] [= <expr|"undefined">];
+
+	// TODO: should we do something different for the "undefined" case?
 
 	// we know we had to peek mut or const to get here
 	bool mutable_ = peek_keyword(Keyword::Mut);
@@ -444,9 +454,22 @@ std::optional<Statement> Parser::consume_statement_expression(Expression&& expre
 	return Statement::make_expression(std::move(expression));
 }
 
+std::optional<Statement> Parser::consume_statement_return() {
+	// "return" [expr];
+
+	// we start after the "return" keyword
+	auto value = SPANNED(consume_expression);
+
+	expect_symbol("expected semicolon after return statement", Token::Symbol::Semicolon);
+
+	return Statement::make_return(Statement::Return {std::move(value)});
+}
+
 std::optional<Statement> Parser::consume_statement() {
-	// FIXME: if someone had a function or variable called const/mut, this would break!
+	// FIXME: if someone had a function or variable called const/mut/return, this would break!
 	if (peek_keyword(Keyword::Const) || peek_keyword(Keyword::Mut)) { return consume_statement_declare(); }
+
+	if (consume_keyword(Keyword::Return)) return consume_statement_return();
 
 	return consume_statement_set();
 }

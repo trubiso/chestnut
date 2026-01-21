@@ -309,13 +309,19 @@ struct Statement {
 		Spanned<Expression> rhs;
 	};
 
+	// TODO: maybe this shouldn't be a separate struct :P
+	struct Return {
+		std::optional<Spanned<Expression>> value;
+	};
+
 	enum class Kind {
 		Declare    = 0,
 		Set        = 1,
 		Expression = 2,
+		Return     = 3,
 	};
 
-	typedef std::variant<Declare, Set, Expression> value_t;
+	typedef std::variant<Declare, Set, Expression, Return> value_t;
 
 	value_t value;
 
@@ -331,15 +337,22 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
 	}
 
+	inline static Statement make_return(Return&& return_) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Return>, std::move(return_)});
+	}
+
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Set const& get_set() const { return std::get<(size_t) Kind::Set>(value); }
 
 	inline Expression const& get_expression() const { return std::get<(size_t) Kind::Expression>(value); }
+
+	inline Return const& get_return() const { return std::get<(size_t) Kind::Return>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
 std::ostream& operator<<(std::ostream&, Statement::Set const&);
+std::ostream& operator<<(std::ostream&, Statement::Return const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
 
 struct Function {
@@ -431,6 +444,7 @@ private:
 	std::optional<Statement> consume_statement_declare();
 	std::optional<Statement> consume_statement_set();
 	std::optional<Statement> consume_statement_expression(Expression&&);
+	std::optional<Statement> consume_statement_return();
 	std::optional<Statement> consume_statement();
 
 	// peek_ methods do not increment the index.
