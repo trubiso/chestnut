@@ -109,8 +109,9 @@ std::ostream& operator<<(std::ostream& os, Statement::Set const& set) {
 
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	switch ((Statement::Kind) statement.value.index()) {
-	case Statement::Kind::Declare: return os << statement.get_declare();
-	case Statement::Kind::Set:     return os << statement.get_set();
+	case Statement::Kind::Declare:    return os << statement.get_declare();
+	case Statement::Kind::Set:        return os << statement.get_set();
+	case Statement::Kind::Expression: return os << "[expr stmt: " << statement.get_expression() << ";]";
 	}
 }
 
@@ -426,8 +427,7 @@ std::optional<Statement> Parser::consume_statement_set() {
 	if (!maybe_lhs.has_value()) return {};
 	Spanned<Expression> lhs = std::move(maybe_lhs.value());
 
-	// TODO: once we implement expression statements, we have to deflect all of these other cases to them
-	if (!consume_symbol(Token::Symbol::Eq)) return {};
+	if (!consume_symbol(Token::Symbol::Eq)) return consume_statement_expression(std::move(lhs.value));
 
 	auto maybe_rhs = SPANNED_REASON(expect_expression, "expected expression after equals sign in set statement");
 	if (!maybe_rhs.has_value()) return {};  // there is no reasonable fallback statement to emit
@@ -436,6 +436,12 @@ std::optional<Statement> Parser::consume_statement_set() {
 	expect_symbol("expected semicolon after variable declaration", Token::Symbol::Semicolon);
 
 	return Statement::make_set(Statement::Set {std::move(lhs), std::move(rhs)});
+}
+
+std::optional<Statement> Parser::consume_statement_expression(Expression&& expression) {
+	// <expr>;
+	expect_symbol("expected semicolon after expression statement", Token::Symbol::Semicolon);
+	return Statement::make_expression(std::move(expression));
 }
 
 std::optional<Statement> Parser::consume_statement() {

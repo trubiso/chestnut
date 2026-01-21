@@ -300,6 +300,7 @@ struct Statement {
 		std::optional<Spanned<Type>>       type;
 		std::optional<Spanned<Expression>> value;
 
+		// TODO: add a span to the mutability qualifier to be able to pinpoint it in diagnostics
 		bool mutable_;
 	};
 
@@ -309,11 +310,12 @@ struct Statement {
 	};
 
 	enum class Kind {
-		Declare,
-		Set,
+		Declare    = 0,
+		Set        = 1,
+		Expression = 2,
 	};
 
-	typedef std::variant<Declare, Set> value_t;
+	typedef std::variant<Declare, Set, Expression> value_t;
 
 	value_t value;
 
@@ -325,9 +327,15 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Set>, std::move(set)});
 	}
 
+	inline static Statement make_expression(Expression&& expression) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
+	}
+
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Set const& get_set() const { return std::get<(size_t) Kind::Set>(value); }
+
+	inline Expression const& get_expression() const { return std::get<(size_t) Kind::Expression>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
@@ -422,6 +430,7 @@ private:
 
 	std::optional<Statement> consume_statement_declare();
 	std::optional<Statement> consume_statement_set();
+	std::optional<Statement> consume_statement_expression(Expression&&);
 	std::optional<Statement> consume_statement();
 
 	// peek_ methods do not increment the index.
@@ -431,6 +440,7 @@ private:
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
 	// upon failure. The reason string is only copied if a diagnostic is thrown.
 	bool expect_symbol(std::string_view reason, Token::Symbol);
+	// TODO: expect_semicolon
 
 	std::optional<std::string_view> expect_identifier(std::string_view reason);
 
