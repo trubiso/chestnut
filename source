@@ -3,7 +3,16 @@ export module hello {
 	export module whats {
 		module up {}
 
-		export func main() void;
+		export func main() void {
+			const a = 30 +- 2 * 3;
+			2 + 4;
+			mut b: uintptr;
+			const c;
+			mut e: bool = -::h;
+			b = --a;
+			return;
+			return ::u::b::q;
+		}
 
 		func hey(cool: uintptr) uint;
 

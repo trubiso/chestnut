@@ -490,6 +490,20 @@ std::optional<Statement> Parser::consume_statement() {
 	return consume_statement_set();
 }
 
+std::optional<Scope> Parser::consume_scope() {
+	if (!consume_symbol(Token::Symbol::LBrace)) return {};
+	std::vector<Statement>   statements {};
+	std::optional<Statement> statement {};
+	skip_semis();
+	while ((statement = consume_statement()).has_value()) {
+		statements.push_back(std::move(statement.value()));
+		skip_semis();
+	}
+	// we don't need to skip semis again
+	expect_symbol("expected closing brace to end scope", Token::Symbol::RBrace);
+	return Scope {std::move(statements)};
+}
+
 bool Parser::peek_symbol(Token::Symbol symbol) const {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return false;
@@ -592,6 +606,16 @@ std::optional<Expression> Parser::expect_expression(std::string_view reason) {
 	return {};
 }
 
+std::optional<Scope> Parser::expect_scope(std::string_view reason) {
+	auto scope = consume_scope();
+	if (scope.has_value()) return scope;
+	Token last_token = tokens_.peek().value_or(tokens_.last());
+	diagnostics_.push_back(
+		Diagnostic::error("expected scope", std::string(reason), {Diagnostic::Sample(last_token.span())})
+	);
+	return {};
+}
+
 void Parser::skip_semis() {
 	tokens_.consume_while([](Token token) {
 		return token.is_symbol() && token.get_symbol() == Token::Symbol::Semicolon;
@@ -612,7 +636,7 @@ std::optional<Module> Parser::parse_module() {
 		<< body.value().items.size()
 		<< " items"
 		<< std::endl;
-	return Module {name, body.value()};
+	return Module {name, std::move(body.value())};
 }
 
 std::optional<Module::Item> Parser::parse_module_item() {
@@ -621,9 +645,13 @@ std::optional<Module::Item> Parser::parse_module_item() {
 
 	std::optional<Module::Item> item;
 	if (peek_keyword(Keyword::Module)) {
-		item = parse_module().transform([exported](auto&& value) { return Module::Item {exported, value}; });
+		item = parse_module().transform([exported](auto&& value) {
+			return Module::Item {exported, std::move(value)};
+		});
 	} else if (peek_keyword(Keyword::Func)) {
-		item = parse_function().transform([exported](auto&& value) { return Module::Item {exported, value}; });
+		item = parse_function().transform([exported](auto&& value) {
+			return Module::Item {exported, std::move(value)};
+		});
 	}
 
 	return item;
@@ -635,12 +663,12 @@ std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 	skip_semis();
 	std::vector<Spanned<Module::Item>> items {};
 	for (auto item = SPANNED(parse_module_item); item.has_value(); item = SPANNED(parse_module_item)) {
-		items.push_back(item.value());
+		items.push_back(std::move(item.value()));
 		skip_semis();
 	}
 	skip_semis();
 	if (!bare) expect_symbol("expected closing brace to end module body", Token::Symbol::RBrace);
-	return Module::Body {items};
+	return Module::Body {std::move(items)};
 }
 
 std::optional<Function> Parser::parse_function() {
@@ -661,12 +689,16 @@ std::optional<Function> Parser::parse_function() {
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};
 	auto return_type = SPANNED(consume_type);
+	auto body        = consume_scope();
 	std::cout << "found function with name " << name.value().value << ", " << arguments.size() << " arguments: ";
 	for (Function::Argument const& argument : arguments) {
 		std::cout << argument.name.value << " of type " << argument.type.value << ", ";
 	}
 	std::cout << std::endl;
-	return Function {name.value(), arguments, return_type};
+	if (body.has_value()) for (auto const& stmt : body.value()) {
+		std::cout << "\t" << stmt << std::endl;
+	}
+	return Function {name.value(), arguments, return_type, std::move(body)};
 }
 
 bool Parser::advance() {

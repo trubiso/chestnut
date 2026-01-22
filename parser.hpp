@@ -300,6 +300,10 @@ struct Type {
 
 std::ostream& operator<<(std::ostream&, Type const&);
 
+struct Statement;
+
+typedef std::vector<Statement> Scope;
+
 struct Statement {
 	struct Declare {
 		Spanned<std::string_view>          name;
@@ -372,7 +376,7 @@ struct Function {
 	std::vector<Argument>        arguments;
 	std::optional<Spanned<Type>> return_type;
 
-	// TODO: body
+	std::optional<Scope> body;
 };
 
 struct Module {
@@ -454,6 +458,8 @@ private:
 	std::optional<Statement> consume_statement_return();
 	std::optional<Statement> consume_statement();
 
+	std::optional<Scope> consume_scope();
+
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;
 	bool peek_keyword(Keyword) const;
@@ -474,6 +480,8 @@ private:
 	std::optional<Expression> expect_expression_unary_l1(std::string_view reason);
 	std::optional<Expression> expect_expression_binop_l1(std::string_view reason);
 	std::optional<Expression> expect_expression(std::string_view reason);
+
+	std::optional<Scope> expect_scope(std::string_view reason);
 
 	// skip semicolons
 	void skip_semis();
