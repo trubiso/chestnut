@@ -19,6 +19,10 @@ struct QualifiedIdentifier {
 	bool absolute;
 	// FIXME: this should absolutely be a SmallVec to avoid heap allocs
 	std::vector<Spanned<std::string_view>> path;
+
+	inline bool is_unqualified() const { return !absolute && path.size() == 1; }
+
+	inline Spanned<std::string_view> get_unqualified() const { return path[0]; }
 };
 
 std::ostream& operator<<(std::ostream&, QualifiedIdentifier const&);
@@ -129,13 +133,28 @@ struct Expression {
 		Token::Symbol                        operation;
 	};
 
+	struct FunctionCall {
+		std::unique_ptr<Spanned<Expression>> callee;
+
+		typedef Spanned<Expression>                                    OrderedArgument;
+		typedef std::tuple<Spanned<std::string_view>, OrderedArgument> LabeledArgument;
+
+		typedef std::variant<OrderedArgument, LabeledArgument> Argument;
+
+		struct Arguments {
+			std::vector<OrderedArgument> ordered;
+			std::vector<LabeledArgument> labeled;
+		} arguments;
+	};
+
 	enum class Kind {
 		Atom            = 0,
 		UnaryOperation  = 1,
 		BinaryOperation = 2,
+		FunctionCall    = 3,
 	};
 
-	typedef std::variant<Atom, UnaryOperation, BinaryOperation> value_t;
+	typedef std::variant<Atom, UnaryOperation, BinaryOperation, FunctionCall> value_t;
 
 	value_t value;
 
@@ -168,6 +187,18 @@ struct Expression {
 		);
 	}
 
+	inline static Expression make_function_call(
+		std::unique_ptr<Spanned<Expression>>&& callee,
+		Expression::FunctionCall::Arguments&&  arguments
+	) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::FunctionCall>,
+				FunctionCall {std::move(callee), std::move(arguments)}
+                }
+		);
+	}
+
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 
 	inline UnaryOperation const& get_unary_operation() const {
@@ -178,6 +209,8 @@ struct Expression {
 		return std::get<(size_t) Kind::BinaryOperation>(value);
 	}
 
+	inline FunctionCall const& get_function_call() const { return std::get<(size_t) Kind::FunctionCall>(value); }
+
 	bool can_be_lhs() const;
 };
 
@@ -187,6 +220,7 @@ std::ostream& operator<<(std::ostream&, Expression::Atom::CharLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::UnaryOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::BinaryOperation const&);
+std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
 std::ostream& operator<<(std::ostream&, Expression const&);
 
 struct Type {
@@ -447,10 +481,12 @@ private:
 
 	std::optional<Type> consume_type();
 
-	std::optional<Expression> consume_expression_atom();
-	std::optional<Expression> consume_expression_unary_l1();
-	std::optional<Expression> consume_expression_binop_l1();
-	std::optional<Expression> consume_expression();
+	std::optional<Expression>                         consume_expression_atom();
+	std::optional<Expression::FunctionCall::Argument> consume_expression_function_call_argument();
+	std::optional<Expression>                         consume_expression_function_call();
+	std::optional<Expression>                         consume_expression_unary_l1();
+	std::optional<Expression>                         consume_expression_binop_l1();
+	std::optional<Expression>                         consume_expression();
 
 	std::optional<Statement> consume_statement_declare();
 	std::optional<Statement> consume_statement_set();
@@ -477,6 +513,7 @@ private:
 	std::optional<Type> expect_type(std::string_view reason);
 
 	std::optional<Expression> expect_expression_atom(std::string_view reason);
+	std::optional<Expression> expect_expression_function_call(std::string_view reason);
 	std::optional<Expression> expect_expression_unary_l1(std::string_view reason);
 	std::optional<Expression> expect_expression_binop_l1(std::string_view reason);
 	std::optional<Expression> expect_expression(std::string_view reason);

@@ -63,11 +63,32 @@ std::ostream& operator<<(std::ostream& os, Expression::BinaryOperation const& op
 	return os << '(' << operation.lhs->value << ' ' << operation.operation << ' ' << operation.rhs->value << ')';
 }
 
+std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call) {
+	os << "(call " << call.callee->value;
+	if (!call.arguments.labeled.empty() || !call.arguments.ordered.empty()) {
+		os << " w/ args: (";
+		for (size_t i = 0; i < call.arguments.ordered.size(); ++i) {
+			os << call.arguments.ordered[i].value;
+			if (!call.arguments.labeled.empty() || i + 1 < call.arguments.ordered.size()) os << ", ";
+		}
+		for (size_t i = 0; i < call.arguments.labeled.size(); ++i) {
+			os
+				<< std::get<0>(call.arguments.labeled[i]).value
+				<< ": "
+				<< std::get<1>(call.arguments.labeled[i]).value;
+			if (i + 1 < call.arguments.labeled.size()) os << ", ";
+		}
+		os << ')';
+	}
+	return os << ')';
+}
+
 std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 	switch (expression.kind()) {
 	case Expression::Kind::Atom:            return os << expression.get_atom();
 	case Expression::Kind::UnaryOperation:  return os << expression.get_unary_operation();
 	case Expression::Kind::BinaryOperation: return os << expression.get_binary_operation();
+	case Expression::Kind::FunctionCall:    return os << expression.get_function_call();
 	}
 }
 
@@ -314,6 +335,87 @@ std::optional<Expression> Parser::consume_expression_atom() {
 	return {};
 }
 
+std::optional<Expression::FunctionCall::Argument> Parser::consume_expression_function_call_argument() {
+	// an argument can either be <identifier>: <expr> or just <expr>, depending on whether it's named or
+	// not. since a bare unqualified identifier is also an expression, we need to consume an expression and
+	// then potentially consume a colon if the conditions are right, followed by another expression
+
+	std::optional<Spanned<Expression>> argument_lhs = SPANNED(consume_expression);
+	if (!argument_lhs.has_value()) return {};
+	// check if it's a bare unqualified identifier followed by a colon
+	if (argument_lhs.value().value.kind() == Expression::Kind::Atom
+	    && argument_lhs.value().value.get_atom().kind() == Expression::Atom::Kind::Identifier
+	    && argument_lhs.value().value.get_atom().get_identifier().is_unqualified()
+	    && consume_symbol(Token::Symbol::Colon)) {
+		// then, the bare unqualified identifier is the label
+		Spanned<std::string_view> label
+			= argument_lhs.value().value.get_atom().get_identifier().get_unqualified();
+		// and we require an actual argument
+		std::optional<Spanned<Expression>> argument_rhs
+			= SPANNED_REASON(expect_expression, "expected argument value after argument label");
+		// we don't really have anything to return if there's no argument
+		if (!argument_rhs.has_value()) return {};
+		return Expression::FunctionCall::LabeledArgument {label, std::move(argument_rhs.value())};
+	}
+	// otherwise it's just a regular argument
+	return Expression::FunctionCall::OrderedArgument {std::move(argument_lhs.value())};
+}
+
+std::optional<Expression> Parser::consume_expression_function_call() {
+	std::optional<Spanned<Expression>> maybe_callee = SPANNED(consume_expression_atom);
+	if (!maybe_callee.has_value()) return {};
+	Spanned<Expression> callee = std::move(maybe_callee.value());
+
+	while (consume_symbol(Token::Symbol::LParen)) {
+		std::optional<Expression::FunctionCall::Argument> argument {};
+		Expression::FunctionCall::Arguments               arguments {};
+
+		while ((argument = consume_expression_function_call_argument()).has_value()) {
+			if (std::holds_alternative<Expression::FunctionCall::LabeledArgument>(argument.value())) {
+				auto labeled_argument = std::move(
+					std::get<Expression::FunctionCall::LabeledArgument>(argument.value())
+				);
+				arguments.labeled.push_back(std::move(labeled_argument));
+			} else {
+				auto ordered_argument = std::move(
+					std::get<Expression::FunctionCall::OrderedArgument>(argument.value())
+				);
+				if (!arguments.labeled.empty()) {
+					diagnostics_.push_back(
+						Diagnostic::error(
+							"cannot specify ordered argument after labeled argument(s)",
+							"labeled arguments should be specified after all ordered arguments, so no ordered arguments can appear between the labeled arguments",
+							{Diagnostic::Sample(ordered_argument.span)}
+						)
+					);
+				} else {
+					arguments.ordered.push_back(std::move(ordered_argument));
+				}
+			}
+
+			while (peek_symbol(Token::Symbol::Comma)) tokens_.advance();
+		}
+
+		// we get the end of the span from the closing parenthesis which is the current token (unless it isn't)
+		size_t end       = tokens_.has_value() ? tokens_.peek().value().span().end : tokens_.last().span().end;
+		Span   call_span = Span(callee.span.start, end);
+
+		// we do this before checking for closing parenthesis because it's still a function call even if you
+		// forgot the closing parenthesis
+		callee = Spanned<Expression> {
+			call_span,
+			Expression::make_function_call(
+				std::make_unique<Spanned<Expression>>(std::move(callee)),
+				std::move(arguments)
+			)
+		};
+
+		if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) break;
+	}
+
+	return std::move(callee.value);
+}
+
 // TODO: greatly improve this code with macros or some system that doesn't require this much repetition
 
 std::optional<Expression> Parser::consume_expression_unary_l1() {
@@ -321,8 +423,9 @@ std::optional<Expression> Parser::consume_expression_unary_l1() {
 	size_t negations = 0;
 	while (consume_symbol(Token::Symbol::Minus)) negations++;
 	std::optional<Spanned<Expression>> should_operand
-		= negations ? SPANNED_REASON(expect_expression_atom, "expected expression after unary operator")
-	                    : SPANNED(consume_expression_atom);
+		= negations
+	                ? SPANNED_REASON(expect_expression_function_call, "expected expression after unary operator")
+	                : SPANNED(consume_expression_function_call);
 	if (!should_operand.has_value()) return {};
 	Spanned<Expression> operand = std::move(should_operand.value());
 	while (negations--)
@@ -567,6 +670,16 @@ std::optional<Type> Parser::expect_type(std::string_view reason) {
 
 std::optional<Expression> Parser::expect_expression_atom(std::string_view reason) {
 	auto expression = consume_expression_atom();
+	if (expression.has_value()) return expression;
+	Token last_token = tokens_.peek().value_or(tokens_.last());
+	diagnostics_.push_back(
+		Diagnostic::error("expected expression", std::string(reason), {Diagnostic::Sample(last_token.span())})
+	);
+	return {};
+}
+
+std::optional<Expression> Parser::expect_expression_function_call(std::string_view reason) {
+	auto expression = consume_expression_function_call();
 	if (expression.has_value()) return expression;
 	Token last_token = tokens_.peek().value_or(tokens_.last());
 	diagnostics_.push_back(
