@@ -1,0 +1,209 @@
+#pragma once
+#include "../token.hpp"
+#include "qualified_identifier.hpp"
+
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <variant>
+#include <vector>
+
+namespace AST {
+
+struct Expression {
+	struct Atom {
+		enum class Kind {
+			Identifier    = 0,
+			NumberLiteral = 1,
+			StringLiteral = 2,
+			CharLiteral   = 3,
+			Expression    = 4,
+		};
+
+		struct NumberLiteral {
+			std::string_view                literal;
+			std::optional<std::string_view> suffix;
+		};
+
+		struct StringLiteral {
+			std::string_view                literal;
+			std::optional<std::string_view> suffix;
+		};
+
+		struct CharLiteral {
+			char                            literal;
+			std::optional<std::string_view> suffix;
+		};
+
+		typedef std::variant<
+			QualifiedIdentifier,
+			NumberLiteral,
+			StringLiteral,
+			CharLiteral,
+			std::unique_ptr<Expression>>
+			value_t;
+
+		value_t value;
+
+		inline constexpr Kind kind() const { return (Kind) value.index(); }
+
+		inline static Atom make_identifier(QualifiedIdentifier&& identifier) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
+		}
+
+		inline static Atom
+		make_number_literal(std::string_view literal, std::optional<std::string_view> suffix) {
+			return Atom(
+				value_t {
+					std::in_place_index<(size_t) Kind::NumberLiteral>,
+					NumberLiteral {literal, suffix}
+                        }
+			);
+		}
+
+		inline static Atom
+		make_string_literal(std::string_view literal, std::optional<std::string_view> suffix) {
+			return Atom(
+				value_t {
+					std::in_place_index<(size_t) Kind::StringLiteral>,
+					StringLiteral {literal, suffix}
+                        }
+			);
+		}
+
+		inline static Atom make_char_literal(char literal, std::optional<std::string_view> suffix) {
+			return Atom(
+				value_t {
+					std::in_place_index<(size_t) Kind::CharLiteral>,
+					CharLiteral {literal, suffix}
+                        }
+			);
+		}
+
+		inline static Atom make_expression(std::unique_ptr<Expression>&& expression) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
+		}
+
+		inline QualifiedIdentifier const& get_identifier() const {
+			return std::get<(size_t) Kind::Identifier>(value);
+		}
+
+		inline NumberLiteral const& get_number_literal() const {
+			return std::get<(size_t) Kind::NumberLiteral>(value);
+		}
+
+		inline StringLiteral const& get_string_literal() const {
+			return std::get<(size_t) Kind::StringLiteral>(value);
+		}
+
+		inline CharLiteral const& get_char_literal() const {
+			return std::get<(size_t) Kind::CharLiteral>(value);
+		}
+
+		inline std::unique_ptr<Expression> const& get_expression() const {
+			return std::get<(size_t) Kind::Expression>(value);
+		}
+	};
+
+	struct UnaryOperation {
+		std::unique_ptr<Spanned<Expression>> operand;
+		Token::Symbol                        operation;
+	};
+
+	struct BinaryOperation {
+		std::unique_ptr<Spanned<Expression>> lhs;
+		std::unique_ptr<Spanned<Expression>> rhs;
+		Token::Symbol                        operation;
+	};
+
+	struct FunctionCall {
+		std::unique_ptr<Spanned<Expression>> callee;
+
+		typedef Spanned<Expression>                                    OrderedArgument;
+		typedef std::tuple<Spanned<std::string_view>, OrderedArgument> LabeledArgument;
+
+		typedef std::variant<OrderedArgument, LabeledArgument> Argument;
+
+		struct Arguments {
+			std::vector<OrderedArgument> ordered;
+			std::vector<LabeledArgument> labeled;
+		} arguments;
+	};
+
+	enum class Kind {
+		Atom            = 0,
+		UnaryOperation  = 1,
+		BinaryOperation = 2,
+		FunctionCall    = 3,
+	};
+
+	typedef std::variant<Atom, UnaryOperation, BinaryOperation, FunctionCall> value_t;
+
+	value_t value;
+
+	inline constexpr Kind kind() const { return (Kind) value.index(); }
+
+	inline static Expression make_atom(Atom&& atom) {
+		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, std::move(atom)});
+	}
+
+	inline static Expression
+	make_unary_operation(std::unique_ptr<Spanned<Expression>>&& operand, Token::Symbol operation) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::UnaryOperation>,
+				UnaryOperation {std::move(operand), operation}
+                }
+		);
+	}
+
+	inline static Expression make_binary_operation(
+		std::unique_ptr<Spanned<Expression>>&& lhs,
+		std::unique_ptr<Spanned<Expression>>&& rhs,
+		Token::Symbol                          operation
+	) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::BinaryOperation>,
+				BinaryOperation {std::move(lhs), std::move(rhs), operation}
+                }
+		);
+	}
+
+	inline static Expression make_function_call(
+		std::unique_ptr<Spanned<Expression>>&& callee,
+		Expression::FunctionCall::Arguments&&  arguments
+	) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::FunctionCall>,
+				FunctionCall {std::move(callee), std::move(arguments)}
+                }
+		);
+	}
+
+	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
+
+	inline UnaryOperation const& get_unary_operation() const {
+		return std::get<(size_t) Kind::UnaryOperation>(value);
+	}
+
+	inline BinaryOperation const& get_binary_operation() const {
+		return std::get<(size_t) Kind::BinaryOperation>(value);
+	}
+
+	inline FunctionCall const& get_function_call() const { return std::get<(size_t) Kind::FunctionCall>(value); }
+
+	bool can_be_lhs() const;
+};
+
+std::ostream& operator<<(std::ostream&, Expression::Atom::NumberLiteral const&);
+std::ostream& operator<<(std::ostream&, Expression::Atom::StringLiteral const&);
+std::ostream& operator<<(std::ostream&, Expression::Atom::CharLiteral const&);
+std::ostream& operator<<(std::ostream&, Expression::Atom const&);
+std::ostream& operator<<(std::ostream&, Expression::UnaryOperation const&);
+std::ostream& operator<<(std::ostream&, Expression::BinaryOperation const&);
+std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
+std::ostream& operator<<(std::ostream&, Expression const&);
+
+}  // namespace AST
