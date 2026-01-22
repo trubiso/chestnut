@@ -149,9 +149,7 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	os << "[scope stmt";
 	if (scope.empty()) return os << " (empty)]";
 	else os << ":\n";
-	for (size_t i = 0; i < scope.size(); ++i) {
-		os << '\t' << scope[i] << '\n';
-	}
+	for (size_t i = 0; i < scope.size(); ++i) { os << '\t' << scope[i].value << '\n'; }
 	return os << ']';
 }
 
@@ -614,10 +612,10 @@ std::optional<Statement> Parser::consume_statement() {
 
 std::optional<Scope> Parser::consume_scope() {
 	if (!consume_symbol(Token::Symbol::LBrace)) return {};
-	std::vector<Statement>   statements {};
-	std::optional<Statement> statement {};
+	std::vector<Spanned<Statement>>   statements {};
+	std::optional<Spanned<Statement>> statement {};
 	skip_semis();
-	while ((statement = consume_statement()).has_value()) {
+	while ((statement = SPANNED(consume_statement)).has_value()) {
 		statements.push_back(std::move(statement.value()));
 		skip_semis();
 	}
@@ -836,7 +834,7 @@ std::optional<Function> Parser::parse_function() {
 			Statement statement = Statement::make_return(Statement::Return {std::move(expression.value())});
 			// TODO: fix this, this is ugly, but i can't seem to directly construct the Scope
 			body = Scope {};
-			body.value().push_back(std::move(statement));
+			body.value().push_back(Spanned<Statement> {expression.value().span, std::move(statement)});
 		}
 	} else {
 		// otherwise, we get a regular body
@@ -849,7 +847,7 @@ std::optional<Function> Parser::parse_function() {
 	}
 	std::cout << std::endl;
 	if (body.has_value())
-		for (auto const& stmt : body.value()) { std::cout << "\t" << stmt << std::endl; }
+		for (auto const& stmt : body.value()) { std::cout << "\t" << stmt.value << std::endl; }
 
 	return Function {name.value(), arguments, return_type, std::move(body)};
 }

@@ -336,7 +336,7 @@ std::ostream& operator<<(std::ostream&, Type const&);
 
 struct Statement;
 
-typedef std::vector<Statement> Scope;
+typedef std::vector<Spanned<Statement>> Scope;
 
 struct Statement {
 	struct Declare {
