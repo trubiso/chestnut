@@ -14,7 +14,7 @@ export module hello {
 			return ::u::b::q;
 		}
 
-		func hey(cool: uintptr) uint;
+		func hey(cool: uintptr) uint => 2 + 2 / -cool;
 
 		export func lets_do_this1(name: bool, age: intsize, what: float128) uint1382;
 

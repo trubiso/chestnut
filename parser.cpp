@@ -674,6 +674,7 @@ std::optional<Function> Parser::parse_function() {
 	if (!consume_keyword(Keyword::Func)) return {};
 	auto name = SPANNED_REASON(expect_identifier, "expected function name");
 	if (!name.has_value()) return {};
+
 	if (!expect_symbol("expected opening parenthesis to begin argument list", Token::Symbol::LParen)) return {};
 	// parse args
 	std::vector<Function::Argument> arguments {};
@@ -687,16 +688,36 @@ std::optional<Function> Parser::parse_function() {
 		while (peek_symbol(Token::Symbol::Comma)) tokens_.advance();
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};
+
 	auto return_type = SPANNED(consume_type);
-	auto body        = consume_scope();
+
+	std::optional<Scope> body {};
+	if (consume_symbol(Token::Symbol::FatArrow)) {
+		// if we get =>, we get an expression for the body, so we return it
+		auto expression = SPANNED_REASON(
+			expect_expression,
+			"expected expression after => indicating function body shorthand"
+		);
+
+		if (expression.has_value()) {
+			Statement statement = Statement::make_return(Statement::Return {std::move(expression.value())});
+			// TODO: fix this, this is ugly, but i can't seem to directly construct the Scope
+			body = Scope {};
+			body.value().push_back(std::move(statement));
+		}
+	} else {
+		// otherwise, we get a regular body
+		body = consume_scope();
+	}
+
 	std::cout << "found function with name " << name.value().value << ", " << arguments.size() << " arguments: ";
 	for (Function::Argument const& argument : arguments) {
 		std::cout << argument.name.value << " of type " << argument.type.value << ", ";
 	}
 	std::cout << std::endl;
-	if (body.has_value()) for (auto const& stmt : body.value()) {
-		std::cout << "\t" << stmt << std::endl;
-	}
+	if (body.has_value())
+		for (auto const& stmt : body.value()) { std::cout << "\t" << stmt << std::endl; }
+
 	return Function {name.value(), arguments, return_type, std::move(body)};
 }
 
