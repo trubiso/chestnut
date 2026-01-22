@@ -109,8 +109,7 @@ struct Type {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Bool>, std::monostate {}});
 	}
 
-	// FIXME: return a reference
-	inline Integer get_integer() const { return std::get<(size_t) Kind::Integer>(value); }
+	inline Integer const& get_integer() const { return std::get<(size_t) Kind::Integer>(value); }
 
 	inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
 };
