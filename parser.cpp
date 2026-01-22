@@ -604,8 +604,7 @@ void Parser::skip_semis() {
 
 std::optional<Module> Parser::parse_module() {
 	if (!consume_keyword(Keyword::Module)) return {};
-	// TODO: expect everything from here on out
-	std::optional<Spanned<std::string_view>> name = SPANNED(consume_identifier);
+	std::optional<Spanned<std::string_view>> name = SPANNED_REASON(expect_identifier, "expected module name");
 	if (!name.has_value()) return {};
 	std::optional<Module::Body> body = parse_module_body();
 	if (!body.has_value()) return {};
@@ -652,6 +651,7 @@ std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 }
 
 std::optional<Function> Parser::parse_function() {
+	// FIXME: this does not require ; after non-scope body/lack thereof
 	if (!consume_keyword(Keyword::Func)) return {};
 	auto name = SPANNED_REASON(expect_identifier, "expected function name");
 	if (!name.has_value()) return {};
