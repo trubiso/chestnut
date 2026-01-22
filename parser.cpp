@@ -444,6 +444,7 @@ std::optional<Statement> Parser::consume_statement_set() {
 	auto maybe_lhs = SPANNED(consume_expression);
 	if (!maybe_lhs.has_value()) return {};
 	Spanned<Expression> lhs = std::move(maybe_lhs.value());
+	if (!consume_symbol(Token::Symbol::Eq)) return consume_statement_expression(std::move(lhs.value));
 	if (!lhs.value.can_be_lhs())
 		diagnostics_.push_back(
 			Diagnostic::error(
@@ -452,8 +453,6 @@ std::optional<Statement> Parser::consume_statement_set() {
 				{Diagnostic::Sample(lhs.span)}
 			)
 		);
-
-	if (!consume_symbol(Token::Symbol::Eq)) return consume_statement_expression(std::move(lhs.value));
 
 	auto maybe_rhs = SPANNED_REASON(expect_expression, "expected expression after equals sign in set statement");
 	if (!maybe_rhs.has_value()) return {};  // there is no reasonable fallback statement to emit
