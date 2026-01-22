@@ -141,7 +141,18 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	case Statement::Kind::Set:        return os << statement.get_set();
 	case Statement::Kind::Expression: return os << "[expr stmt: " << statement.get_expression() << ";]";
 	case Statement::Kind::Return:     return os << statement.get_return();
+	case Statement::Kind::Scope:      break;
 	}
+
+	// FIXME: take indentation into account somehow
+	Scope const& scope = statement.get_scope();
+	os << "[scope stmt";
+	if (scope.empty()) return os << " (empty)]";
+	else os << ":\n";
+	for (size_t i = 0; i < scope.size(); ++i) {
+		os << '\t' << scope[i] << '\n';
+	}
+	return os << ']';
 }
 
 bool Expression::can_be_lhs() const {
@@ -584,7 +595,15 @@ std::optional<Statement> Parser::consume_statement_return() {
 	return Statement::make_return(Statement::Return {std::move(value)});
 }
 
+std::optional<Statement> Parser::consume_statement_scope() {
+	// { [stmt1, stmt2, ...] }
+	// we can delegate this to consume_scope
+	return consume_scope().transform([](auto&& value) { return Statement::make_scope(std::move(value)); });
+}
+
 std::optional<Statement> Parser::consume_statement() {
+	if (peek_symbol(Token::Symbol::LBrace)) return consume_statement_scope();
+
 	// FIXME: if someone had a function or variable called const/mut/return, this would break!
 	if (peek_keyword(Keyword::Const) || peek_keyword(Keyword::Mut)) { return consume_statement_declare(); }
 
