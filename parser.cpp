@@ -145,8 +145,9 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 }
 
 bool Expression::can_be_lhs() const {
-	// TODO: change this once deref, member access, function calls exist
+	// TODO: change this once deref, member access exist
 
+	if (kind() == Kind::FunctionCall) return true;
 	if (kind() != Kind::Atom) return false;
 	return get_atom().kind() == Atom::Kind::Identifier;
 }
