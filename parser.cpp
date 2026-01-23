@@ -17,7 +17,7 @@ namespace AST {
 	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
 
 ExpectedDiagnostic::operator Diagnostic() const {
-	std::stringstream title_stream{}, subtitle_stream {};
+	std::stringstream title_stream {}, subtitle_stream {};
 	title_stream << "expected ";
 	// we know there should be at least one expectation
 	assert(!expectations.empty());
@@ -542,7 +542,8 @@ bool Parser::peek_keyword(Keyword keyword) const {
 }
 
 // TODO: add more context to some expected diagnoses (e.g. maybe for closing brace, add the header of what we want to
-// close?). also because some of these stop making sense (e.g. if it wants an argument type but doesn't find it, it goes up and ends up expecting module closure or something)
+// close?). also because some of these stop making sense (e.g. if it wants an argument type but doesn't find it, it goes
+// up and ends up expecting module closure or something)
 
 #define EXPECT(fn, what)                                               \
 	auto maybe = fn();                                             \
@@ -579,6 +580,10 @@ std::optional<std::string_view> Parser::expect_identifier(std::string_view reaso
 	EXPECT(consume_identifier, "identifier");
 }
 
+std::optional<QualifiedIdentifier> Parser::expect_qualified_identifier(std::string_view reason) {
+	EXPECT(consume_qualified_identifier, "(qualified) identifier");
+}
+
 std::optional<Type> Parser::expect_type(std::string_view reason) {
 	EXPECT(consume_type, "type");
 }
@@ -611,58 +616,6 @@ void Parser::skip_semis() {
 	tokens_.consume_while([](Token token) {
 		return token.is_symbol() && token.get_symbol() == Token::Symbol::Semicolon;
 	});
-}
-
-std::optional<Module> Parser::parse_module() {
-	if (!consume_keyword(Keyword::Module)) return {};
-	std::optional<Spanned<std::string_view>> name = SPANNED_REASON(expect_identifier, "expected module name");
-	if (!name.has_value()) return {};
-	std::optional<Module::Body> body = parse_module_body();
-	if (!body.has_value()) return {};
-	std::cout
-		<< "found module with name "
-		<< name.value().value
-		<< " and "
-		<< body.value().items.size()
-		<< " items"
-		<< std::endl;
-	return Module {name, std::move(body.value())};
-}
-
-std::optional<Module::Item> Parser::parse_module_item() {
-	std::vector<Tag>   tags {};
-	std::optional<Tag> tag {};
-	while ((tag = consume_tag()).has_value()) tags.push_back(std::move(tag.value()));
-
-	// if we find export, we consume it
-	bool exported = consume_keyword(Keyword::Export);
-
-	std::optional<Module::Item> item;
-	if (peek_keyword(Keyword::Module)) {
-		item = parse_module().transform([tags = std::move(tags), exported](auto&& value) {
-			return Module::Item {std::move(tags), exported, std::move(value)};
-		});
-	} else if (peek_keyword(Keyword::Func)) {
-		item = parse_function().transform([tags = std::move(tags), exported](auto&& value) {
-			return Module::Item {std::move(tags), exported, std::move(value)};
-		});
-	}
-
-	return item;
-}
-
-std::optional<Module::Body> Parser::parse_module_body(bool bare) {
-	if (!bare)
-		if (!expect_symbol("expected opening brace to begin module body", Token::Symbol::LBrace)) return {};
-	skip_semis();
-	std::vector<Spanned<Module::Item>> items {};
-	for (auto item = SPANNED(parse_module_item); item.has_value(); item = SPANNED(parse_module_item)) {
-		items.push_back(std::move(item.value()));
-		skip_semis();
-	}
-	skip_semis();
-	if (!bare) expect_symbol("expected closing brace to end module body", Token::Symbol::RBrace);
-	return Module::Body {std::move(items)};
 }
 
 std::optional<Function> Parser::parse_function() {
@@ -715,6 +668,72 @@ std::optional<Function> Parser::parse_function() {
 		for (auto const& stmt : body.value()) { std::cout << "\t" << stmt.value << std::endl; }
 
 	return Function {name.value(), arguments, return_type, std::move(body)};
+}
+
+std::optional<Import> Parser::parse_import() {
+	if (!consume_keyword(Keyword::Import)) return {};
+	std::optional<Spanned<QualifiedIdentifier>> name
+		= SPANNED_REASON(expect_qualified_identifier, "expected name of the module to import");
+	if (!name.has_value()) return {};
+	expect_semicolon("expected semicolon after import");
+	std::cout << "found import, importing " << name.value().value << std::endl;
+	return Import {std::move(name.value())};
+}
+
+std::optional<Module> Parser::parse_module() {
+	if (!consume_keyword(Keyword::Module)) return {};
+	std::optional<Spanned<std::string_view>> name = SPANNED_REASON(expect_identifier, "expected module name");
+	if (!name.has_value()) return {};
+	std::optional<Module::Body> body = parse_module_body();
+	if (!body.has_value()) return {};
+	std::cout
+		<< "found module with name "
+		<< name.value().value
+		<< " and "
+		<< body.value().items.size()
+		<< " items"
+		<< std::endl;
+	return Module {name, std::move(body.value())};
+}
+
+std::optional<Module::Item> Parser::parse_module_item() {
+	std::vector<Tag>   tags {};
+	std::optional<Tag> tag {};
+	while ((tag = consume_tag()).has_value()) tags.push_back(std::move(tag.value()));
+
+	// if we find export, we consume it
+	bool exported = consume_keyword(Keyword::Export);
+
+	std::optional<Module::Item> item;
+	if (peek_keyword(Keyword::Module)) {
+		item = parse_module().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
+		});
+	} else if (peek_keyword(Keyword::Func)) {
+		item = parse_function().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
+		});
+	} else if (peek_keyword(Keyword::Import)) {
+		item = parse_import().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
+		});
+	}
+
+	return item;
+}
+
+std::optional<Module::Body> Parser::parse_module_body(bool bare) {
+	if (!bare)
+		if (!expect_symbol("expected opening brace to begin module body", Token::Symbol::LBrace)) return {};
+	skip_semis();
+	std::vector<Spanned<Module::Item>> items {};
+	for (auto item = SPANNED(parse_module_item); item.has_value(); item = SPANNED(parse_module_item)) {
+		items.push_back(std::move(item.value()));
+		skip_semis();
+	}
+	skip_semis();
+	if (!bare) expect_symbol("expected closing brace to end module body", Token::Symbol::RBrace);
+	return Module::Body {std::move(items)};
 }
 
 bool Parser::advance() {

@@ -32,6 +32,11 @@ struct Function {
 	std::optional<Scope> body;
 };
 
+// TODO: more complex imports
+struct Import {
+	Spanned<QualifiedIdentifier> name;
+};
+
 struct Module {
 	std::optional<Spanned<std::string_view>> name;
 
@@ -39,7 +44,7 @@ struct Module {
 	// know this will be on the heap anyways).
 	// the vector of tags stores all tags that modify this module item.
 	// the boolean is whether this item is exported or not.
-	using Item = std::tuple<std::vector<Tag>, bool, std::variant<Function, Module>>;
+	using Item = std::tuple<std::vector<Tag>, bool, std::variant<Function, Module, Import>>;
 
 	struct Body {
 		std::vector<Spanned<Item>> items;
@@ -150,7 +155,8 @@ private:
 		return expect_symbol(reason, Token::Symbol::Semicolon);
 	}
 
-	std::optional<std::string_view> expect_identifier(std::string_view reason);
+	std::optional<std::string_view>    expect_identifier(std::string_view reason);
+	std::optional<QualifiedIdentifier> expect_qualified_identifier(std::string_view reason);
 
 	std::optional<Type> expect_type(std::string_view reason);
 
@@ -165,11 +171,11 @@ private:
 	// skip semicolons
 	void skip_semis();
 
+	std::optional<Function>     parse_function();
+	std::optional<Import>       parse_import();
 	std::optional<Module>       parse_module();
 	std::optional<Module::Item> parse_module_item();
 	std::optional<Module::Body> parse_module_body(bool bare = false);
-
-	std::optional<Function> parse_function();
 };
 
 }  // namespace AST

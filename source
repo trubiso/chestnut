@@ -1,5 +1,8 @@
 export module hello {
 	module world {}
+
+	@abc import std::io::printf;
+
 	@mingleton
 	export module whats {
 		module up {}
