@@ -502,98 +502,56 @@ bool Parser::peek_keyword(Keyword keyword) const {
 
 // TODO: merge expected diagnoses
 
-// TODO: reduce boilerplate in these methods
+#define EXPECT(fn, what)                                               \
+	auto maybe = fn();                                             \
+	if (!maybe.has_value()) add_expected_diagnostic(what, reason); \
+	return maybe
 
+void Parser::add_expected_diagnostic(std::string_view what, std::string_view why) {
+	Token       last_token = tokens_.peek().value_or(tokens_.last());
+	std::string title      = std::format("expected {}", what);
+	diagnostics_.push_back(
+		Diagnostic::error(std::move(title), std::string(why), {Diagnostic::Sample(last_token.span())})
+	);
+}
+
+// it's better to keep this one expanded because of how specific it is
 bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
 	if (consume_symbol(symbol)) return true;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-
-	std::string title = std::format("expected symbol '{}'", get_variant_name(symbol));
-
-	diagnostics_.push_back(
-		Diagnostic::error(std::move(title), std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
+	add_expected_diagnostic(std::format("symbol '{}'", get_variant_name(symbol)), reason);
 	return false;
 }
 
 std::optional<std::string_view> Parser::expect_identifier(std::string_view reason) {
-	auto identifier = consume_identifier();
-	if (identifier.has_value()) return identifier;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(
-		Diagnostic::error("expected identifier", std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
-	return {};
+	EXPECT(consume_identifier, "identifier");
 }
 
 std::optional<Type> Parser::expect_type(std::string_view reason) {
-	auto type = consume_type();
-	if (type.has_value()) return type;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(
-		Diagnostic::error("expected type", std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
-	return {};
+	EXPECT(consume_type, "type");
 }
 
 std::optional<Expression> Parser::expect_expression_atom(std::string_view reason) {
-	auto expression = consume_expression_atom();
-	if (expression.has_value()) return expression;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(
-		Diagnostic::error("expected expression", std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
-	return {};
+	EXPECT(consume_expression_atom, "expression");
 }
 
 std::optional<Expression> Parser::expect_expression_function_call(std::string_view reason) {
-	auto expression = consume_expression_function_call();
-	if (expression.has_value()) return expression;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(
-		Diagnostic::error("expected expression", std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
-	return {};
+	EXPECT(consume_expression_function_call, "expression");
 }
 
 std::optional<Expression> Parser::expect_expression_unary_l1(std::string_view reason) {
-	auto expression = consume_expression_unary_l1();
-	if (expression.has_value()) return expression;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(
-		Diagnostic::error("expected expression", std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
-	return {};
+	EXPECT(consume_expression_unary_l1, "expression");
 }
 
 std::optional<Expression> Parser::expect_expression_binop_l1(std::string_view reason) {
-	auto expression = consume_expression_binop_l1();
-	if (expression.has_value()) return expression;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(
-		Diagnostic::error("expected expression", std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
-	return {};
+	EXPECT(consume_expression_binop_l1, "expression");
 }
 
 std::optional<Expression> Parser::expect_expression(std::string_view reason) {
-	auto expression = consume_expression();
-	if (expression.has_value()) return expression;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(
-		Diagnostic::error("expected expression", std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
-	return {};
+	EXPECT(consume_expression, "expression");
 }
 
 std::optional<Scope> Parser::expect_scope(std::string_view reason) {
-	auto scope = consume_scope();
-	if (scope.has_value()) return scope;
-	Token last_token = tokens_.peek().value_or(tokens_.last());
-	diagnostics_.push_back(
-		Diagnostic::error("expected scope", std::string(reason), {Diagnostic::Sample(last_token.span())})
-	);
-	return {};
+	EXPECT(consume_scope, "scope");
 }
 
 void Parser::skip_semis() {

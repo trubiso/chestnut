@@ -119,6 +119,8 @@ private:
 
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
 	// upon failure. The reason string is only copied if a diagnostic is thrown.
+	void add_expected_diagnostic(std::string_view what, std::string_view why);
+
 	bool expect_symbol(std::string_view reason, Token::Symbol);
 
 	inline bool expect_semicolon(std::string_view reason) {
