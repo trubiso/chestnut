@@ -6,6 +6,7 @@
 #include <charconv>
 #include <format>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -14,6 +15,40 @@ namespace AST {
 #define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
 #define SPANNED_REASON(fn, reason)                                                                               \
 	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
+
+ExpectedDiagnostic::operator Diagnostic() const {
+	std::stringstream title_stream{}, subtitle_stream {};
+	title_stream << "expected ";
+	// we know there should be at least one expectation
+	assert(!expectations.empty());
+	title_stream << expectations[0].what;
+	subtitle_stream << expectations[0].why;
+	if (expectations.size() == 1) goto done;
+	// since there are more expectations, let's parenthesize the rest of them in the format (or A, B, C, D)
+	title_stream << " (or ";
+	for (size_t i = 1; i < expectations.size(); ++i) {
+		title_stream << expectations[i].what;
+		subtitle_stream << "\n\t(" << expectations[i].why << ")";
+		// we can use expectations.size() - 1 because we know expectations.size() >= 1
+		if (i + 1 < expectations.size() - 1) title_stream << ", ";
+		else if (i < expectations.size() - 1) title_stream << " or ";
+	}
+	title_stream << ")";
+done:
+	std::string title    = title_stream.str();
+	std::string subtitle = subtitle_stream.str();
+	return Diagnostic::error(std::move(title), std::move(subtitle), {Diagnostic::Sample(where)});
+}
+
+std::vector<Diagnostic> Parser::diagnostics() const {
+	std::vector<Diagnostic> diagnostics {};
+	for (std::variant<ExpectedDiagnostic, Diagnostic> const& diagnostic : diagnostics_) {
+		if (std::holds_alternative<Diagnostic>(diagnostic))
+			diagnostics.push_back(std::get<Diagnostic>(diagnostic));
+		else diagnostics.push_back(Diagnostic(std::get<ExpectedDiagnostic>(diagnostic)));
+	}
+	return diagnostics;
+}
 
 bool Parser::consume_keyword(Keyword keyword) {
 	if (!peek_keyword(keyword)) return false;
@@ -500,7 +535,8 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	return false;
 }
 
-// TODO: merge expected diagnoses
+// TODO: add more context to some expected diagnoses (e.g. maybe for closing brace, add the header of what we want to
+// close?). also because some of these stop making sense (e.g. if it wants an argument type but doesn't find it, it goes up and ends up expecting module closure or something)
 
 #define EXPECT(fn, what)                                               \
 	auto maybe = fn();                                             \
@@ -508,11 +544,22 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	return maybe
 
 void Parser::add_expected_diagnostic(std::string_view what, std::string_view why) {
-	Token       last_token = tokens_.peek().value_or(tokens_.last());
-	std::string title      = std::format("expected {}", what);
-	diagnostics_.push_back(
-		Diagnostic::error(std::move(title), std::string(why), {Diagnostic::Sample(last_token.span())})
-	);
+	Token last_token = tokens_.peek().value_or(tokens_.last());
+
+	if (!diagnostics_.empty()
+	    && std::holds_alternative<ExpectedDiagnostic>(diagnostics_.at(diagnostics_.size() - 1))) {
+		ExpectedDiagnostic& expected_diagnostic
+			= std::get<ExpectedDiagnostic>(diagnostics_.at(diagnostics_.size() - 1));
+		if (expected_diagnostic.where == last_token.span()) {
+			ExpectedDiagnostic::Expectation expectation {std::string(what), std::string(why)};
+			// only push the expectation if we don't already have it
+			if (!expected_diagnostic.has_expectation(expectation))
+				expected_diagnostic.expectations.push_back({std::string(what), std::string(why)});
+			return;
+		}
+		// otherwise, push a new expected diagnostic
+	}
+	diagnostics_.push_back(ExpectedDiagnostic {{{std::string(what), std::string(why)}}, last_token.span()});
 }
 
 // it's better to keep this one expanded because of how specific it is

@@ -46,13 +46,33 @@ struct Module {
 	} body;
 };
 
+struct ExpectedDiagnostic {
+	struct Expectation {
+		std::string what;
+		std::string why;
+
+		bool operator==(Expectation const&) const = default;
+	};
+
+	// TODO: SmallVec this up
+	std::vector<Expectation> expectations;
+
+	Span where;
+
+	explicit operator Diagnostic() const;
+
+	inline bool has_expectation(Expectation const& expectation) {
+		return std::find(expectations.cbegin(), expectations.cend(), expectation) != expectations.cend();
+	}
+};
+
 class Parser {
 public:
 	explicit Parser(Stream<Token>&& tokens) : tokens_(tokens) {}
 
 	bool advance();
 
-	inline std::vector<Diagnostic>& diagnostics() { return diagnostics_; }
+	std::vector<Diagnostic> diagnostics() const;
 
 private:
 	enum class Keyword {
@@ -65,8 +85,9 @@ private:
 		Return,
 	};
 
-	Stream<Token>           tokens_;
-	std::vector<Diagnostic> diagnostics_;
+	Stream<Token> tokens_;
+
+	std::vector<std::variant<ExpectedDiagnostic, Diagnostic>> diagnostics_;
 
 	template <typename T>
 	inline std::optional<Spanned<T>> spanned(std::function<std::optional<T>()> function) {

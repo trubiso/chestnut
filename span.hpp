@@ -8,10 +8,12 @@ struct Span {
 	explicit Span(size_t start, size_t end) : start(start), end(end) { assert(start <= end); }
 
 	explicit Span(size_t pos) : start(pos), end(pos + 1) {}
+
+	bool operator==(Span const& other) const = default;
 };
 
 template <typename T>
 struct Spanned {
 	Span span;
-	T value;
+	T    value;
 };

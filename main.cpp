@@ -25,7 +25,9 @@ int main(void) {
 
 	AST::Parser parser {std::move(tokens)};
 
-	while (parser.advance());
+	// TODO: remove this once the compiler knows when to stop
+	size_t iters = 1000;
+	while (iters-- && parser.advance());
 	
 	for (auto const& diagnostic : parser.diagnostics()) { diagnostic.print(lexer.loc(), source); }
 
