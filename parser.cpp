@@ -63,13 +63,6 @@ std::optional<std::string_view> Parser::consume_identifier() {
 	return token.get_identifier();
 }
 
-std::optional<std::string_view> Parser::consume_tag() {
-	if (!consume_symbol(Token::Symbol::At)) return {};
-	std::optional<std::string_view> name = expect_identifier("expected an identifier (`@` starts a tag)");
-	if (!name.has_value()) return {};
-	return name;
-}
-
 std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
 	// NOTE: in the future, we will have to account for static members (T::a) and potentially discarded identifiers
 	// at the beginning (_::a)
@@ -96,6 +89,13 @@ std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
 		path.push_back(piece.value());
 	}
 	return QualifiedIdentifier {absolute, path};
+}
+
+std::optional<Tag> Parser::consume_tag() {
+	if (!consume_symbol(Token::Symbol::At)) return {};
+	std::optional<std::string_view> name = expect_identifier("expected an identifier (`@` starts a tag)");
+	if (!name.has_value()) return {};
+	return Tag {name.value()};
 }
 
 std::optional<Type> Parser::consume_type() {
@@ -619,17 +619,21 @@ std::optional<Module> Parser::parse_module() {
 }
 
 std::optional<Module::Item> Parser::parse_module_item() {
+	std::vector<Tag>   tags {};
+	std::optional<Tag> tag {};
+	while ((tag = consume_tag()).has_value()) tags.push_back(std::move(tag.value()));
+
 	// if we find export, we consume it
 	bool exported = consume_keyword(Keyword::Export);
 
 	std::optional<Module::Item> item;
 	if (peek_keyword(Keyword::Module)) {
-		item = parse_module().transform([exported](auto&& value) {
-			return Module::Item {exported, std::move(value)};
+		item = parse_module().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
 	} else if (peek_keyword(Keyword::Func)) {
-		item = parse_function().transform([exported](auto&& value) {
-			return Module::Item {exported, std::move(value)};
+		item = parse_function().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
 	}
 

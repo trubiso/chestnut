@@ -1,7 +1,10 @@
 export module hello {
 	module world {}
+	@mingleton
 	export module whats {
 		module up {}
+
+		@extern func putc(c: char);
 
 		export func main() void {
 			const a = 30 +- 2 * 3;

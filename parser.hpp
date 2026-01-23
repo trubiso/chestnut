@@ -2,6 +2,7 @@
 #include "ast/expression.hpp"
 #include "ast/qualified_identifier.hpp"
 #include "ast/statement.hpp"
+#include "ast/tag.hpp"
 #include "ast/type.hpp"
 #include "lexer.hpp"
 #include "span.hpp"
@@ -36,8 +37,9 @@ struct Module {
 
 	// we cannot make this a struct, because C++ does not allow incomplete types in variants (which is fair, but we
 	// know this will be on the heap anyways).
-	// the boolean means whether this item is exported or not.
-	using Item = std::tuple<bool, std::variant<Function, Module>>;
+	// the vector of tags stores all tags that modify this module item.
+	// the boolean is whether this item is exported or not.
+	using Item = std::tuple<std::vector<Tag>, bool, std::variant<Function, Module>>;
 
 	struct Body {
 		std::vector<Spanned<Item>> items;
@@ -89,8 +91,9 @@ private:
 	std::optional<char>             consume_char_literal();
 
 	std::optional<std::string_view>    consume_identifier();
-	std::optional<std::string_view>    consume_tag();
 	std::optional<QualifiedIdentifier> consume_qualified_identifier();
+
+	std::optional<Tag> consume_tag();
 
 	std::optional<Type> consume_type();
 
