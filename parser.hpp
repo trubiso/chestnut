@@ -107,6 +107,8 @@ private:
 	bool consume_keyword(Keyword);
 	bool consume_symbol(Token::Symbol);
 
+	bool consume_single_comma_or_more();
+
 	std::optional<std::string_view> consume_number_literal();
 	std::optional<std::string_view> consume_string_literal();
 	std::optional<char>             consume_char_literal();

@@ -62,6 +62,12 @@ bool Parser::consume_symbol(Token::Symbol symbol) {
 	return true;
 }
 
+bool Parser::consume_single_comma_or_more() {
+	if (!consume_symbol(Token::Symbol::Comma)) return false;
+	while (consume_symbol(Token::Symbol::Comma));
+	return true;
+}
+
 std::optional<std::string_view> Parser::consume_number_literal() {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return {};
@@ -288,7 +294,7 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 				}
 			}
 
-			while (peek_symbol(Token::Symbol::Comma)) tokens_.advance();
+			if (!consume_single_comma_or_more()) break;
 		}
 
 		// we get the end of the span from the closing parenthesis which is the current token (unless it isn't)
@@ -675,7 +681,7 @@ std::optional<Function> Parser::parse_function() {
 		auto argument_type = SPANNED_REASON(expect_type, "expected argument type");
 		if (!argument_type.has_value()) return {};
 		arguments.emplace_back(argument_name.value(), argument_type.value());
-		while (peek_symbol(Token::Symbol::Comma)) tokens_.advance();
+		if (!consume_single_comma_or_more()) break;
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};
 
