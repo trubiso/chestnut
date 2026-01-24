@@ -139,6 +139,8 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 	AST::Module const* root_module = module_table_.at(qualified_identifier.path[0].value);
 	// the last item that was pointed to
 	Symbol* pointed_item = nullptr;
+	// whether we have already thrown the privacy violation diagnostic
+	bool privacy_violated_diagnostic_thrown = false;
 	// whether we found anything last iteration
 	bool found = false;
 	// set this once we reach a function or something decidedly without subitems
@@ -178,6 +180,31 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 					// change the root module if we are definitely pointing towards a module
 					if (std::holds_alternative<AST::Module*>(pointed_item->item))
 						root_module = &*std::get<AST::Module*>(pointed_item->item);
+				}
+				if (!std::get<bool>(item.value) && !privacy_violated_diagnostic_thrown) {
+					// this item is not exported, but we're trying to access it
+					// TODO: check if it is in the same scope as ours or on a parent module(?) to
+					// not raise the diagnostic
+					std::string title = std::format("tried to access unexported item '{}'", name);
+					// FIXME: diagnostics are not being thrown showing the correct files
+					parsed_files.at(file_id).diagnostics.push_back(
+						Diagnostic::error(
+							std::move(title),
+							"the item must be exported for it to be accessible from outside its scope",
+							{Diagnostic::Sample {{Diagnostic::Sample::Label {
+								 pointed_item->span,
+								 "item declared here",
+								 OutFmt::Color::BrightBlue
+							 }}},
+					                 Diagnostic::Sample {{Diagnostic::Sample::Label {
+								 Span(qualified_identifier.path[0].span.start,
+					                              fragment.span.end),
+								 "item accessed here",
+								 OutFmt::Color::BrightMagenta
+							 }}}}
+						)
+					);
+					privacy_violated_diagnostic_thrown = true;
 				}
 				found = true;
 				break;
