@@ -11,10 +11,6 @@
 void Resolver::resolve() {
 	populate_module_table();
 	identify_module_items();
-
-	populate_unresolved_imports();
-	traverse_unresolved_imports();
-
 	resolve_identifiers();
 }
 
@@ -62,149 +58,6 @@ void Resolver::identify(AST::Function& function, uint32_t file_id) {
 
 void Resolver::identify_module_items() {
 	for (ParsedFile& file : parsed_files) { identify(file.module, file.file_id); }
-}
-
-void Resolver::traverse_unresolved_imports() {
-	// FIXME: this is useless, this is essentially just qualified identifier resolution
-	for (auto& unresolved_import : unresolved_imports_) {
-		auto& import = *unresolved_import.import;
-		// now we found an import, time to see if we can find what it refers to
-		if (import.name.value.absolute) {
-			// if it's absolute, we just need to start in our module table
-			if (!module_table_.contains(import.name.value.path[0].value)) {
-				std::stringstream title_stream {}, subtitle_stream {};
-				title_stream << "unknown identifier '";
-				title_stream << import.name.value.path[0].value;
-				title_stream << '\'';
-				subtitle_stream
-					<< "could not find the provided identifier in the global scope (available: ";
-				size_t count = 0;
-				for (auto const& v : module_table_) {
-					subtitle_stream << '\'' << v.first << '\'';
-					if (++count < module_table_.size()) subtitle_stream << ", ";
-				}
-				subtitle_stream << ')';
-				std::string title    = title_stream.str();
-				std::string subtitle = subtitle_stream.str();
-				unresolved_import.file->diagnostics.push_back(
-					Diagnostic::error(
-						std::move(title),
-						std::move(subtitle),
-						{Diagnostic::Sample(import.name.value.path[0].span)}
-					)
-				);
-				continue;
-			}
-			AST::Module const* root_module = module_table_.at(import.name.value.path[0].value);
-			std::optional<AST::Function const*> pointed_item {};
-
-			bool found = false;
-			for (size_t i = 1; i < import.name.value.path.size(); ++i) {
-				Spanned<std::string> const& fragment = import.name.value.path[i];
-				if (pointed_item.has_value()) {
-					// for now, this can only mean it is a function, which does not have subitems
-					std::cout << "tried to access a function's subitems !" << std::endl;
-					break;
-				}
-				found = false;
-				for (auto const& item : root_module->body.items) {
-					auto const& value = std::get<AST::Module::InnerItem>(item.value);
-					// TODO: make a method for this name getting thing
-					std::string name;
-					if (std::holds_alternative<AST::Function>(value)) {
-						name = std::get<AST::Function>(value).name.value.name;
-					} else if (std::holds_alternative<AST::Module>(value)) {
-						name = std::get<AST::Module>(value).name.value.name;
-					} else if (std::holds_alternative<AST::Import>(value)) {
-						name = std::get<AST::Import>(value).name.value.last_fragment().value;
-					}
-
-					if (name == fragment.value) {
-						// found!
-						if (std::holds_alternative<AST::Function>(value)) {
-							pointed_item = &std::get<AST::Function>(value);
-						} else if (std::holds_alternative<AST::Module>(value)) {
-							root_module = &std::get<AST::Module>(value);
-						} else if (std::holds_alternative<AST::Import>(value)) {
-							// TODO: handle these cases with symbol tables
-							AST::Import const* pointed_to_import
-								= &std::get<AST::Import>(value);
-							if (pointed_to_import->name.value.id.has_value()) {
-								std::cout
-									<< "TODO: found import to import's id"
-									<< std::endl;
-							} else {
-								std::cout
-									<< "TODO: found import to unresolved import"
-									<< std::endl;
-							}
-							std::exit(0);
-						}
-						found = true;
-						break;
-					}
-				}
-
-				if (!found) {
-					std::stringstream title_stream {}, subtitle_stream {};
-					title_stream << "unknown identifier '";
-					title_stream << import.name.value.path[i].value;
-					title_stream << '\'';
-					subtitle_stream << "could not find the provided identifier (available: ";
-					size_t count = 0;
-					for (auto const& item : root_module->body.items) {
-						auto const& value = std::get<AST::Module::InnerItem>(item.value);
-						std::string name;
-						if (std::holds_alternative<AST::Function>(value)) {
-							name = std::get<AST::Function>(value).name.value.name;
-						} else if (std::holds_alternative<AST::Module>(value)) {
-							name = std::get<AST::Module>(value).name.value.name;
-						} else if (std::holds_alternative<AST::Import>(value)) {
-							name = std::get<AST::Import>(value)
-							               .name.value.last_fragment()
-							               .value;
-						}
-						subtitle_stream << '\'' << name << '\'';
-						if (++count < root_module->body.items.size()) subtitle_stream << ", ";
-					}
-					subtitle_stream << ')';
-					std::string title    = title_stream.str();
-					std::string subtitle = subtitle_stream.str();
-					unresolved_import.file->diagnostics.push_back(
-						Diagnostic::error(
-							std::move(title),
-							std::move(subtitle),
-							{Diagnostic::Sample(import.name.value.path[i].span)}
-						)
-					);
-					break;
-				}
-			}
-
-			if (found) {
-				if (pointed_item.has_value())
-					import.name.value.id = pointed_item.value()->name.value.id;
-				else import.name.value.id = root_module->name.value.id;
-				// TODO: throw error if the name wasn't exported
-			}
-		}
-	}
-}
-
-void Resolver::populate_unresolved_imports(AST::Module& module, ParsedFile& file) {
-	for (Spanned<AST::Module::Item>& item : module.body.items) {
-		auto& value = std::get<AST::Module::InnerItem>(item.value);
-		if (std::holds_alternative<AST::Import>(value))
-			unresolved_imports_.push_back(
-				UnresolvedImport {&file, &std::get<AST::Import>(value), &module, {}}
-			);
-		else if (std::holds_alternative<AST::Module>(value))
-			populate_unresolved_imports(std::get<AST::Module>(value), file);
-	}
-}
-
-void Resolver::populate_unresolved_imports() {
-	for (ParsedFile& file : parsed_files) { populate_unresolved_imports(file.module, file); }
 }
 
 void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& lookup_scope, uint32_t file_id) {
@@ -476,6 +329,8 @@ void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
 			);
 		} else if (std::holds_alternative<AST::Import>(value)) {
 			auto& import = std::get<AST::Import>(value);
+			if (!import.name.value.absolute) continue;
+			resolve(import.name.value, child_scope, file_id);
 			// TODO: handle unresolved imports
 			if (import.name.value.id.has_value())
 				child_scope.symbols.emplace(

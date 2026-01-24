@@ -3,7 +3,7 @@ import ::my_module::my_submodule::sum_numbers;
 export module hello {
 	module world {}
 
-	@abc import std::io::printf;
+	@abc import ::source::sum_numbers;
 
 	@mingleton
 	export module whats {

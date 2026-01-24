@@ -673,6 +673,14 @@ std::optional<Import> Parser::parse_import() {
 	std::optional<Spanned<QualifiedIdentifier>> name
 		= SPANNED_REASON(expect_qualified_identifier, "expected name of the module to import");
 	if (!name.has_value()) return {};
+	if (!name.value().value.absolute)
+		diagnostics_.push_back(
+			Diagnostic::error(
+				"unsupported relative import",
+				"imports must be absolute (for now)",
+				{Diagnostic::Sample(name.value().span)}
+			)
+		);
 	expect_semicolon("expected semicolon after import");
 	return Import {std::move(name.value())};
 }

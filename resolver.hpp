@@ -48,15 +48,6 @@ private:
 
 	std::unordered_map<std::string, AST::Module*> module_table_;
 
-	struct UnresolvedImport {
-		ParsedFile*                 file;
-		AST::Import*                import;
-		AST::Module*                module;
-		std::optional<AST::Import*> pointing_to_import;
-	};
-
-	std::vector<UnresolvedImport> unresolved_imports_;
-
 	uint32_t counter_;
 
 	/// Returns a new ID produced by the counter.
@@ -74,13 +65,6 @@ private:
 	/// Identifies all module items with an ID, but does not resolve imports.
 	void identify_module_items();
 
-	/// Populates the list of unresolved imports from the provided module.
-	void populate_unresolved_imports(AST::Module&, ParsedFile&);
-	/// Populates the list of unresolved imports.
-	void populate_unresolved_imports();
-	/// Traverses the list of unresolved imports and resolves as many as it can.
-	void traverse_unresolved_imports();
-
 	void resolve(Spanned<AST::Identifier>&, Scope const&, uint32_t file_id);
 	void resolve(AST::QualifiedIdentifier&, Scope const&, uint32_t file_id);
 	void resolve(AST::Expression::Atom&, Scope const&, uint32_t file_id);
@@ -95,6 +79,6 @@ private:
 	void resolve(AST::Scope&, Scope, uint32_t file_id);
 	void resolve(AST::Function&, Scope, uint32_t file_id);
 	void resolve(AST::Module&, Scope, uint32_t file_id);
-	/// Resolves function bodies and all remaining identifiers.
+	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
 };
