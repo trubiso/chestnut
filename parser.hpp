@@ -1,5 +1,6 @@
 #pragma once
 #include "ast/expression.hpp"
+#include "ast/identifier.hpp"
 #include "ast/qualified_identifier.hpp"
 #include "ast/statement.hpp"
 #include "ast/tag.hpp"
@@ -21,11 +22,11 @@ namespace AST {
 
 struct Function {
 	struct Argument {
-		Spanned<std::string_view> name;
-		Spanned<Type>             type;
+		Spanned<Identifier> name;
+		Spanned<Type>       type;
 	};
 
-	Spanned<std::string_view>    name;
+	Spanned<Identifier>          name;
 	std::vector<Argument>        arguments;
 	std::optional<Spanned<Type>> return_type;
 
@@ -38,7 +39,7 @@ struct Import {
 };
 
 struct Module {
-	std::optional<Spanned<std::string_view>> name;
+	std::optional<Spanned<Identifier>> name;
 
 	// we cannot make this a struct, because C++ does not allow incomplete types in variants (which is fair, but we
 	// know this will be on the heap anyways).
@@ -118,7 +119,8 @@ private:
 	std::optional<std::string_view> consume_string_literal();
 	std::optional<char>             consume_char_literal();
 
-	std::optional<std::string_view>    consume_identifier();
+	std::optional<std::string_view>    consume_bare_identifier();
+	std::optional<Identifier>          consume_identifier();
 	std::optional<QualifiedIdentifier> consume_qualified_identifier();
 
 	std::optional<Tag> consume_tag();
@@ -155,7 +157,8 @@ private:
 		return expect_symbol(reason, Token::Symbol::Semicolon);
 	}
 
-	std::optional<std::string_view>    expect_identifier(std::string_view reason);
+	std::optional<std::string_view>    expect_bare_identifier(std::string_view reason);
+	std::optional<Identifier>          expect_identifier(std::string_view reason);
 	std::optional<QualifiedIdentifier> expect_qualified_identifier(std::string_view reason);
 
 	std::optional<Type> expect_type(std::string_view reason);

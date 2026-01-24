@@ -1,5 +1,6 @@
 #pragma once
 #include "../token.hpp"
+#include "identifier.hpp"
 #include "qualified_identifier.hpp"
 
 #include <memory>
@@ -21,18 +22,18 @@ struct Expression {
 		};
 
 		struct NumberLiteral {
-			std::string_view                literal;
-			std::optional<std::string_view> suffix;
+			std::string_view          literal;
+			std::optional<Identifier> suffix;
 		};
 
 		struct StringLiteral {
-			std::string_view                literal;
-			std::optional<std::string_view> suffix;
+			std::string_view          literal;
+			std::optional<Identifier> suffix;
 		};
 
 		struct CharLiteral {
-			char                            literal;
-			std::optional<std::string_view> suffix;
+			char                      literal;
+			std::optional<Identifier> suffix;
 		};
 
 		typedef std::variant<
@@ -51,8 +52,7 @@ struct Expression {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
 		}
 
-		inline static Atom
-		make_number_literal(std::string_view literal, std::optional<std::string_view> suffix) {
+		inline static Atom make_number_literal(std::string_view literal, std::optional<Identifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::NumberLiteral>,
@@ -61,8 +61,7 @@ struct Expression {
 			);
 		}
 
-		inline static Atom
-		make_string_literal(std::string_view literal, std::optional<std::string_view> suffix) {
+		inline static Atom make_string_literal(std::string_view literal, std::optional<Identifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::StringLiteral>,
@@ -71,7 +70,7 @@ struct Expression {
 			);
 		}
 
-		inline static Atom make_char_literal(char literal, std::optional<std::string_view> suffix) {
+		inline static Atom make_char_literal(char literal, std::optional<Identifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::CharLiteral>,
@@ -119,8 +118,8 @@ struct Expression {
 	struct FunctionCall {
 		std::unique_ptr<Spanned<Expression>> callee;
 
-		typedef Spanned<Expression>                                    OrderedArgument;
-		typedef std::tuple<Spanned<std::string_view>, OrderedArgument> LabeledArgument;
+		typedef Spanned<Expression>                              OrderedArgument;
+		typedef std::tuple<Spanned<Identifier>, OrderedArgument> LabeledArgument;
 
 		typedef std::variant<OrderedArgument, LabeledArgument> Argument;
 

@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++23 -Wall -Wpedantic -g -O3
 
-OBJS = diagnostic.o lexer.o main.o out_fmt.o parser.o token.o ast/expression.o ast/qualified_identifier.o ast/statement.o ast/type.o
+OBJS = diagnostic.o lexer.o main.o out_fmt.o parser.o token.o ast/expression.o ast/identifier.o ast/qualified_identifier.o ast/statement.o ast/type.o
 
 ./out: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o ./out
@@ -10,9 +10,12 @@ OBJS = diagnostic.o lexer.o main.o out_fmt.o parser.o token.o ast/expression.o a
 %.o : %.cpp
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
-.PHONY: clean build run tidy cleancallgrind callgrind
+.PHONY: clean cleanall build run tidy cleancallgrind callgrind
 
 clean:
+	rm -f *.o **/*.o out
+
+cleanall:
 	rm -f *.o **/*.o out compile_commands.json
 
 build: ./out
@@ -20,7 +23,7 @@ run: ./out
 	./out
 
 compile_commands.json:
-	make clean
+	make cleanall
 	bear -- make -j4
 
 tidy: compile_commands.json

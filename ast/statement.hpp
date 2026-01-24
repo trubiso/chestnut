@@ -1,10 +1,10 @@
 #pragma once
 #include "../span.hpp"
 #include "expression.hpp"
+#include "identifier.hpp"
 #include "type.hpp"
 
 #include <optional>
-#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -16,7 +16,7 @@ typedef std::vector<Spanned<Statement>> Scope;
 
 struct Statement {
 	struct Declare {
-		Spanned<std::string_view>          name;
+		Spanned<Identifier>                name;
 		std::optional<Spanned<Type>>       type;
 		std::optional<Spanned<Expression>> value;
 
