@@ -69,7 +69,7 @@ struct Token {
 		Symbol        = 4,
 	};
 
-	typedef std::variant<std::string_view, std::string_view, std::string_view, char, Symbol> value_t;
+	typedef std::variant<std::string, std::string, std::string, char, Symbol> value_t;
 
 	size_t  begin;
 	value_t value;
@@ -112,11 +112,11 @@ struct Token {
 
 	inline bool is_symbol() const { return kind() == Kind::Symbol; }
 
-	inline std::string_view get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
+	inline std::string get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 
-	inline std::string_view get_number_literal() const { return std::get<(size_t) Kind::NumberLiteral>(value); }
+	inline std::string get_number_literal() const { return std::get<(size_t) Kind::NumberLiteral>(value); }
 
-	inline std::string_view get_string_literal() const { return std::get<(size_t) Kind::StringLiteral>(value); }
+	inline std::string get_string_literal() const { return std::get<(size_t) Kind::StringLiteral>(value); }
 
 	inline char get_char_literal() const { return std::get<(size_t) Kind::CharLiteral>(value); }
 

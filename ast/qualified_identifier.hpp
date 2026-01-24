@@ -3,7 +3,6 @@
 #include "identifier.hpp"
 
 #include <iostream>
-#include <string_view>
 #include <vector>
 
 namespace AST {
@@ -13,7 +12,7 @@ struct QualifiedIdentifier {
 	bool                    absolute;
 	std::optional<uint32_t> id;
 	// FIXME: this should absolutely be a SmallVec to avoid heap allocs
-	std::vector<Spanned<std::string_view>> path;
+	std::vector<Spanned<std::string>> path;
 
 	inline bool is_unqualified() const { return !absolute && path.size() == 1; }
 

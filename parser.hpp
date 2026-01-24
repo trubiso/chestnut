@@ -80,7 +80,7 @@ public:
 
 	std::vector<Diagnostic> diagnostics() const;
 
-	Module parse_all(std::string_view name);
+	Module parse_all(std::string name);
 
 private:
 	enum class Keyword {
@@ -117,11 +117,11 @@ private:
 
 	bool consume_single_comma_or_more();
 
-	std::optional<std::string_view> consume_number_literal();
-	std::optional<std::string_view> consume_string_literal();
+	std::optional<std::string> consume_number_literal();
+	std::optional<std::string> consume_string_literal();
 	std::optional<char>             consume_char_literal();
 
-	std::optional<std::string_view>    consume_bare_identifier();
+	std::optional<std::string>    consume_bare_identifier();
 	std::optional<Identifier>          consume_identifier();
 	std::optional<QualifiedIdentifier> consume_qualified_identifier();
 
@@ -159,7 +159,7 @@ private:
 		return expect_symbol(reason, Token::Symbol::Semicolon);
 	}
 
-	std::optional<std::string_view>    expect_bare_identifier(std::string_view reason);
+	std::optional<std::string>    expect_bare_identifier(std::string_view reason);
 	std::optional<Identifier>          expect_identifier(std::string_view reason);
 	std::optional<QualifiedIdentifier> expect_qualified_identifier(std::string_view reason);
 

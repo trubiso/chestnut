@@ -79,7 +79,7 @@ void Resolver::resolve(AST::Module& module) {
 				}
 				AST::Module* current_module;
 				for (size_t i = 0; i < import.name.value.path.size(); ++i) {
-					Spanned<std::string_view> const& fragment = import.name.value.path[i];
+					Spanned<std::string> const& fragment = import.name.value.path[i];
 				}
 			}
 		}

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <string>
 
-std::optional<Resolver::ParsedFile> parse_file(std::string_view name) {
+std::optional<Resolver::ParsedFile> parse_file(std::string const& name) {
 	// reading
 	std::ifstream file;
 	file.open(name.data());
