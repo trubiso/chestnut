@@ -6,28 +6,37 @@
 #include <iostream>
 #include <string>
 
-int main(void) {
+struct ParsedFile {
+	std::string source;
+	AST::Module module;
+};
+
+std::optional<ParsedFile> parse_file(std::string_view name) {
+	// reading
 	std::ifstream file;
-	file.open("source");
+	file.open(name.data());
 	if (!file.is_open()) {
 		std::cerr << "Failed to open source file." << std::endl;
-		return ENOENT;
+		errno = ENOENT;
+		return {};
 	}
 	std::string source {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 
+	// lexing
 	Lexer lexer(source);
-
-	Diagnostic diag(Diagnostic::Severity::Warning, "died", "mingle", {Diagnostic::Sample({Diagnostic::Sample::Label(Span(15, 43), "not ok", OutFmt::Color::Red)})});
-
 	Stream<Token> tokens {std::move(lexer.collect_all())};
-
 	for (auto const& diagnostic : lexer.diagnostics()) { diagnostic.print(lexer.loc(), source); }
 
+	// parsing
 	AST::Parser parser {std::move(tokens)};
-
-	AST::Module parsed = parser.parse_all("source");
-	
+	AST::Module parsed = parser.parse_all(name);
 	for (auto const& diagnostic : parser.diagnostics()) { diagnostic.print(lexer.loc(), source); }
 
-	std::cout << std::endl;
+	return ParsedFile{source, std::move(parsed)};
+}
+
+int main(void) {
+	auto maybe_file = parse_file("source");
+	if (!maybe_file.has_value()) return errno;
+	ParsedFile parsed_file = std::move(maybe_file.value());
 }
