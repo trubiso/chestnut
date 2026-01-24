@@ -69,13 +69,23 @@ struct Statement {
 
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
+	inline Declare& get_declare() { return std::get<(size_t) Kind::Declare>(value); }
+
 	inline Set const& get_set() const { return std::get<(size_t) Kind::Set>(value); }
+
+	inline Set& get_set() { return std::get<(size_t) Kind::Set>(value); }
 
 	inline Expression const& get_expression() const { return std::get<(size_t) Kind::Expression>(value); }
 
+	inline Expression& get_expression() { return std::get<(size_t) Kind::Expression>(value); }
+
 	inline Return const& get_return() const { return std::get<(size_t) Kind::Return>(value); }
 
+	inline Return& get_return() { return std::get<(size_t) Kind::Return>(value); }
+
 	inline Scope const& get_scope() const { return std::get<(size_t) Kind::Scope>(value); }
+
+	inline Scope& get_scope() { return std::get<(size_t) Kind::Scope>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);

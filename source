@@ -1,4 +1,4 @@
-import ::my_module::my_submodule::q;
+import ::my_module::my_submodule::sum_numbers;
 
 export module hello {
 	module world {}
@@ -12,6 +12,7 @@ export module hello {
 		@extern func putc(c: char);
 
 		export func main() void {
+			sum_numbers(2, 3);
 			const a = 30 +- 2 * 3;
 			2 + 4;
 			{

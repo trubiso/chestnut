@@ -87,6 +87,8 @@ struct Expression {
 			return std::get<(size_t) Kind::Identifier>(value);
 		}
 
+		inline QualifiedIdentifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
+
 		inline NumberLiteral const& get_number_literal() const {
 			return std::get<(size_t) Kind::NumberLiteral>(value);
 		}
@@ -100,6 +102,10 @@ struct Expression {
 		}
 
 		inline std::unique_ptr<Expression> const& get_expression() const {
+			return std::get<(size_t) Kind::Expression>(value);
+		}
+
+		inline std::unique_ptr<Expression>& get_expression() {
 			return std::get<(size_t) Kind::Expression>(value);
 		}
 	};
@@ -183,15 +189,23 @@ struct Expression {
 
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 
+	inline Atom& get_atom() { return std::get<(size_t) Kind::Atom>(value); }
+
 	inline UnaryOperation const& get_unary_operation() const {
 		return std::get<(size_t) Kind::UnaryOperation>(value);
 	}
+
+	inline UnaryOperation& get_unary_operation() { return std::get<(size_t) Kind::UnaryOperation>(value); }
 
 	inline BinaryOperation const& get_binary_operation() const {
 		return std::get<(size_t) Kind::BinaryOperation>(value);
 	}
 
+	inline BinaryOperation& get_binary_operation() { return std::get<(size_t) Kind::BinaryOperation>(value); }
+
 	inline FunctionCall const& get_function_call() const { return std::get<(size_t) Kind::FunctionCall>(value); }
+
+	inline FunctionCall& get_function_call() { return std::get<(size_t) Kind::FunctionCall>(value); }
 
 	bool can_be_lhs() const;
 };

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <string>
 
-std::optional<Resolver::ParsedFile> parse_file(std::string const& name) {
+std::optional<Resolver::ParsedFile> parse_file(std::string const& name, uint32_t file_id) {
 	// reading
 	std::ifstream file;
 	file.open(name.data());
@@ -28,15 +28,16 @@ std::optional<Resolver::ParsedFile> parse_file(std::string const& name) {
 	AST::Module parsed = parser.parse_all(name);
 	for (auto const& diagnostic : parser.diagnostics()) { diagnostic.print(name, lexer.loc(), source); }
 
-	return Resolver::ParsedFile {source, name, lexer.loc(), std::move(parsed)};
+	return Resolver::ParsedFile {file_id, source, name, lexer.loc(), std::move(parsed)};
 }
 
 int main(void) {
 	// TODO: at some point, we have to solve folders and how they create submodules
 	std::vector<Resolver::ParsedFile> parsed_files {};
 	std::vector<std::string>          files_to_parse {"source", "my_module"};
+	uint32_t file_id = 0;
 	for (auto const& file : files_to_parse) {
-		auto maybe_file = parse_file(file);
+		auto maybe_file = parse_file(file, file_id++);
 		if (!maybe_file.has_value()) return errno;
 		parsed_files.push_back(std::move(maybe_file.value()));
 	}

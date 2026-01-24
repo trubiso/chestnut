@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
+#include <unordered_set>
 
 void Resolver::resolve() {
 	populate_module_table();
@@ -34,22 +35,33 @@ void Resolver::identify(AST::Identifier& identifier) {
 	identifier.id = next();
 }
 
-void Resolver::identify(AST::Module& module) {
+void Resolver::identify(AST::Module& module, uint32_t file_id) {
 	// TODO: ensure there are no duplicated item names (including imports)
 	identify(module.name.value);
+	symbol_pool_.push_back(
+		Symbol {module.name.value.id.value(), file_id, module.name.span, module.name.value.name, &module, false}
+	);
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
-		if (std::holds_alternative<AST::Function>(value)) identify(std::get<AST::Function>(value));
-		else if (std::holds_alternative<AST::Module>(value)) identify(std::get<AST::Module>(value));
+		if (std::holds_alternative<AST::Function>(value)) identify(std::get<AST::Function>(value), file_id);
+		else if (std::holds_alternative<AST::Module>(value)) identify(std::get<AST::Module>(value), file_id);
 	}
 }
 
-void Resolver::identify(AST::Function& function) {
+void Resolver::identify(AST::Function& function, uint32_t file_id) {
 	identify(function.name.value);
+	symbol_pool_.push_back(
+		Symbol {function.name.value.id.value(),
+	                file_id,
+	                function.name.span,
+	                function.name.value.name,
+	                &function,
+	                false}
+	);
 }
 
 void Resolver::identify_module_items() {
-	for (ParsedFile& file : parsed_files) { identify(file.module); }
+	for (ParsedFile& file : parsed_files) { identify(file.module, file.file_id); }
 }
 
 void Resolver::traverse_unresolved_imports() {
@@ -194,4 +206,177 @@ void Resolver::populate_unresolved_imports() {
 	for (ParsedFile& file : parsed_files) { populate_unresolved_imports(file.module, file); }
 }
 
-void Resolver::resolve_identifiers() {}
+void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& lookup_scope, uint32_t file_id) {
+	if (identifier.value.id.has_value()) return;
+
+	Scope const* scope = &lookup_scope;
+	while (scope != nullptr) {
+		if (scope->symbols.contains(identifier.value.name)) {
+			identifier.value.id = scope->symbols.at(identifier.value.name)->id;
+			break;
+		}
+		scope = scope->parent;
+	}
+
+	if (scope == nullptr) {
+		std::string       title = std::format("unknown identifier '{}'", identifier.value.name);
+		std::stringstream subtitle_stream {};
+		subtitle_stream << "could not find any symbol with that name in the current scope (available: ";
+		std::unordered_set<std::string> available_symbols {};
+		scope = &lookup_scope;
+		while (scope != nullptr) {
+			for (auto const& symbol : scope->symbols) available_symbols.insert(symbol.first);
+			scope = scope->parent;
+		}
+		size_t count = 0;
+		for (auto const& symbol : available_symbols) {
+			subtitle_stream << '\'' << symbol << '\'';
+			if (++count < available_symbols.size()) subtitle_stream << ", ";
+		}
+		subtitle_stream << ')';
+		std::string subtitle = subtitle_stream.str();
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(std::move(title), std::move(subtitle), {Diagnostic::Sample(identifier.span)})
+		);
+	}
+}
+
+void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope const& scope, uint32_t file_id) {
+	if (qualified_identifier.is_unqualified()) {
+		Spanned<AST::Identifier> unqualified = qualified_identifier.get_unqualified();
+		resolve(unqualified, scope, file_id);
+		qualified_identifier.id = unqualified.value.id;
+	}
+}
+
+void Resolver::resolve(AST::Expression::Atom& atom, Scope const& scope, uint32_t file_id) {
+	switch (atom.kind()) {
+	case AST::Expression::Atom::Kind::Identifier:    resolve(atom.get_identifier(), scope, file_id); return;
+	case AST::Expression::Atom::Kind::Expression:    resolve(*atom.get_expression(), scope, file_id); return;
+	case AST::Expression::Atom::Kind::NumberLiteral:
+	case AST::Expression::Atom::Kind::StringLiteral:
+	case AST::Expression::Atom::Kind::CharLiteral:   break;
+	}
+}
+
+void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope const& scope, uint32_t file_id) {
+	resolve(unary_operation.operand->value, scope, file_id);
+}
+
+void Resolver::resolve(AST::Expression::BinaryOperation& binary_operation, Scope const& scope, uint32_t file_id) {
+	resolve(binary_operation.lhs->value, scope, file_id);
+	resolve(binary_operation.rhs->value, scope, file_id);
+}
+
+void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const& scope, uint32_t file_id) {
+	resolve(function_call.callee->value, scope, file_id);
+	for (auto& argument : function_call.arguments.ordered) { resolve(argument.value, scope, file_id); }
+	// FIXME: we need to properly resolve these labels wrt. func args, for which we need to pre-identify func args
+	for (auto& argument : function_call.arguments.labeled) { resolve(std::get<1>(argument).value, scope, file_id); }
+}
+
+void Resolver::resolve(AST::Expression& expression, Scope const& scope, uint32_t file_id) {
+	switch (expression.kind()) {
+	case AST::Expression::Kind::Atom:            resolve(expression.get_atom(), scope, file_id); return;
+	case AST::Expression::Kind::UnaryOperation:  resolve(expression.get_unary_operation(), scope, file_id); return;
+	case AST::Expression::Kind::BinaryOperation: resolve(expression.get_binary_operation(), scope, file_id); return;
+	case AST::Expression::Kind::FunctionCall:    resolve(expression.get_function_call(), scope, file_id); return;
+	}
+}
+
+void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, uint32_t file_id) {
+	// resolve the value before the name, otherwise 'const a = a;' would not work
+	if (declare.value.has_value()) resolve(declare.value.value().value, scope, file_id);
+	identify(declare.name.value);
+	symbol_pool_.push_back(
+		Symbol {declare.name.value.id.value(),
+	                file_id,
+	                declare.name.span,
+	                declare.name.value.name,
+	                {},
+	                declare.mutable_.value}
+	);
+	scope.symbols.insert_or_assign(declare.name.value.name, &symbol_pool_.at(declare.name.value.id.value()));
+}
+
+void Resolver::resolve(AST::Statement::Set& set, Scope& scope, uint32_t file_id) {
+	// TODO: maybe check here for mutability?
+	resolve(set.lhs.value, scope, file_id);
+	resolve(set.rhs.value, scope, file_id);
+}
+
+void Resolver::resolve(AST::Statement::Return& return_, Scope& scope, uint32_t file_id) {
+	if (return_.value.has_value()) resolve(return_.value.value().value, scope, file_id);
+}
+
+void Resolver::resolve(AST::Statement& statement, Scope& scope, uint32_t file_id) {
+	switch (statement.kind()) {
+	case AST::Statement::Kind::Declare:    resolve(statement.get_declare(), scope, file_id); return;
+	case AST::Statement::Kind::Set:        resolve(statement.get_set(), scope, file_id); return;
+	case AST::Statement::Kind::Expression: resolve(statement.get_expression(), scope, file_id); return;
+	case AST::Statement::Kind::Return:     resolve(statement.get_return(), scope, file_id); return;
+	case AST::Statement::Kind::Scope:      resolve(statement.get_scope(), scope, file_id); return;
+	}
+}
+
+void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, uint32_t file_id) {
+	for (auto& statement : ast_scope) { resolve(statement.value, resolver_scope, file_id); }
+}
+
+void Resolver::resolve(AST::Function& function, Scope scope, uint32_t file_id) {
+	Scope child_scope {&scope, {}};
+	for (auto& argument : function.arguments) {
+		identify(argument.name.value);
+		// TODO: support mutable arguments
+		symbol_pool_.push_back(
+			Symbol {argument.name.value.id.value(),
+		                file_id,
+		                argument.name.span,
+		                argument.name.value.name,
+		                {},
+		                false}
+		);
+		child_scope.symbols.emplace(argument.name.value.name, &symbol_pool_.at(argument.name.value.id.value()));
+	}
+	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
+}
+
+void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
+	Scope child_scope {&scope, {}};
+	for (Spanned<AST::Module::Item>& item : module.body.items) {
+		auto& value = std::get<AST::Module::InnerItem>(item.value);
+		if (std::holds_alternative<AST::Function>(value)) {
+			auto& function = std::get<AST::Function>(value);
+			child_scope.symbols.emplace(
+				function.name.value.name,
+				&symbol_pool_.at(function.name.value.id.value())
+			);
+		} else if (std::holds_alternative<AST::Module>(value)) {
+			auto& submodule = std::get<AST::Module>(value);
+			child_scope.symbols.emplace(
+				submodule.name.value.name,
+				&symbol_pool_.at(submodule.name.value.id.value())
+			);
+		} else if (std::holds_alternative<AST::Import>(value)) {
+			auto& import = std::get<AST::Import>(value);
+			// TODO: handle unresolved imports
+			if (import.name.value.id.has_value())
+				child_scope.symbols.emplace(
+					import.name.value.last_fragment().value,
+					&symbol_pool_.at(import.name.value.id.value())
+				);
+		}
+	}
+
+	for (Spanned<AST::Module::Item>& item : module.body.items) {
+		auto& value = std::get<AST::Module::InnerItem>(item.value);
+		if (std::holds_alternative<AST::Function>(value))
+			resolve(std::get<AST::Function>(value), child_scope, file_id);
+		else if (std::holds_alternative<AST::Module>(value))
+			resolve(std::get<AST::Module>(value), child_scope, file_id);
+	}
+}
+
+void Resolver::resolve_identifiers() {
+	for (ParsedFile& file : parsed_files) { resolve(file.module, Scope {}, file.file_id); }
+}
