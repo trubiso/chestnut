@@ -11,12 +11,14 @@ std::ostream& operator<<(std::ostream& os, Function const& function) {
 	}
 	os << ")";
 	if (function.body.has_value()) {
-		// FIXME: take indentation into account somehow
 		Scope const& scope = function.body.value();
 		os << ": ";
 		if (scope.empty()) return os << "(empty body)";
 		os << "{\n";
-		for (auto const& stmt : scope) { os << '\t' << stmt.value << '\n'; }
+		os.iword(0)++;
+		for (auto const& stmt : scope) { os << stmt.value << '\n'; }
+		os.iword(0)--;
+		for (long i = 0; i < os.iword(0); ++i) os << "    ";
 		os << "}";
 	}
 	return os;

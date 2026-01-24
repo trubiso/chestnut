@@ -13,17 +13,20 @@ std::ostream& operator<<(std::ostream& os, Module::InnerItem const& item) {
 }
 
 std::ostream& operator<<(std::ostream& os, Module::Item const& item) {
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	for (auto const& tag : std::get<0>(item)) os << tag << " ";
 	if (std::get<1>(item)) os << "(exported declaration) ";
 	return os << std::get<Module::InnerItem>(item);
 }
 
 std::ostream& operator<<(std::ostream& os, Module const& module) {
-	// FIXME: take indentation into account somehow
 	os << "declare module " << module.name.value << ": ";
 	if (module.body.items.empty()) return os << "(empty module)";
 	os << "{\n";
-	for (auto const& item : module.body.items) { os << '\t' << item.value << '\n'; }
+	os.iword(0)++;
+	for (auto const& item : module.body.items) { os << item.value << '\n'; }
+	os.iword(0)--;
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	return os << "}";
 }
 

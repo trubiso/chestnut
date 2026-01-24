@@ -24,6 +24,7 @@ std::ostream& operator<<(std::ostream& os, Statement::Return const& return_) {
 }
 
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	switch (statement.kind()) {
 	case Statement::Kind::Declare:    return os << statement.get_declare();
 	case Statement::Kind::Set:        return os << statement.get_set();
@@ -32,12 +33,14 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	case Statement::Kind::Scope:      break;
 	}
 
-	// FIXME: take indentation into account somehow
 	Scope const& scope = statement.get_scope();
 	os << "[scope stmt";
 	if (scope.empty()) return os << " (empty)]";
 	else os << ":\n";
-	for (size_t i = 0; i < scope.size(); ++i) { os << '\t' << scope[i].value << '\n'; }
+	os.iword(0)++;
+	for (size_t i = 0; i < scope.size(); ++i) { os << scope[i].value << '\n'; }
+	os.iword(0)--;
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	return os << ']';
 }
 
