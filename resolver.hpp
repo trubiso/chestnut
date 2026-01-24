@@ -30,6 +30,14 @@ private:
 	// FIXME: diagnostics should be file-specific. fixable via file-specific spans.
 	std::vector<Diagnostic> diagnostics_;
 
+	struct UnresolvedImport {
+		AST::Import* import;
+		AST::Module* module;
+		std::optional<AST::Import*> pointing_to_import;
+	};
+
+	std::vector<UnresolvedImport> unresolved_imports_;
+
 	uint32_t counter_;
 
 	/// Returns a new ID produced by the counter.
@@ -47,9 +55,13 @@ private:
 	/// Identifies all module items with an ID, but does not resolve imports.
 	void identify_module_items();
 
-	void resolve(AST::Module&);
-	/// Specifically resolves imports.
-	void resolve_imports();
+	/// Populates the list of unresolved imports from the provided module.
+	void populate_unresolved_imports(AST::Module&);
+	/// Populates the list of unresolved imports.
+	void populate_unresolved_imports();
+	/// Traverses the list of unresolved imports and resolves as many as it can.
+	void traverse_unresolved_imports();
+
 	/// Resolves function bodies and all remaining identifiers.
 	void resolve_identifiers();
 };

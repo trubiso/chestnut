@@ -22,6 +22,8 @@ struct QualifiedIdentifier {
 			Identifier {path[0].value, id}
 		};
 	}
+
+	inline Spanned<std::string> const& last_fragment() const { return path.at(path.size() - 1); }
 };
 
 std::ostream& operator<<(std::ostream&, QualifiedIdentifier const&);

@@ -47,7 +47,8 @@ struct Module {
 	// know this will be on the heap anyways).
 	// the vector of tags stores all tags that modify this module item.
 	// the boolean is whether this item is exported or not.
-	using Item = std::tuple<std::vector<Tag>, bool, std::variant<Function, Module, Import>>;
+	typedef std::variant<Function, Module, Import> InnerItem;
+	using Item = std::tuple<std::vector<Tag>, bool, InnerItem>;
 
 	struct Body {
 		std::vector<Spanned<Item>> items;

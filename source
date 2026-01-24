@@ -1,4 +1,4 @@
-import ::my_module;
+import ::my_module::my_submodule::q;
 
 export module hello {
 	module world {}
