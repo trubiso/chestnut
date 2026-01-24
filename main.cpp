@@ -21,14 +21,14 @@ std::optional<Resolver::ParsedFile> parse_file(std::string const& name) {
 	// lexing
 	Lexer         lexer(source);
 	Stream<Token> tokens {std::move(lexer.collect_all())};
-	for (auto const& diagnostic : lexer.diagnostics()) { diagnostic.print(lexer.loc(), source); }
+	for (auto const& diagnostic : lexer.diagnostics()) { diagnostic.print(name, lexer.loc(), source); }
 
 	// parsing
 	AST::Parser parser {std::move(tokens)};
 	AST::Module parsed = parser.parse_all(name);
-	for (auto const& diagnostic : parser.diagnostics()) { diagnostic.print(lexer.loc(), source); }
+	for (auto const& diagnostic : parser.diagnostics()) { diagnostic.print(name, lexer.loc(), source); }
 
-	return Resolver::ParsedFile {source, lexer.loc(), std::move(parsed)};
+	return Resolver::ParsedFile {source, name, lexer.loc(), std::move(parsed)};
 }
 
 int main(void) {
@@ -46,7 +46,6 @@ int main(void) {
 
 	for (auto const& file : resolver.parsed_files) { std::cout << file.module.name.value << std::endl; }
 
-	for (auto const& diagnostic : resolver.diagnostics()) {
-		diagnostic.print(resolver.parsed_files[0].loc, resolver.parsed_files[0].source);
-	}
+	for (auto const& file : resolver.parsed_files)
+		for (auto const& diagnostic : file.diagnostics) diagnostic.print(file.name, file.loc, file.source);
 }

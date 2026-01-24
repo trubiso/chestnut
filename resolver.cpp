@@ -73,7 +73,7 @@ void Resolver::traverse_unresolved_imports() {
 				subtitle_stream << ')';
 				std::string title    = title_stream.str();
 				std::string subtitle = subtitle_stream.str();
-				diagnostics_.push_back(
+				unresolved_import.file->diagnostics.push_back(
 					Diagnostic::error(
 						std::move(title),
 						std::move(subtitle),
@@ -157,7 +157,7 @@ void Resolver::traverse_unresolved_imports() {
 					subtitle_stream << ')';
 					std::string title    = title_stream.str();
 					std::string subtitle = subtitle_stream.str();
-					diagnostics_.push_back(
+					unresolved_import.file->diagnostics.push_back(
 						Diagnostic::error(
 							std::move(title),
 							std::move(subtitle),
@@ -178,18 +178,20 @@ void Resolver::traverse_unresolved_imports() {
 	}
 }
 
-void Resolver::populate_unresolved_imports(AST::Module& module) {
+void Resolver::populate_unresolved_imports(AST::Module& module, ParsedFile& file) {
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Import>(value))
-			unresolved_imports_.push_back(UnresolvedImport {&std::get<AST::Import>(value), &module, {}});
+			unresolved_imports_.push_back(
+				UnresolvedImport {&file, &std::get<AST::Import>(value), &module, {}}
+			);
 		else if (std::holds_alternative<AST::Module>(value))
-			populate_unresolved_imports(std::get<AST::Module>(value));
+			populate_unresolved_imports(std::get<AST::Module>(value), file);
 	}
 }
 
 void Resolver::populate_unresolved_imports() {
-	for (ParsedFile& file : parsed_files) { populate_unresolved_imports(file.module); }
+	for (ParsedFile& file : parsed_files) { populate_unresolved_imports(file.module, file); }
 }
 
 void Resolver::resolve_identifiers() {}

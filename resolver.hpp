@@ -9,8 +9,10 @@ class Resolver {
 public:
 	struct ParsedFile {
 		std::string source;
+		std::string name;
 		std::vector<size_t> loc;
 		AST::Module module;
+		std::vector<Diagnostic> diagnostics;
 	};
 
 	std::vector<ParsedFile> parsed_files;
@@ -22,15 +24,11 @@ public:
 
 	void resolve();
 
-	inline std::vector<Diagnostic> const& diagnostics() const { return diagnostics_; }
-
 private:
 	std::unordered_map<std::string, AST::Module*> module_table_;
 
-	// FIXME: diagnostics should be file-specific. fixable via file-specific spans.
-	std::vector<Diagnostic> diagnostics_;
-
 	struct UnresolvedImport {
+		ParsedFile* file;
 		AST::Import* import;
 		AST::Module* module;
 		std::optional<AST::Import*> pointing_to_import;
@@ -56,7 +54,7 @@ private:
 	void identify_module_items();
 
 	/// Populates the list of unresolved imports from the provided module.
-	void populate_unresolved_imports(AST::Module&);
+	void populate_unresolved_imports(AST::Module&, ParsedFile&);
 	/// Populates the list of unresolved imports.
 	void populate_unresolved_imports();
 	/// Traverses the list of unresolved imports and resolves as many as it can.

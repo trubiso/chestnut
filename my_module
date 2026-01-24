@@ -1,3 +1,5 @@
+import ::a;
+
 export module my_submodule {
 	func sum_numbers(a: uint32, b: uint32) uint32 => a + b;
 }

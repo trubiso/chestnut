@@ -77,7 +77,7 @@ SampleLocInfo get_sample_loc_info(Span total_span, std::vector<size_t> const& lo
 	return SampleLocInfo {loc_start, start_index, loc_end, end_index};
 }
 
-void Diagnostic::Sample::print(std::vector<size_t> const& loc, std::string_view code) const {
+void Diagnostic::Sample::print(std::string_view filename, std::vector<size_t> const& loc, std::string_view code) const {
 	Span total_span = span();
 
 	auto [loc_start, start_index, loc_end, end_index] = get_sample_loc_info(total_span, loc, code);
@@ -87,6 +87,10 @@ void Diagnostic::Sample::print(std::vector<size_t> const& loc, std::string_view 
 
 	putchar('\n');
 	// TODO: print sample title
+	OutFmt::fg(OutFmt::Color::Gray);
+	size_t col_start = total_span.start - loc[loc_start - 1] + 1;
+	std::cout << filename << ':' << loc_start << ':' << col_start << '\n';
+	OutFmt::fg_reset();
 	print_loc_line(loc_pad);
 	putchar('\n');
 
@@ -133,7 +137,7 @@ void print_title(Diagnostic::Severity severity, std::string const& title) {
 	OutFmt::reset();
 }
 
-void Diagnostic::print(std::vector<size_t> const& loc, std::string_view code) const {
+void Diagnostic::print(std::string_view filename, std::vector<size_t> const& loc, std::string_view code) const {
 	print_title(severity, title);
 
 	if (subtitle.has_value()) {
@@ -142,5 +146,5 @@ void Diagnostic::print(std::vector<size_t> const& loc, std::string_view code) co
 		OutFmt::reset();
 	}
 
-	for (Sample const& sample : samples) { sample.print(loc, code); }
+	for (Sample const& sample : samples) { sample.print(filename, loc, code); }
 }

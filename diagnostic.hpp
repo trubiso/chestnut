@@ -40,7 +40,7 @@ struct Diagnostic {
 		explicit Sample(Span span) : Sample {span, OutFmt::Color::Red} {}
 
 		Span span() const;
-		void print(std::vector<size_t> const& loc, std::string_view code) const;
+		void print(std::string_view filename, std::vector<size_t> const& loc, std::string_view code) const;
 	};
 
 	enum class Severity { Error, Warning } severity;
@@ -81,5 +81,5 @@ struct Diagnostic {
 		return Diagnostic(Severity::Warning, std::move(title), {}, samples);
 	}
 
-	void print(std::vector<size_t> const& loc, std::string_view code) const;
+	void print(std::string_view filename, std::vector<size_t> const& loc, std::string_view code) const;
 };
