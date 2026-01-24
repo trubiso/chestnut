@@ -1,7 +1,8 @@
 #pragma once
+#include "ast/function.hpp"
 #include "ast/identifier.hpp"
+#include "ast/module.hpp"
 #include "lexer.hpp"
-#include "parser.hpp"
 
 #include <unordered_map>
 

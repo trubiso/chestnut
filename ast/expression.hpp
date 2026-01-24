@@ -22,12 +22,12 @@ struct Expression {
 		};
 
 		struct NumberLiteral {
-			std::string_view          literal;
+			std::string               literal;
 			std::optional<Identifier> suffix;
 		};
 
 		struct StringLiteral {
-			std::string_view          literal;
+			std::string               literal;
 			std::optional<Identifier> suffix;
 		};
 
@@ -52,7 +52,7 @@ struct Expression {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
 		}
 
-		inline static Atom make_number_literal(std::string_view literal, std::optional<Identifier> suffix) {
+		inline static Atom make_number_literal(std::string literal, std::optional<Identifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::NumberLiteral>,
@@ -61,7 +61,7 @@ struct Expression {
 			);
 		}
 
-		inline static Atom make_string_literal(std::string_view literal, std::optional<Identifier> suffix) {
+		inline static Atom make_string_literal(std::string literal, std::optional<Identifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::StringLiteral>,

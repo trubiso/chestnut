@@ -138,7 +138,7 @@ std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
 
 std::optional<Tag> Parser::consume_tag() {
 	if (!consume_symbol(Token::Symbol::At)) return {};
-	std::optional<std::string_view> name = expect_bare_identifier("expected an identifier (`@` starts a tag)");
+	std::optional<std::string> name = expect_bare_identifier("expected an identifier (`@` starts a tag)");
 	if (!name.has_value()) return {};
 	return Tag {name.value()};
 }
@@ -205,8 +205,8 @@ std::optional<Expression> Parser::consume_expression_atom() {
 		return Expression::make_atom(Expression::Atom::make_identifier(std::move(identifier.value())));
 
 	// since it's not an identifier, it has to be a literal
-	std::optional<std::string_view> sv;
-	std::optional<Identifier>       suffix;  // we always try to consume an extra suffix
+	std::optional<std::string> sv;
+	std::optional<Identifier>  suffix;  // we always try to consume an extra suffix
 
 	if (sv = consume_number_literal(), sv.has_value()) {
 		suffix = consume_identifier();

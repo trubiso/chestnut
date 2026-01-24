@@ -69,6 +69,7 @@ struct Token {
 		Symbol        = 4,
 	};
 
+	// TODO: change char to std::string so that we can support more escape things
 	typedef std::variant<std::string, std::string, std::string, char, Symbol> value_t;
 
 	size_t  begin;
@@ -82,15 +83,15 @@ struct Token {
 
 	explicit Token(size_t begin, decltype(Token::value)&& value) : begin(begin), value(std::move(value)) {}
 
-	inline static Token make_identifier(size_t begin, std::string_view identifier) {
+	inline static Token make_identifier(size_t begin, std::string identifier) {
 		return Token(begin, value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
 	}
 
-	inline static Token make_number_literal(size_t begin, std::string_view literal) {
+	inline static Token make_number_literal(size_t begin, std::string literal) {
 		return Token(begin, value_t {std::in_place_index<(size_t) Kind::NumberLiteral>, literal});
 	}
 
-	inline static Token make_string_literal(size_t begin, std::string_view literal) {
+	inline static Token make_string_literal(size_t begin, std::string literal) {
 		return Token(begin, value_t {std::in_place_index<(size_t) Kind::StringLiteral>, literal});
 	}
 

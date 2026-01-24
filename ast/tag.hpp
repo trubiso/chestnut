@@ -1,10 +1,12 @@
 #pragma once
-#include <string_view>
+#include <string>
 
 namespace AST {
 
 struct Tag {
-	std::string_view identifier;
+	std::string identifier;
 };
+
+std::ostream& operator<<(std::ostream&, Tag const&);
 
 };

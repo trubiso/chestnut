@@ -8,6 +8,7 @@ std::ostream& operator<<(std::ostream& os, QualifiedIdentifier const& identifier
 		os << identifier.path[i].value;
 		if (i + 1 < identifier.path.size()) os << "::";
 	}
+	if (identifier.id.has_value()) { os << " (@" << identifier.id.value() << ')'; }
 	return os;
 }
 

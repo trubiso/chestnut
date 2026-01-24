@@ -1,6 +1,8 @@
 #pragma once
 #include "ast/expression.hpp"
+#include "ast/function.hpp"
 #include "ast/identifier.hpp"
+#include "ast/module.hpp"
 #include "ast/qualified_identifier.hpp"
 #include "ast/statement.hpp"
 #include "ast/tag.hpp"
@@ -17,43 +19,6 @@
 #include <vector>
 
 namespace AST {
-
-// TODO: create a StringInterner to avoid moving around string views constantly
-
-struct Function {
-	struct Argument {
-		Spanned<Identifier> name;
-		Spanned<Type>       type;
-	};
-
-	Spanned<Identifier>          name;
-	std::vector<Argument>        arguments;
-	std::optional<Spanned<Type>> return_type;
-
-	std::optional<Scope> body;
-};
-
-// TODO: more complex imports
-struct Import {
-	Spanned<QualifiedIdentifier> name;
-};
-
-// TODO: add an item for constants, at which point we will have to change the resolver's approach with imports to have a
-// symbol table per module
-struct Module {
-	Spanned<Identifier> name;
-
-	// we cannot make this a struct, because C++ does not allow incomplete types in variants (which is fair, but we
-	// know this will be on the heap anyways).
-	// the vector of tags stores all tags that modify this module item.
-	// the boolean is whether this item is exported or not.
-	typedef std::variant<Function, Module, Import> InnerItem;
-	using Item = std::tuple<std::vector<Tag>, bool, InnerItem>;
-
-	struct Body {
-		std::vector<Spanned<Item>> items;
-	} body;
-};
 
 struct ExpectedDiagnostic {
 	struct Expectation {
@@ -120,9 +85,9 @@ private:
 
 	std::optional<std::string> consume_number_literal();
 	std::optional<std::string> consume_string_literal();
-	std::optional<char>             consume_char_literal();
+	std::optional<char>        consume_char_literal();
 
-	std::optional<std::string>    consume_bare_identifier();
+	std::optional<std::string>         consume_bare_identifier();
 	std::optional<Identifier>          consume_identifier();
 	std::optional<QualifiedIdentifier> consume_qualified_identifier();
 
@@ -160,7 +125,7 @@ private:
 		return expect_symbol(reason, Token::Symbol::Semicolon);
 	}
 
-	std::optional<std::string>    expect_bare_identifier(std::string_view reason);
+	std::optional<std::string>         expect_bare_identifier(std::string_view reason);
 	std::optional<Identifier>          expect_identifier(std::string_view reason);
 	std::optional<QualifiedIdentifier> expect_qualified_identifier(std::string_view reason);
 

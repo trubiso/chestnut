@@ -45,7 +45,7 @@ int main(void) {
 	Resolver resolver {std::move(parsed_files)};
 	resolver.resolve();
 
-	for (auto const& file : resolver.parsed_files) { std::cout << file.module.name.value << std::endl; }
+	for (auto const& file : resolver.parsed_files) { std::cout << file.module << std::endl; }
 
 	for (auto const& file : resolver.parsed_files)
 		for (auto const& diagnostic : file.diagnostics) diagnostic.print(file.name, file.loc, file.source);
