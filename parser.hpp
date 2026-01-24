@@ -38,6 +38,8 @@ struct Import {
 	Spanned<QualifiedIdentifier> name;
 };
 
+// TODO: add an item for constants, at which point we will have to change the resolver's approach with imports to have a
+// symbol table per module
 struct Module {
 	Spanned<Identifier> name;
 
