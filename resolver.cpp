@@ -1,12 +1,12 @@
 #include "resolver.hpp"
 
 #include "ast/identifier.hpp"
-#include "parser.hpp"
 
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <unordered_set>
+#include <variant>
 
 void Resolver::resolve() {
 	populate_module_table();
@@ -65,6 +65,7 @@ void Resolver::identify_module_items() {
 }
 
 void Resolver::traverse_unresolved_imports() {
+	// FIXME: this is useless, this is essentially just qualified identifier resolution
 	for (auto& unresolved_import : unresolved_imports_) {
 		auto& import = *unresolved_import.import;
 		// now we found an import, time to see if we can find what it refers to
@@ -219,7 +220,7 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& lookup
 	}
 
 	if (scope == nullptr) {
-		std::string       title = std::format("unknown identifier '{}'", identifier.value.name);
+		std::string       title = std::format("unknown symbol '{}'", identifier.value.name);
 		std::stringstream subtitle_stream {};
 		subtitle_stream << "could not find any symbol with that name in the current scope (available: ";
 		std::unordered_set<std::string> available_symbols {};
@@ -246,7 +247,123 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 		Spanned<AST::Identifier> unqualified = qualified_identifier.get_unqualified();
 		resolve(unqualified, scope, file_id);
 		qualified_identifier.id = unqualified.value.id;
+		return;
 	}
+
+	if (!qualified_identifier.absolute) {
+		// TODO: resolve non-absolute qualified identifiers
+		std::cout << "unsupported non-absolute qualified identifier detected!" << std::endl;
+		return;
+	}
+
+	// since this is an absolutely qualified identifier, we must find it in the global scope
+	// we do an initial check to ensure that it is in the global scope
+	if (!module_table_.contains(qualified_identifier.path[0].value)) {
+		std::stringstream title_stream {}, subtitle_stream {};
+		title_stream << "unknown symbol '";
+		title_stream << qualified_identifier.path[0].value;
+		title_stream << '\'';
+		subtitle_stream << "could not find any symbol with that name in the global scope (available: ";
+		size_t count = 0;
+		for (auto const& v : module_table_) {
+			subtitle_stream << '\'' << v.first << '\'';
+			if (++count < module_table_.size()) subtitle_stream << ", ";
+		}
+		subtitle_stream << ')';
+		std::string title    = title_stream.str();
+		std::string subtitle = subtitle_stream.str();
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				std::move(title),
+				std::move(subtitle),
+				{Diagnostic::Sample(qualified_identifier.path[0].span)}
+			)
+		);
+		return;
+	}
+
+	// the module to check within
+	AST::Module const* root_module = module_table_.at(qualified_identifier.path[0].value);
+	// the last item that was pointed to
+	Symbol* pointed_item = nullptr;
+	// whether we found anything last iteration
+	bool found = false;
+	// set this once we reach a function or something decidedly without subitems
+	bool cannot_traverse_further = false;
+
+	for (size_t i = 1; i < qualified_identifier.path.size(); ++i) {
+		Spanned<std::string> const& fragment = qualified_identifier.path[i];
+		if (cannot_traverse_further) {
+			// for now, this can only mean it is a function, which does not have subitems
+			std::cout << "tried to access a function's subitems !" << std::endl;
+			break;
+		}
+		found = false;
+		for (auto const& item : root_module->body.items) {
+			auto const& value = std::get<AST::Module::InnerItem>(item.value);
+			std::string name  = AST::Module::get_name(item.value);
+
+			if (name == fragment.value) {
+				// found!
+				if (std::holds_alternative<AST::Function>(value)) {
+					pointed_item = &symbol_pool_.at(
+						std::get<AST::Function>(value).name.value.id.value()
+					);
+					cannot_traverse_further = true;
+				} else if (std::holds_alternative<AST::Module>(value)) {
+					root_module = &std::get<AST::Module>(value);
+					pointed_item
+						= &symbol_pool_.at(std::get<AST::Module>(value).name.value.id.value());
+				} else if (std::holds_alternative<AST::Import>(value)) {
+					auto const& import = std::get<AST::Import>(value);
+					// TODO: do something else about this & handle imports that import other imports
+					if (!import.name.value.id.has_value()) {
+						std::cout << "unresolved import !" << std::endl;
+						break;
+					}
+					pointed_item = &symbol_pool_.at(import.name.value.id.value());
+					// change the root module if we are definitely pointing towards a module
+					if (std::holds_alternative<AST::Module*>(pointed_item->item))
+						root_module = &*std::get<AST::Module*>(pointed_item->item);
+				}
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			std::stringstream title_stream {}, subtitle_stream {};
+			title_stream << "unknown symbol '";
+			title_stream << qualified_identifier.path[i].value;
+			title_stream << '\'';
+			subtitle_stream
+				<< "could not find any symbol with that name in the specified scope (available: ";
+			size_t count = 0;
+			for (auto const& item : root_module->body.items) {
+				std::string name = AST::Module::get_name(item.value);
+				subtitle_stream << '\'' << name << '\'';
+				if (++count < root_module->body.items.size()) subtitle_stream << ", ";
+			}
+			subtitle_stream << ')';
+			std::string title    = title_stream.str();
+			std::string subtitle = subtitle_stream.str();
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					std::move(title),
+					std::move(subtitle),
+					{Diagnostic::Sample(qualified_identifier.path[i].span)}
+				)
+			);
+			break;
+		}
+	}
+
+	if (!found) return;
+
+	assert(pointed_item);
+	qualified_identifier.id = pointed_item->id;
+
+	// TODO: throw error if the name wasn't exported
 }
 
 void Resolver::resolve(AST::Expression::Atom& atom, Scope const& scope, uint32_t file_id) {

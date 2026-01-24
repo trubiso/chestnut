@@ -24,7 +24,9 @@ struct Module {
 	// the vector of tags stores all tags that modify this module item.
 	// the boolean is whether this item is exported or not.
 	typedef std::variant<Function, Module, Import> InnerItem;
+	static std::string const& get_name(InnerItem const& inner_item);
 	using Item = std::tuple<std::vector<Tag>, bool, InnerItem>;
+	static inline std::string const& get_name(Item const& item) { return get_name(std::get<InnerItem>(item)); }
 
 	struct Body {
 		std::vector<Spanned<Item>> items;
