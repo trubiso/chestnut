@@ -39,7 +39,7 @@ struct Import {
 };
 
 struct Module {
-	std::optional<Spanned<Identifier>> name;
+	Spanned<Identifier> name;
 
 	// we cannot make this a struct, because C++ does not allow incomplete types in variants (which is fair, but we
 	// know this will be on the heap anyways).
@@ -76,9 +76,9 @@ class Parser {
 public:
 	explicit Parser(Stream<Token>&& tokens) : tokens_(tokens) {}
 
-	bool advance();
-
 	std::vector<Diagnostic> diagnostics() const;
+
+	Module parse_all(std::string_view name);
 
 private:
 	enum class Keyword {

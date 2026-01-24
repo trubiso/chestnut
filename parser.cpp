@@ -700,7 +700,7 @@ std::optional<Module> Parser::parse_module() {
 		<< body.value().items.size()
 		<< " items"
 		<< std::endl;
-	return Module {name, std::move(body.value())};
+	return Module {name.value(), std::move(body.value())};
 }
 
 std::optional<Module::Item> Parser::parse_module_item() {
@@ -743,11 +743,12 @@ std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 	return Module::Body {std::move(items)};
 }
 
-bool Parser::advance() {
-	// FIXME: if some statement is misparsed, it keeps trying to advance and hangs
-	if (!tokens_.has_value()) return false;  // EOF
-	skip_semis();
-	return parse_module_body(true).has_value();
+Module Parser::parse_all(std::string_view name) {
+	Module::Body body = parse_module_body(true).value_or(Module::Body {});
+	return Module {
+		Spanned<Identifier> {Span(0), Identifier(name)},
+		std::move(body)
+	};
 }
 
 }  // namespace AST
