@@ -5,7 +5,6 @@
 #include <cassert>
 #include <charconv>
 #include <format>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -666,14 +665,6 @@ std::optional<Function> Parser::parse_function() {
 		body = consume_scope();
 	}
 
-	std::cout << "found function with name " << name.value().value << ", " << arguments.size() << " arguments: ";
-	for (Function::Argument const& argument : arguments) {
-		std::cout << argument.name.value << " of type " << argument.type.value << ", ";
-	}
-	std::cout << std::endl;
-	if (body.has_value())
-		for (auto const& stmt : body.value()) { std::cout << "\t" << stmt.value << std::endl; }
-
 	return Function {name.value(), arguments, return_type, std::move(body)};
 }
 
@@ -683,7 +674,6 @@ std::optional<Import> Parser::parse_import() {
 		= SPANNED_REASON(expect_qualified_identifier, "expected name of the module to import");
 	if (!name.has_value()) return {};
 	expect_semicolon("expected semicolon after import");
-	std::cout << "found import, importing " << name.value().value << std::endl;
 	return Import {std::move(name.value())};
 }
 
@@ -693,13 +683,6 @@ std::optional<Module> Parser::parse_module() {
 	if (!name.has_value()) return {};
 	std::optional<Module::Body> body = parse_module_body();
 	if (!body.has_value()) return {};
-	std::cout
-		<< "found module with name "
-		<< name.value().value
-		<< " and "
-		<< body.value().items.size()
-		<< " items"
-		<< std::endl;
 	return Module {name.value(), std::move(body.value())};
 }
 
