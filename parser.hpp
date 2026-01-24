@@ -33,7 +33,7 @@ struct ExpectedDiagnostic {
 
 	Span where;
 
-	explicit operator Diagnostic() const;
+	Diagnostic as_diagnostic(FileContext const& context) const;
 
 	inline bool has_expectation(Expectation const& expectation) {
 		return std::find(expectations.cbegin(), expectations.cend(), expectation) != expectations.cend();
@@ -42,7 +42,7 @@ struct ExpectedDiagnostic {
 
 class Parser {
 public:
-	explicit Parser(Stream<Token>&& tokens) : tokens_(tokens) {}
+	explicit Parser(FileContext const& context, Stream<Token>&& tokens) : context_(context), tokens_(tokens) {}
 
 	std::vector<Diagnostic> diagnostics() const;
 
@@ -59,6 +59,7 @@ private:
 		Return,
 	};
 
+	FileContext   context_;
 	Stream<Token> tokens_;
 
 	std::vector<std::variant<ExpectedDiagnostic, Diagnostic>> diagnostics_;

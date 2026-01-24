@@ -15,7 +15,7 @@ namespace AST {
 #define SPANNED_REASON(fn, reason)                                                                               \
 	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
 
-ExpectedDiagnostic::operator Diagnostic() const {
+Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
 	title_stream << "expected ";
 	// we know there should be at least one expectation
@@ -36,7 +36,7 @@ ExpectedDiagnostic::operator Diagnostic() const {
 done:
 	std::string title    = title_stream.str();
 	std::string subtitle = subtitle_stream.str();
-	return Diagnostic::error(std::move(title), std::move(subtitle), {Diagnostic::Sample(where)});
+	return Diagnostic::error(std::move(title), std::move(subtitle), {Diagnostic::Sample(context, where)});
 }
 
 std::vector<Diagnostic> Parser::diagnostics() const {
@@ -44,7 +44,7 @@ std::vector<Diagnostic> Parser::diagnostics() const {
 	for (std::variant<ExpectedDiagnostic, Diagnostic> const& diagnostic : diagnostics_) {
 		if (std::holds_alternative<Diagnostic>(diagnostic))
 			diagnostics.push_back(std::get<Diagnostic>(diagnostic));
-		else diagnostics.push_back(Diagnostic(std::get<ExpectedDiagnostic>(diagnostic)));
+		else diagnostics.push_back(std::get<ExpectedDiagnostic>(diagnostic).as_diagnostic(context_));
 	}
 	return diagnostics;
 }
@@ -288,7 +288,7 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 						Diagnostic::error(
 							"cannot specify ordered argument after labeled argument(s)",
 							"labeled arguments should be specified after all ordered arguments, so no ordered arguments can appear between the labeled arguments",
-							{Diagnostic::Sample(ordered_argument.span)}
+							{Diagnostic::Sample(context_, ordered_argument.span)}
 						)
 					);
 				} else {
@@ -456,7 +456,7 @@ std::optional<Statement> Parser::consume_statement_set() {
 			Diagnostic::error(
 				"invalid left-hand side for set statement",
 				"set statements can only take lvalues (identifiers, function calls, dereferences and access expressions) in their left-hand side",
-				{Diagnostic::Sample(lhs.span)}
+				{Diagnostic::Sample(context_, lhs.span)}
 			)
 		);
 
@@ -678,7 +678,7 @@ std::optional<Import> Parser::parse_import() {
 			Diagnostic::error(
 				"unsupported relative import",
 				"imports must be absolute (for now)",
-				{Diagnostic::Sample(name.value().span)}
+				{Diagnostic::Sample(context_, name.value().span)}
 			)
 		);
 	expect_semicolon("expected semicolon after import");

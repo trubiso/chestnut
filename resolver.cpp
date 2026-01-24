@@ -18,6 +18,15 @@ uint32_t Resolver::next() {
 	return counter_++;
 }
 
+FileContext Resolver::get_context(uint32_t file_id) {
+	return FileContext {
+		parsed_files.at(file_id).name,
+		file_id,
+		parsed_files.at(file_id).loc,
+		parsed_files.at(file_id).source,
+	};
+}
+
 void Resolver::populate_module_table() {
 	for (ParsedFile& file : parsed_files) {
 		std::string name = file.module.name.value.name;
@@ -90,7 +99,11 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& lookup
 		subtitle_stream << ')';
 		std::string subtitle = subtitle_stream.str();
 		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(std::move(title), std::move(subtitle), {Diagnostic::Sample(identifier.span)})
+			Diagnostic::error(
+				std::move(title),
+				std::move(subtitle),
+				{Diagnostic::Sample(get_context(file_id), identifier.span)}
+			)
 		);
 	}
 }
@@ -129,7 +142,7 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 			Diagnostic::error(
 				std::move(title),
 				std::move(subtitle),
-				{Diagnostic::Sample(qualified_identifier.path[0].span)}
+				{Diagnostic::Sample(get_context(file_id), qualified_identifier.path[0].span)}
 			)
 		);
 		return;
@@ -186,22 +199,29 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 					// TODO: check if it is in the same scope as ours or on a parent module(?) to
 					// not raise the diagnostic
 					std::string title = std::format("tried to access unexported item '{}'", name);
-					// FIXME: diagnostics are not being thrown showing the correct files
+
+					Diagnostic::Sample declared_sample {
+						get_context(pointed_item->file_id),
+						{Diagnostic::Sample::Label {
+							pointed_item->span,
+							"item declared here",
+							OutFmt::Color::BrightBlue
+						}}
+					};
+					Diagnostic::Sample accessed_sample {
+						get_context(file_id),
+						{Diagnostic::Sample::Label {
+							Span(qualified_identifier.path[0].span.start,
+					                     fragment.span.end),
+							"item accessed here",
+							OutFmt::Color::BrightMagenta
+						}}
+					};
 					parsed_files.at(file_id).diagnostics.push_back(
 						Diagnostic::error(
 							std::move(title),
 							"the item must be exported for it to be accessible from outside its scope",
-							{Diagnostic::Sample {{Diagnostic::Sample::Label {
-								 pointed_item->span,
-								 "item declared here",
-								 OutFmt::Color::BrightBlue
-							 }}},
-					                 Diagnostic::Sample {{Diagnostic::Sample::Label {
-								 Span(qualified_identifier.path[0].span.start,
-					                              fragment.span.end),
-								 "item accessed here",
-								 OutFmt::Color::BrightMagenta
-							 }}}}
+							{declared_sample, accessed_sample}
 						)
 					);
 					privacy_violated_diagnostic_thrown = true;
@@ -231,7 +251,7 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 				Diagnostic::error(
 					std::move(title),
 					std::move(subtitle),
-					{Diagnostic::Sample(qualified_identifier.path[i].span)}
+					{Diagnostic::Sample(get_context(file_id), qualified_identifier.path[i].span)}
 				)
 			);
 			break;

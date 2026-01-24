@@ -1,10 +1,20 @@
 #include "out_fmt.hpp"
 #include "span.hpp"
 
+#include <cstdint>
 #include <initializer_list>
 #include <optional>
 #include <string>
 #include <vector>
+
+struct FileContext {
+	std::string name;
+	uint32_t    file_id;
+	/// An array containing the start of each of the lines of code in a file.
+	std::vector<size_t> loc;
+	// we don't want to own the source!
+	std::string_view source;
+};
 
 struct Diagnostic {
 	struct Sample {
@@ -26,21 +36,25 @@ struct Diagnostic {
 		/// There must be at least one label!!!
 		std::vector<Label> labels;
 
-		explicit Sample(std::initializer_list<Label> labels) : title {}, labels {labels} {}
+		FileContext context;
 
-		explicit Sample(std::string&& title, std::initializer_list<Label> labels)
+		explicit Sample(FileContext const& context, std::initializer_list<Label> labels)
+			: title {}
+			, labels {labels}
+			, context {context} {}
+
+		explicit Sample(FileContext const& context, std::string&& title, std::initializer_list<Label> labels)
 			: title {title}
-			, labels {labels} {}
+			, labels {labels}
+			, context {context} {}
 
-		explicit Sample(Span span, OutFmt::Color color)
-			: Sample {
-				  Label {span, color}
-                } {}
+		explicit Sample(FileContext const& context, Span span, OutFmt::Color color)
+			: Sample {context, {Label {span, color}}} {}
 
-		explicit Sample(Span span) : Sample {span, OutFmt::Color::Red} {}
+		explicit Sample(FileContext const& context, Span span) : Sample {context, span, OutFmt::Color::Red} {}
 
 		Span span() const;
-		void print(std::string_view filename, std::vector<size_t> const& loc, std::string_view code) const;
+		void print() const;
 	};
 
 	enum class Severity { Error, Warning } severity;
@@ -81,5 +95,5 @@ struct Diagnostic {
 		return Diagnostic(Severity::Warning, std::move(title), {}, samples);
 	}
 
-	void print(std::string_view filename, std::vector<size_t> const& loc, std::string_view code) const;
+	void print() const;
 };

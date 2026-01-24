@@ -53,6 +53,9 @@ private:
 	/// Returns a new ID produced by the counter.
 	uint32_t next();
 
+	/// Returns the file context for the requested file ID.
+	FileContext get_context(uint32_t file_id);
+
 	/// Populates the module table according to the parsed files.
 	void populate_module_table();
 

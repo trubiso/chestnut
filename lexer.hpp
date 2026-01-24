@@ -9,7 +9,10 @@
 
 class Lexer {
 public:
-	explicit Lexer(std::string_view source) : stream_(std::move(source)), tokens_(), loc_ {0} {}
+	explicit Lexer(FileContext& context, std::string_view source)
+		: context(context)
+		, stream_(std::move(source))
+		, tokens_() {}
 
 	bool advance();
 
@@ -22,9 +25,9 @@ public:
 
 	inline std::vector<Token>& tokens() { return tokens_; }
 
-	inline std::vector<size_t>& loc() { return loc_; }
-
 	inline std::vector<Diagnostic>& diagnostics() { return diagnostics_; }
+
+	FileContext& context;
 
 private:
 	static inline bool is_whitespace(char x) { return x == ' ' || x == '\t' || x == '\r'; }
@@ -92,6 +95,5 @@ private:
 
 	Stream<char>            stream_;
 	std::vector<Token>      tokens_;
-	std::vector<size_t>     loc_;
 	std::vector<Diagnostic> diagnostics_;
 };
