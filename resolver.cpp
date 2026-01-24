@@ -331,12 +331,11 @@ void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
 			auto& import = std::get<AST::Import>(value);
 			if (!import.name.value.absolute) continue;
 			resolve(import.name.value, child_scope, file_id);
-			// TODO: handle unresolved imports
-			if (import.name.value.id.has_value())
-				child_scope.symbols.emplace(
-					import.name.value.last_fragment().value,
-					&symbol_pool_.at(import.name.value.id.value())
-				);
+			if (!import.name.value.id.has_value()) continue;
+			child_scope.symbols.emplace(
+				import.name.value.last_fragment().value,
+				&symbol_pool_.at(import.name.value.id.value())
+			);
 		}
 	}
 

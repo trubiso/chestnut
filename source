@@ -1,5 +1,15 @@
 import ::my_module::my_submodule::sum_numbers;
 
+module a {
+	import ::source::b::b;
+	func a() {}
+}
+
+module b {
+	import ::source::a::a;
+	func b() {}
+}
+
 export module hello {
 	module world {}
 
