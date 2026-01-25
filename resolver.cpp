@@ -1,6 +1,7 @@
 #include "resolver.hpp"
 
 #include "ast/identifier.hpp"
+#include "ast/qualified_identifier.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -108,15 +109,15 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& lookup
 	}
 }
 
-void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope const& scope, uint32_t file_id) {
-	if (qualified_identifier.is_unqualified()) {
-		Spanned<AST::Identifier> unqualified = qualified_identifier.get_unqualified();
+void Resolver::resolve(Spanned<AST::QualifiedIdentifier>& qualified_identifier, Scope const& scope, uint32_t file_id) {
+	if (qualified_identifier.value.is_unqualified()) {
+		Spanned<AST::Identifier> unqualified = qualified_identifier.value.get_unqualified();
 		resolve(unqualified, scope, file_id);
-		qualified_identifier.id = unqualified.value.id;
+		qualified_identifier.value.id = unqualified.value.id;
 		return;
 	}
 
-	if (!qualified_identifier.absolute) {
+	if (!qualified_identifier.value.absolute) {
 		// TODO: resolve non-absolute qualified identifiers
 		std::cout << "unsupported non-absolute qualified identifier detected!" << std::endl;
 		return;
@@ -124,10 +125,10 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 
 	// since this is an absolutely qualified identifier, we must find it in the global scope
 	// we do an initial check to ensure that it is in the global scope
-	if (!module_table_.contains(qualified_identifier.path[0].value)) {
+	if (!module_table_.contains(qualified_identifier.value.path[0].value)) {
 		std::stringstream title_stream {}, subtitle_stream {};
 		title_stream << "unknown symbol '";
-		title_stream << qualified_identifier.path[0].value;
+		title_stream << qualified_identifier.value.path[0].value;
 		title_stream << '\'';
 		subtitle_stream << "could not find any symbol with that name in the global scope (available: ";
 		size_t count = 0;
@@ -142,14 +143,14 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 			Diagnostic::error(
 				std::move(title),
 				std::move(subtitle),
-				{Diagnostic::Sample(get_context(file_id), qualified_identifier.path[0].span)}
+				{Diagnostic::Sample(get_context(file_id), qualified_identifier.value.path[0].span)}
 			)
 		);
 		return;
 	}
 
 	// the module to check within
-	AST::Module const* root_module = module_table_.at(qualified_identifier.path[0].value);
+	AST::Module const* root_module = module_table_.at(qualified_identifier.value.path[0].value);
 	// the last item that was pointed to
 	Symbol* pointed_item = nullptr;
 	// whether we have already thrown the privacy violation diagnostic
@@ -159,8 +160,8 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 	// set this once we reach a function or something decidedly without subitems
 	bool cannot_traverse_further = false;
 
-	for (size_t i = 1; i < qualified_identifier.path.size(); ++i) {
-		Spanned<std::string> const& fragment = qualified_identifier.path[i];
+	for (size_t i = 1; i < qualified_identifier.value.path.size(); ++i) {
+		Spanned<std::string> const& fragment = qualified_identifier.value.path[i];
 		if (cannot_traverse_further) {
 			// for now, this can only mean it is a function, which does not have subitems
 			std::cout << "tried to access a function's subitems !" << std::endl;
@@ -211,8 +212,7 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 					Diagnostic::Sample accessed_sample {
 						get_context(file_id),
 						{Diagnostic::Sample::Label {
-							Span(qualified_identifier.path[0].span.start,
-					                     fragment.span.end),
+							Span(qualified_identifier.span.start, fragment.span.end),
 							"item accessed here",
 							OutFmt::Color::BrightMagenta
 						}}
@@ -234,7 +234,7 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 		if (!found) {
 			std::stringstream title_stream {}, subtitle_stream {};
 			title_stream << "unknown symbol '";
-			title_stream << qualified_identifier.path[i].value;
+			title_stream << qualified_identifier.value.path[i].value;
 			title_stream << '\'';
 			subtitle_stream
 				<< "could not find any symbol with that name in the specified scope (available: ";
@@ -251,7 +251,10 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 				Diagnostic::error(
 					std::move(title),
 					std::move(subtitle),
-					{Diagnostic::Sample(get_context(file_id), qualified_identifier.path[i].span)}
+					{Diagnostic::Sample(
+						get_context(file_id),
+						qualified_identifier.value.path[i].span
+					)}
 				)
 			);
 			break;
@@ -261,49 +264,55 @@ void Resolver::resolve(AST::QualifiedIdentifier& qualified_identifier, Scope con
 	if (!found) return;
 
 	assert(pointed_item);
-	qualified_identifier.id = pointed_item->id;
-
-	// TODO: throw error if the name wasn't exported
-}
-
-void Resolver::resolve(AST::Expression::Atom& atom, Scope const& scope, uint32_t file_id) {
-	switch (atom.kind()) {
-	case AST::Expression::Atom::Kind::Identifier:    resolve(atom.get_identifier(), scope, file_id); return;
-	case AST::Expression::Atom::Kind::Expression:    resolve(*atom.get_expression(), scope, file_id); return;
-	case AST::Expression::Atom::Kind::NumberLiteral:
-	case AST::Expression::Atom::Kind::StringLiteral:
-	case AST::Expression::Atom::Kind::CharLiteral:   break;
-	}
+	qualified_identifier.value.id = pointed_item->id;
 }
 
 void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope const& scope, uint32_t file_id) {
-	resolve(unary_operation.operand->value, scope, file_id);
+	resolve(*unary_operation.operand, scope, file_id);
 }
 
 void Resolver::resolve(AST::Expression::BinaryOperation& binary_operation, Scope const& scope, uint32_t file_id) {
-	resolve(binary_operation.lhs->value, scope, file_id);
-	resolve(binary_operation.rhs->value, scope, file_id);
+	resolve(*binary_operation.lhs, scope, file_id);
+	resolve(*binary_operation.rhs, scope, file_id);
 }
 
 void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const& scope, uint32_t file_id) {
-	resolve(function_call.callee->value, scope, file_id);
-	for (auto& argument : function_call.arguments.ordered) { resolve(argument.value, scope, file_id); }
+	resolve(*function_call.callee, scope, file_id);
+	for (auto& argument : function_call.arguments.ordered) { resolve(argument, scope, file_id); }
 	// FIXME: we need to properly resolve these labels wrt. func args, for which we need to pre-identify func args
-	for (auto& argument : function_call.arguments.labeled) { resolve(std::get<1>(argument).value, scope, file_id); }
+	for (auto& argument : function_call.arguments.labeled) { resolve(std::get<1>(argument), scope, file_id); }
 }
 
-void Resolver::resolve(AST::Expression& expression, Scope const& scope, uint32_t file_id) {
+void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scope, uint32_t file_id) {
 	switch (expression.kind()) {
-	case AST::Expression::Kind::Atom:            resolve(expression.get_atom(), scope, file_id); return;
 	case AST::Expression::Kind::UnaryOperation:  resolve(expression.get_unary_operation(), scope, file_id); return;
 	case AST::Expression::Kind::BinaryOperation: resolve(expression.get_binary_operation(), scope, file_id); return;
 	case AST::Expression::Kind::FunctionCall:    resolve(expression.get_function_call(), scope, file_id); return;
+	case AST::Expression::Kind::Atom:            break;
 	}
+
+	// atom resolution (better to do it here directly)
+	AST::Expression::Atom& atom = expression.get_atom();
+	if (atom.kind() == AST::Expression::Atom::Kind::Identifier) {
+		// for identifiers, we create a faux spanned qualified identifier, resolve it and apply that information
+		// here
+		Spanned<AST::QualifiedIdentifier> qualified_identifier {span, atom.get_identifier()};
+		resolve(qualified_identifier, scope, file_id);
+		atom.get_identifier().id = qualified_identifier.value.id;
+	} else if (atom.kind() == AST::Expression::Atom::Kind::Expression) {
+		// for subexpressions, we just recurse
+		resolve(*atom.get_expression(), span, scope, file_id);
+		return;
+	}
+}
+
+void Resolver::resolve(Spanned<AST::Expression>& expression, Scope const& scope, uint32_t file_id) {
+	resolve(expression.value, expression.span, scope, file_id);
 }
 
 void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, uint32_t file_id) {
 	// resolve the value before the name, otherwise 'const a = a;' would not work
-	if (declare.value.has_value()) resolve(declare.value.value().value, scope, file_id);
+	if (declare.value.has_value()) resolve(declare.value.value(), scope, file_id);
 	identify(declare.name.value);
 	symbol_pool_.push_back(
 		Symbol {declare.name.value.id.value(),
@@ -318,26 +327,28 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, uint32_t 
 
 void Resolver::resolve(AST::Statement::Set& set, Scope& scope, uint32_t file_id) {
 	// TODO: maybe check here for mutability?
-	resolve(set.lhs.value, scope, file_id);
-	resolve(set.rhs.value, scope, file_id);
+	resolve(set.lhs, scope, file_id);
+	resolve(set.rhs, scope, file_id);
 }
 
 void Resolver::resolve(AST::Statement::Return& return_, Scope& scope, uint32_t file_id) {
-	if (return_.value.has_value()) resolve(return_.value.value().value, scope, file_id);
+	if (return_.value.has_value()) resolve(return_.value.value(), scope, file_id);
 }
 
-void Resolver::resolve(AST::Statement& statement, Scope& scope, uint32_t file_id) {
-	switch (statement.kind()) {
-	case AST::Statement::Kind::Declare:    resolve(statement.get_declare(), scope, file_id); return;
-	case AST::Statement::Kind::Set:        resolve(statement.get_set(), scope, file_id); return;
-	case AST::Statement::Kind::Expression: resolve(statement.get_expression(), scope, file_id); return;
-	case AST::Statement::Kind::Return:     resolve(statement.get_return(), scope, file_id); return;
-	case AST::Statement::Kind::Scope:      resolve(statement.get_scope(), scope, file_id); return;
+void Resolver::resolve(Spanned<AST::Statement>& statement, Scope& scope, uint32_t file_id) {
+	switch (statement.value.kind()) {
+	case AST::Statement::Kind::Declare: resolve(statement.value.get_declare(), scope, file_id); return;
+	case AST::Statement::Kind::Set:     resolve(statement.value.get_set(), scope, file_id); return;
+	case AST::Statement::Kind::Expression:
+		resolve(statement.value.get_expression(), statement.span, scope, file_id);
+		return;
+	case AST::Statement::Kind::Return: resolve(statement.value.get_return(), scope, file_id); return;
+	case AST::Statement::Kind::Scope:  resolve(statement.value.get_scope(), scope, file_id); return;
 	}
 }
 
 void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, uint32_t file_id) {
-	for (auto& statement : ast_scope) { resolve(statement.value, resolver_scope, file_id); }
+	for (auto& statement : ast_scope) { resolve(statement, resolver_scope, file_id); }
 }
 
 void Resolver::resolve(AST::Function& function, Scope scope, uint32_t file_id) {
@@ -377,7 +388,7 @@ void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
 		} else if (std::holds_alternative<AST::Import>(value)) {
 			auto& import = std::get<AST::Import>(value);
 			if (!import.name.value.absolute) continue;
-			resolve(import.name.value, child_scope, file_id);
+			resolve(import.name, child_scope, file_id);
 			if (!import.name.value.id.has_value()) continue;
 			child_scope.symbols.emplace(
 				import.name.value.last_fragment().value,

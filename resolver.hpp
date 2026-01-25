@@ -68,17 +68,18 @@ private:
 	/// Identifies all module items with an ID, but does not resolve imports.
 	void identify_module_items();
 
+	// TODO: return the ID for ergonomics in some of these
 	void resolve(Spanned<AST::Identifier>&, Scope const&, uint32_t file_id);
-	void resolve(AST::QualifiedIdentifier&, Scope const&, uint32_t file_id);
-	void resolve(AST::Expression::Atom&, Scope const&, uint32_t file_id);
+	void resolve(Spanned<AST::QualifiedIdentifier>&, Scope const&, uint32_t file_id);
 	void resolve(AST::Expression::UnaryOperation&, Scope const&, uint32_t file_id);
 	void resolve(AST::Expression::BinaryOperation&, Scope const&, uint32_t file_id);
 	void resolve(AST::Expression::FunctionCall&, Scope const&, uint32_t file_id);
-	void resolve(AST::Expression&, Scope const&, uint32_t file_id);
+	void resolve(AST::Expression&, Span, Scope const&, uint32_t file_id);
+	void resolve(Spanned<AST::Expression>&, Scope const&, uint32_t file_id);
 	void resolve(AST::Statement::Declare&, Scope&, uint32_t file_id);
 	void resolve(AST::Statement::Set&, Scope&, uint32_t file_id);
 	void resolve(AST::Statement::Return&, Scope&, uint32_t file_id);
-	void resolve(AST::Statement&, Scope&, uint32_t file_id);
+	void resolve(Spanned<AST::Statement>&, Scope&, uint32_t file_id);
 	void resolve(AST::Scope&, Scope, uint32_t file_id);
 	void resolve(AST::Function&, Scope, uint32_t file_id);
 	void resolve(AST::Module&, Scope, uint32_t file_id);
