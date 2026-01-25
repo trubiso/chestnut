@@ -4,8 +4,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <unordered_map>
 
-#define TAB_STR "        "
+#define TAB_STR   "        "
+#define TAB_WIDTH 8
 
 constexpr OutFmt::Color severity_bg(Diagnostic::Severity severity) {
 	switch (severity) {
@@ -77,10 +79,43 @@ SampleLocInfo get_sample_loc_info(Span total_span, std::vector<size_t> const& lo
 	return SampleLocInfo {loc_start, start_index, loc_end, end_index};
 }
 
+void print_label_text(
+	Diagnostic::Sample::Label const& label,
+	FileContext const&               context,
+	size_t                           loc_current,
+	size_t                           loc_pad
+) {
+	Span label_span = label.span;
+	label_span.end -= context.loc[loc_current - 1];
+	if (label_span.start <= context.loc[loc_current - 1]) label_span.start = 0;
+	else label_span.start -= context.loc[loc_current - 1];
+	print_loc_line(loc_pad);
+	size_t line_size = ((loc_current == context.loc.size()) ? context.source.size() : context.loc[loc_current])
+	                 - context.loc[loc_current - 1]
+	                 - 1;
+	assert(label_span.end <= line_size);
+	bool printed_out_first = false;
+	for (size_t j = 0; j < label_span.end; ++j) {
+		bool is_tab = context.source.at(context.loc[loc_current - 1] + j) == '\t';
+		if (j >= label_span.start) {
+			if (!printed_out_first) OutFmt::fg(label.color);
+			if (is_tab) printf("^^^^^^^^");
+			else putchar('^');
+			printed_out_first = true;
+		} else {
+			if (is_tab) printf(TAB_STR);
+			else putchar(' ');
+		}
+	}
+	printf(" %s\n", label.label.value().c_str());
+}
+
 void Diagnostic::Sample::print() const {
+	assert(!context.loc.empty());
 	Span total_span = span();
 
-	auto [loc_start, start_index, loc_end, end_index] = get_sample_loc_info(total_span, context.loc, context.source);
+	auto [loc_start, start_index, loc_end, end_index]
+		= get_sample_loc_info(total_span, context.loc, context.source);
 
 	size_t loc_pad     = number_size(loc_end);
 	size_t loc_current = loc_start;
@@ -94,11 +129,32 @@ void Diagnostic::Sample::print() const {
 	print_loc_line(loc_pad);
 	putchar('\n');
 
-	// TODO: print label text
+	// calculate the spans of the labels for each line
+	std::unordered_map<size_t, std::vector<Label>> labels_per_line {};
+	for (Label const& label : labels) {
+		if (!label.label.has_value()) continue;
+		size_t label_loc_start = context.loc.size() - 1;
+		assert(label.span.end > 0);
+		for (size_t i = 0; i < context.loc.size(); ++i) {
+			if (context.loc[i] >= label.span.end) {
+				label_loc_start = i - 1;
+				break;
+			}
+		}
+		if (labels_per_line.contains(label_loc_start)) {
+			labels_per_line.at(label_loc_start).push_back(label);
+		} else {
+			labels_per_line.emplace(label_loc_start, std::vector<Label> {label});
+		}
+	}
+
 	for (size_t i = start_index; i < end_index; ++i) {
 		if (i == start_index) print_loc_line(loc_pad, loc_current);
 		if (context.source.at(i) == '\n') {
 			putchar('\n');
+			if (labels_per_line.contains(loc_current - 1))
+				for (Label const& label : labels_per_line.at(loc_current - 1))
+					print_label_text(label, context, loc_current, loc_pad);
 			++loc_current;
 			print_loc_line(loc_pad, loc_current);
 		} else {
@@ -121,6 +177,9 @@ void Diagnostic::Sample::print() const {
 	}
 
 	putchar('\n');
+	if (labels_per_line.contains(loc_end - 1))
+		for (Label const& label : labels_per_line.at(loc_end - 1))
+			print_label_text(label, context, loc_end, loc_pad);
 	print_loc_line(loc_pad);
 	puts("\n");
 }
