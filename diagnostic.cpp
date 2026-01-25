@@ -120,11 +120,29 @@ void Diagnostic::Sample::print() const {
 	size_t loc_pad     = number_size(loc_end);
 	size_t loc_current = loc_start;
 
-	putchar('\n');
-	// TODO: print sample title
+	// sample title
 	OutFmt::fg(OutFmt::Color::Gray);
-	size_t col_start = total_span.start - context.loc[loc_start - 1] + 1;
-	std::cout << context.name << ':' << loc_start << ':' << col_start << '\n';
+	if (title.has_value()) {
+		OutFmt::set_bold();
+		printf("%s", title.value().c_str());
+		OutFmt::clear_bold();
+		printf(" (");
+	}
+	size_t count = 0;
+	for (Label const& label : labels) {
+		size_t label_loc_start = context.loc.size();
+		for (size_t i = context.loc.size(); i > 0; --i) {
+			if (context.loc[i - 1] <= label.span.start) {
+				label_loc_start = i;
+				break;
+			}
+		}
+		size_t col_start = label.span.start - context.loc[label_loc_start - 1] + 1;
+		std::cout << context.name << ':' << label_loc_start << ':' << col_start;
+		if (++count < labels.size()) printf(", ");
+	}
+	if (title.has_value()) putchar(')');
+	putchar('\n');
 	OutFmt::fg_reset();
 	print_loc_line(loc_pad);
 	putchar('\n');
@@ -148,6 +166,7 @@ void Diagnostic::Sample::print() const {
 		}
 	}
 
+	// print sample itself
 	for (size_t i = start_index; i < end_index; ++i) {
 		if (i == start_index) print_loc_line(loc_pad, loc_current);
 		if (context.source.at(i) == '\n') {
@@ -204,6 +223,8 @@ void Diagnostic::print() const {
 		puts(subtitle.value().c_str());
 		OutFmt::reset();
 	}
+
+	putchar('\n');
 
 	for (Sample const& sample : samples) { sample.print(); }
 }
