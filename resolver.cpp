@@ -35,14 +35,14 @@ void Resolver::populate_module_table() {
 }
 
 void Resolver::identify(AST::Identifier& identifier) {
-	identifier.id = next();
+	identifier.id = {next()};
 }
 
 void Resolver::identify(AST::Module& module, uint32_t file_id) {
 	// TODO: ensure there are no duplicated item names (including imports)
 	identify(module.name.value);
 	symbol_pool_.push_back(
-		Symbol {module.name.value.id.value(),
+		Symbol {module.name.value.id.value()[0],
 	                file_id,
 	                module.name.span,
 	                module.name.value.name(),
@@ -59,7 +59,7 @@ void Resolver::identify(AST::Module& module, uint32_t file_id) {
 void Resolver::identify(AST::Function& function, uint32_t file_id) {
 	identify(function.name.value);
 	symbol_pool_.push_back(
-		Symbol {function.name.value.id.value(),
+		Symbol {function.name.value.id.value()[0],
 	                file_id,
 	                function.name.span,
 	                function.name.value.name(),
@@ -72,26 +72,26 @@ void Resolver::identify_module_items() {
 	for (ParsedFile& file : parsed_files) { identify(file.module, file.file_id); }
 }
 
-void Resolver::resolve(Spanned<AST::Identifier>& qualified_identifier, Scope const& scope, uint32_t file_id) {
+// FIXME: once more, we don't need this span, since the diagnostics that did need it are gone, maybe we should remove it
+void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope, uint32_t file_id) {
 	// do not try to resolve already resolved identifiers (just in case, i don't think we will ever hit this)
-	if (qualified_identifier.value.id.has_value()) return;
+	if (identifier.value.id.has_value()) return;
 
 	// unqualified identifiers get resolved differently
-	if (qualified_identifier.value.is_unqualified()) {
+	if (identifier.value.is_unqualified()) {
 		// Spanned<AST::Identifier> unqualified = qualified_identifier.value.extract_unqualified_with_span();
 
 		Scope const* traversing_scope = &scope;
 		while (traversing_scope != nullptr) {
-			if (traversing_scope->symbols.contains(qualified_identifier.value.name())) {
-				qualified_identifier.value.id
-					= traversing_scope->symbols.at(qualified_identifier.value.name())->id;
+			if (traversing_scope->symbols.contains(identifier.value.name())) {
+				identifier.value.id = {traversing_scope->symbols.at(identifier.value.name())->id};
 				return;
 			}
 			traversing_scope = traversing_scope->parent;
 		}
 
 		// if we didn't find anything, throw a diagnostic
-		std::string       title = std::format("unknown symbol '{}'", qualified_identifier.value.name());
+		std::string       title = std::format("unknown symbol '{}'", identifier.value.name());
 		std::stringstream subtitle_stream {};
 		subtitle_stream << "could not find any symbol with that name in the current scope (available: ";
 		std::unordered_set<std::string> available_symbols {};
@@ -111,13 +111,13 @@ void Resolver::resolve(Spanned<AST::Identifier>& qualified_identifier, Scope con
 			Diagnostic::error(
 				std::move(title),
 				std::move(subtitle),
-				{Diagnostic::Sample(get_context(file_id), qualified_identifier.span)}
+				{Diagnostic::Sample(get_context(file_id), identifier.span)}
 			)
 		);
 		return;
 	}
 
-	if (!qualified_identifier.value.absolute) {
+	if (!identifier.value.absolute) {
 		// TODO: resolve non-absolute qualified identifiers
 		std::cout << "unsupported non-absolute qualified identifier detected!" << std::endl;
 		return;
@@ -125,10 +125,10 @@ void Resolver::resolve(Spanned<AST::Identifier>& qualified_identifier, Scope con
 
 	// since this is an absolutely qualified identifier, we must find it in the global scope
 	// we do an initial check to ensure that it is in the global scope
-	if (!module_table_.contains(qualified_identifier.value.path[0].value)) {
+	if (!module_table_.contains(identifier.value.path[0].value)) {
 		std::stringstream title_stream {}, subtitle_stream {};
 		title_stream << "unknown symbol '";
-		title_stream << qualified_identifier.value.path[0].value;
+		title_stream << identifier.value.path[0].value;
 		title_stream << '\'';
 		subtitle_stream << "could not find any symbol with that name in the global scope (available: ";
 		size_t count = 0;
@@ -143,46 +143,51 @@ void Resolver::resolve(Spanned<AST::Identifier>& qualified_identifier, Scope con
 			Diagnostic::error(
 				std::move(title),
 				std::move(subtitle),
-				{Diagnostic::Sample(get_context(file_id), qualified_identifier.value.path[0].span)}
+				{Diagnostic::Sample(get_context(file_id), identifier.value.path[0].span)}
 			)
 		);
 		return;
 	}
 
 	// the module to check within
-	AST::Module const* root_module = module_table_.at(qualified_identifier.value.path[0].value);
-	// the last item that was pointed to
-	Symbol* pointed_item = nullptr;
-	// whether we have already thrown the privacy violation diagnostic
-	bool privacy_violated_diagnostic_thrown = false;
-	// whether we found anything last iteration
-	bool found = false;
+	AST::Module const* root_module = module_table_.at(identifier.value.path[0].value);
+	// the item(s) found after traversal
+	std::vector<Symbol*> pointed_items {};
+	// the id for each of the pointed items
+	std::vector<uint32_t> pointed_ids {};
 	// set this once we reach a function or something decidedly without subitems
 	bool cannot_traverse_further = false;
 
-	for (size_t i = 1; i < qualified_identifier.value.path.size(); ++i) {
-		Spanned<std::string> const& fragment = qualified_identifier.value.path[i];
+	for (size_t i = 1; i < identifier.value.path.size(); ++i) {
+		Spanned<std::string> const& fragment = identifier.value.path[i];
 		if (cannot_traverse_further) {
 			// for now, this can only mean it is a function, which does not have subitems
 			std::cout << "tried to access a function's subitems !" << std::endl;
 			break;
 		}
-		found = false;
+
+		// we reset each cycle so that we don't end up racking up all of the pointed items
+		pointed_items = {};
+		pointed_ids   = {};
 		for (auto const& item : root_module->body.items) {
 			auto const& value = std::get<AST::Module::InnerItem>(item.value);
 			std::string name  = AST::Module::get_name(item.value);
 
 			if (name == fragment.value) {
 				// found!
+				size_t added_items = 0;
 				if (std::holds_alternative<AST::Function>(value)) {
-					pointed_item = &symbol_pool_.at(
-						std::get<AST::Function>(value).name.value.id.value()
-					);
+					assert(std::get<AST::Function>(value).name.value.id.has_value());
+					for (uint32_t id : std::get<AST::Function>(value).name.value.id.value()) {
+						pointed_items.push_back(&get_single_symbol(id));
+						added_items++;
+					}
 					cannot_traverse_further = true;
 				} else if (std::holds_alternative<AST::Module>(value)) {
 					root_module = &std::get<AST::Module>(value);
-					pointed_item
-						= &symbol_pool_.at(std::get<AST::Module>(value).name.value.id.value());
+					pointed_items.push_back(
+						&get_single_symbol(std::get<AST::Module>(value).name.value)
+					);
 				} else if (std::holds_alternative<AST::Import>(value)) {
 					auto const& import = std::get<AST::Import>(value);
 					// TODO: do something else about this & handle imports that import other imports
@@ -190,51 +195,29 @@ void Resolver::resolve(Spanned<AST::Identifier>& qualified_identifier, Scope con
 						std::cout << "unresolved import !" << std::endl;
 						break;
 					}
-					pointed_item = &symbol_pool_.at(import.name.value.id.value());
-					// change the root module if we are definitely pointing towards a module
-					if (std::holds_alternative<AST::Module*>(pointed_item->item))
-						root_module = &*std::get<AST::Module*>(pointed_item->item);
-				}
-				if (!std::get<bool>(item.value) && !privacy_violated_diagnostic_thrown) {
-					// this item is not exported, but we're trying to access it
-					// TODO: check if it is in the same scope as ours or on a parent module(?) to
-					// not raise the diagnostic
-					std::string title = std::format("tried to access unexported item '{}'", name);
+					for (uint32_t id : import.name.value.id.value()) {
+						pointed_items.push_back(&get_single_symbol(id));
+						added_items++;
 
-					Diagnostic::Sample declared_sample {
-						get_context(pointed_item->file_id),
-						{Diagnostic::Sample::Label {
-							pointed_item->span,
-							"item declared here",
-							OutFmt::Color::BrightBlue
-						}}
-					};
-					Diagnostic::Sample accessed_sample {
-						get_context(file_id),
-						{Diagnostic::Sample::Label {
-							Span(qualified_identifier.span.start, fragment.span.end),
-							"item accessed here",
-							OutFmt::Color::BrightMagenta
-						}}
-					};
-					parsed_files.at(file_id).diagnostics.push_back(
-						Diagnostic::error(
-							std::move(title),
-							"the item must be exported for it to be accessible from outside its scope",
-							{declared_sample, accessed_sample}
-						)
-					);
-					privacy_violated_diagnostic_thrown = true;
+						// change the root module if we are definitely pointing towards a module
+						if (std::holds_alternative<AST::Module*>(
+							    pointed_items.at(pointed_items.size() - 1)->item
+						    ))
+							root_module = &*std::get<AST::Module*>(
+								pointed_items.at(pointed_items.size() - 1)->item
+							);
+					}
 				}
-				found = true;
-				break;
+
+				for (size_t j = 1; j <= added_items; ++j)
+					pointed_ids.push_back(pointed_items.at(pointed_items.size() - j)->id);
 			}
 		}
 
-		if (!found) {
+		if (pointed_items.empty()) {
 			std::stringstream title_stream {}, subtitle_stream {};
 			title_stream << "unknown symbol '";
-			title_stream << qualified_identifier.value.path[i].value;
+			title_stream << identifier.value.path[i].value;
 			title_stream << '\'';
 			subtitle_stream
 				<< "could not find any symbol with that name in the specified scope (available: ";
@@ -251,20 +234,15 @@ void Resolver::resolve(Spanned<AST::Identifier>& qualified_identifier, Scope con
 				Diagnostic::error(
 					std::move(title),
 					std::move(subtitle),
-					{Diagnostic::Sample(
-						get_context(file_id),
-						qualified_identifier.value.path[i].span
-					)}
+					{Diagnostic::Sample(get_context(file_id), identifier.value.path[i].span)}
 				)
 			);
 			break;
 		}
 	}
 
-	if (!found) return;
-
-	assert(pointed_item);
-	qualified_identifier.value.id = pointed_item->id;
+	// if we didn't find anything, we intentionally pass on the empty vector to the identifier
+	identifier.value.id = pointed_ids;
 }
 
 void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope const& scope, uint32_t file_id) {
@@ -315,14 +293,14 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, uint32_t 
 	if (declare.value.has_value()) resolve(declare.value.value(), scope, file_id);
 	identify(declare.name.value);
 	symbol_pool_.push_back(
-		Symbol {declare.name.value.id.value(),
+		Symbol {declare.name.value.id.value()[0],
 	                file_id,
 	                declare.name.span,
 	                declare.name.value.name(),
 	                {},
 	                declare.mutable_.value}
 	);
-	scope.symbols.insert_or_assign(declare.name.value.name(), &symbol_pool_.at(declare.name.value.id.value()));
+	scope.symbols.insert_or_assign(declare.name.value.name(), &get_single_symbol(declare.name.value));
 }
 
 void Resolver::resolve(AST::Statement::Set& set, Scope& scope, uint32_t file_id) {
@@ -357,17 +335,14 @@ void Resolver::resolve(AST::Function& function, Scope scope, uint32_t file_id) {
 		identify(argument.name.value);
 		// TODO: support mutable arguments
 		symbol_pool_.push_back(
-			Symbol {argument.name.value.id.value(),
+			Symbol {argument.name.value.id.value()[0],
 		                file_id,
 		                argument.name.span,
 		                argument.name.value.name(),
 		                {},
 		                false}
 		);
-		child_scope.symbols.emplace(
-			argument.name.value.name(),
-			&symbol_pool_.at(argument.name.value.id.value())
-		);
+		child_scope.symbols.emplace(argument.name.value.name(), &get_single_symbol(argument.name.value));
 	}
 	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
 }
@@ -380,23 +355,25 @@ void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
 			auto& function = std::get<AST::Function>(value);
 			child_scope.symbols.emplace(
 				function.name.value.name(),
-				&symbol_pool_.at(function.name.value.id.value())
+				&get_single_symbol(function.name.value)
 			);
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			auto& submodule = std::get<AST::Module>(value);
 			child_scope.symbols.emplace(
 				submodule.name.value.name(),
-				&symbol_pool_.at(submodule.name.value.id.value())
+				&get_single_symbol(submodule.name.value)
 			);
 		} else if (std::holds_alternative<AST::Import>(value)) {
 			auto& import = std::get<AST::Import>(value);
 			if (!import.name.value.absolute) continue;
 			resolve(import.name, child_scope, file_id);
-			if (!import.name.value.id.has_value()) continue;
-			child_scope.symbols.emplace(
-				import.name.value.last_fragment().value,
-				&symbol_pool_.at(import.name.value.id.value())
-			);
+			if (!import.name.value.id.has_value() || import.name.value.id.value().empty()) continue;
+			for (uint32_t id : import.name.value.id.value()) {
+				child_scope.symbols.emplace(
+					import.name.value.last_fragment().value,
+					&symbol_pool_.at(id)
+				);
+			}
 		}
 	}
 

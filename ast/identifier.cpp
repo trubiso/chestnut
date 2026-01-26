@@ -8,7 +8,15 @@ std::ostream& operator<<(std::ostream& os, Identifier const& identifier) {
 		os << identifier.path[i].value;
 		if (i + 1 < identifier.path.size()) os << "::";
 	}
-	if (identifier.id.has_value()) { os << " (@" << identifier.id.value() << ')'; }
+	if (identifier.id.has_value()) {
+		os << " (";
+		size_t count = 0;
+		for (uint32_t id : identifier.id.value()) {
+			os << '@' << id;
+			if (++count < identifier.id.value().size()) os << ", ";
+		}
+		os << ')';
+	}
 	return os;
 }
 

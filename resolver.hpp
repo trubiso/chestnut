@@ -40,9 +40,17 @@ private:
 
 	std::vector<Symbol> symbol_pool_;
 
-	// FIXME: support overloaded functions
+	inline Symbol& get_single_symbol(uint32_t id) { return symbol_pool_.at(id); }
+
+	inline Symbol& get_single_symbol(AST::Identifier const& identifier) {
+		std::cout << identifier << std::endl;
+		assert(identifier.id.has_value() && identifier.id.value().size() == 1);
+		return get_single_symbol(identifier.id.value().at(0));
+	}
+
 	struct Scope {
-		Scope const*                             parent = nullptr;
+		Scope const* parent = nullptr;
+		// FIXME: support names that may refer to more than one symbol
 		std::unordered_map<std::string, Symbol*> symbols;
 	};
 
@@ -59,7 +67,7 @@ private:
 	/// Populates the module table according to the parsed files.
 	void populate_module_table();
 
-	/// Adds an ID to the identifier (but the caller must register it in the symbol pool).
+	/// Produces a single ID for the identifier and sets it; the caller must register this ID in the symbol pool.
 	void identify(AST::Identifier&);
 	/// Identifies the module with an ID and its non-import items.
 	void identify(AST::Module&, uint32_t file_id);

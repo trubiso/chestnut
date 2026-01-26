@@ -9,8 +9,10 @@ namespace AST {
 struct Identifier {
 	/// Whether the identifier is an absolutely qualified identifier or not.
 	bool absolute;
-	/// The resolved ID pertaining to this identifier.
-	std::optional<uint32_t> id;
+	/// The candidates for this identifier's ID. It starts out as std::nullopt, but becomes a vector of candidates
+	/// which can have 0 elements, meaning no symbol matches this identifier.
+	// TODO: maybe swap out for a set
+	std::optional<std::vector<uint32_t>> id;
 	// FIXME: this should absolutely be a SmallVec to avoid heap allocs. also, we're storing the span twice if we do
 	// Spanned<Identifier> and it's unqualified.
 	/// The path for the qualified identifier. For unqualified identifiers, this holds a single value.
