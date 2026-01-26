@@ -11,7 +11,7 @@ std::ostream& operator<<(std::ostream& os, Identifier const& identifier) {
 	if (identifier.id.has_value()) {
 		os << " (";
 		size_t count = 0;
-		for (uint32_t id : identifier.id.value()) {
+		for (SymbolID id : identifier.id.value()) {
 			os << '@' << id;
 			if (++count < identifier.id.value().size()) os << ", ";
 		}

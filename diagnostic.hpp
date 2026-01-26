@@ -8,8 +8,11 @@
 #include <vector>
 
 struct FileContext {
+	typedef uint32_t ID;
+
 	std::string name;
-	uint32_t    file_id;
+
+	ID file_id;
 	/// An array containing the start of each of the lines of code in a file.
 	std::vector<size_t> loc;
 	// we don't want to own the source!

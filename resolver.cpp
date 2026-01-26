@@ -12,11 +12,11 @@ void Resolver::resolve() {
 	resolve_identifiers();
 }
 
-uint32_t Resolver::next() {
+AST::SymbolID Resolver::next() {
 	return counter_++;
 }
 
-FileContext Resolver::get_context(uint32_t file_id) {
+FileContext Resolver::get_context(FileContext::ID file_id) {
 	return FileContext {
 		parsed_files.at(file_id).name,
 		file_id,
@@ -38,7 +38,7 @@ void Resolver::identify(AST::Identifier& identifier) {
 	identifier.id = {next()};
 }
 
-void Resolver::identify(AST::Module& module, uint32_t file_id) {
+void Resolver::identify(AST::Module& module, FileContext::ID file_id) {
 	// TODO: ensure there are no duplicated item names (including imports)
 	identify(module.name.value);
 	symbol_pool_.push_back(
@@ -56,7 +56,7 @@ void Resolver::identify(AST::Module& module, uint32_t file_id) {
 	}
 }
 
-void Resolver::identify(AST::Function& function, uint32_t file_id) {
+void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 	identify(function.name.value);
 	symbol_pool_.push_back(
 		Symbol {function.name.value.id.value()[0],
@@ -73,7 +73,7 @@ void Resolver::identify_module_items() {
 }
 
 // FIXME: once more, we don't need this span, since the diagnostics that did need it are gone, maybe we should remove it
-void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope, uint32_t file_id) {
+void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope, FileContext::ID file_id) {
 	// do not try to resolve already resolved identifiers (just in case, i don't think we will ever hit this)
 	if (identifier.value.id.has_value()) return;
 
@@ -86,7 +86,7 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 			if (traversing_scope->symbols.contains(identifier.value.name())) {
 				std::vector<Symbol*> const& symbols
 					= traversing_scope->symbols.at(identifier.value.name());
-				identifier.value.id = std::vector<uint32_t> {};
+				identifier.value.id = std::vector<AST::SymbolID> {};
 				for (Symbol* symbol : symbols) identifier.value.id.value().push_back(symbol->id);
 				return;
 			}
@@ -157,7 +157,7 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 	// the item(s) found after traversal
 	std::vector<Symbol*> pointed_items {};
 	// the id for each of the pointed items
-	std::vector<uint32_t> pointed_ids {};
+	std::vector<AST::SymbolID> pointed_ids {};
 	// set this once we reach a function or something decidedly without subitems
 	bool cannot_traverse_further = false;
 
@@ -181,7 +181,7 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 				size_t added_items = 0;
 				if (std::holds_alternative<AST::Function>(value)) {
 					assert(std::get<AST::Function>(value).name.value.id.has_value());
-					for (uint32_t id : std::get<AST::Function>(value).name.value.id.value()) {
+					for (AST::SymbolID id : std::get<AST::Function>(value).name.value.id.value()) {
 						pointed_items.push_back(&get_single_symbol(id));
 						added_items++;
 					}
@@ -198,7 +198,7 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 						std::cout << "unresolved import !" << std::endl;
 						break;
 					}
-					for (uint32_t id : import.name.value.id.value()) {
+					for (AST::SymbolID id : import.name.value.id.value()) {
 						pointed_items.push_back(&get_single_symbol(id));
 						added_items++;
 
@@ -248,23 +248,27 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 	identifier.value.id = pointed_ids;
 }
 
-void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope const& scope, uint32_t file_id) {
+void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope const& scope, FileContext::ID file_id) {
 	resolve(*unary_operation.operand, scope, file_id);
 }
 
-void Resolver::resolve(AST::Expression::BinaryOperation& binary_operation, Scope const& scope, uint32_t file_id) {
+void Resolver::resolve(
+	AST::Expression::BinaryOperation& binary_operation,
+	Scope const&                      scope,
+	FileContext::ID                   file_id
+) {
 	resolve(*binary_operation.lhs, scope, file_id);
 	resolve(*binary_operation.rhs, scope, file_id);
 }
 
-void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const& scope, uint32_t file_id) {
+void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const& scope, FileContext::ID file_id) {
 	resolve(*function_call.callee, scope, file_id);
 	for (auto& argument : function_call.arguments.ordered) { resolve(argument, scope, file_id); }
 	// FIXME: we need to properly resolve these labels wrt. func args, for which we need to pre-identify func args
 	for (auto& argument : function_call.arguments.labeled) { resolve(std::get<1>(argument), scope, file_id); }
 }
 
-void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scope, uint32_t file_id) {
+void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scope, FileContext::ID file_id) {
 	switch (expression.kind()) {
 	case AST::Expression::Kind::UnaryOperation:  resolve(expression.get_unary_operation(), scope, file_id); return;
 	case AST::Expression::Kind::BinaryOperation: resolve(expression.get_binary_operation(), scope, file_id); return;
@@ -287,11 +291,11 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	}
 }
 
-void Resolver::resolve(Spanned<AST::Expression>& expression, Scope const& scope, uint32_t file_id) {
+void Resolver::resolve(Spanned<AST::Expression>& expression, Scope const& scope, FileContext::ID file_id) {
 	resolve(expression.value, expression.span, scope, file_id);
 }
 
-void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, uint32_t file_id) {
+void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileContext::ID file_id) {
 	// resolve the value before the name, otherwise 'const a = a;' would not work
 	if (declare.value.has_value()) resolve(declare.value.value(), scope, file_id);
 	identify(declare.name.value);
@@ -310,17 +314,17 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, uint32_t 
 	);
 }
 
-void Resolver::resolve(AST::Statement::Set& set, Scope& scope, uint32_t file_id) {
+void Resolver::resolve(AST::Statement::Set& set, Scope& scope, FileContext::ID file_id) {
 	// TODO: maybe check here for mutability?
 	resolve(set.lhs, scope, file_id);
 	resolve(set.rhs, scope, file_id);
 }
 
-void Resolver::resolve(AST::Statement::Return& return_, Scope& scope, uint32_t file_id) {
+void Resolver::resolve(AST::Statement::Return& return_, Scope& scope, FileContext::ID file_id) {
 	if (return_.value.has_value()) resolve(return_.value.value(), scope, file_id);
 }
 
-void Resolver::resolve(Spanned<AST::Statement>& statement, Scope& scope, uint32_t file_id) {
+void Resolver::resolve(Spanned<AST::Statement>& statement, Scope& scope, FileContext::ID file_id) {
 	switch (statement.value.kind()) {
 	case AST::Statement::Kind::Declare: resolve(statement.value.get_declare(), scope, file_id); return;
 	case AST::Statement::Kind::Set:     resolve(statement.value.get_set(), scope, file_id); return;
@@ -332,11 +336,11 @@ void Resolver::resolve(Spanned<AST::Statement>& statement, Scope& scope, uint32_
 	}
 }
 
-void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, uint32_t file_id) {
+void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext::ID file_id) {
 	for (auto& statement : ast_scope) { resolve(statement, resolver_scope, file_id); }
 }
 
-void Resolver::resolve(AST::Function& function, Scope scope, uint32_t file_id) {
+void Resolver::resolve(AST::Function& function, Scope scope, FileContext::ID file_id) {
 	Scope child_scope {&scope, {}};
 	for (auto& argument : function.arguments) {
 		identify(argument.name.value);
@@ -358,7 +362,7 @@ void Resolver::resolve(AST::Function& function, Scope scope, uint32_t file_id) {
 	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
 }
 
-void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
+void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id) {
 	Scope child_scope {&scope, {}};
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
@@ -384,7 +388,7 @@ void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
 			resolve(import.name, child_scope, file_id);
 			if (!import.name.value.id.has_value() || import.name.value.id.value().empty()) continue;
 			child_scope.symbols.emplace(import.name.value.last_fragment().value, std::vector<Symbol*> {});
-			for (uint32_t id : import.name.value.id.value()) {
+			for (AST::SymbolID id : import.name.value.id.value()) {
 				child_scope.symbols.at(import.name.value.last_fragment().value)
 					.push_back(&symbol_pool_.at(id));
 			}
