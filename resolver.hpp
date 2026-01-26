@@ -50,8 +50,7 @@ private:
 
 	struct Scope {
 		Scope const* parent = nullptr;
-		// FIXME: support names that may refer to more than one symbol
-		std::unordered_map<std::string, Symbol*> symbols;
+		std::unordered_map<std::string, std::vector<Symbol*>> symbols;
 	};
 
 	std::unordered_map<std::string, AST::Module*> module_table_;

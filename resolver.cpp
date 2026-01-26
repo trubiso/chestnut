@@ -84,7 +84,10 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 		Scope const* traversing_scope = &scope;
 		while (traversing_scope != nullptr) {
 			if (traversing_scope->symbols.contains(identifier.value.name())) {
-				identifier.value.id = {traversing_scope->symbols.at(identifier.value.name())->id};
+				std::vector<Symbol*> const& symbols
+					= traversing_scope->symbols.at(identifier.value.name());
+				identifier.value.id = std::vector<uint32_t> {};
+				for (Symbol* symbol : symbols) identifier.value.id.value().push_back(symbol->id);
 				return;
 			}
 			traversing_scope = traversing_scope->parent;
@@ -300,7 +303,11 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, uint32_t 
 	                {},
 	                declare.mutable_.value}
 	);
-	scope.symbols.insert_or_assign(declare.name.value.name(), &get_single_symbol(declare.name.value));
+	// intentionally replace (shadowing)
+	scope.symbols.insert_or_assign(
+		declare.name.value.name(),
+		std::vector<Symbol*> {&get_single_symbol(declare.name.value)}
+	);
 }
 
 void Resolver::resolve(AST::Statement::Set& set, Scope& scope, uint32_t file_id) {
@@ -342,7 +349,11 @@ void Resolver::resolve(AST::Function& function, Scope scope, uint32_t file_id) {
 		                {},
 		                false}
 		);
-		child_scope.symbols.emplace(argument.name.value.name(), &get_single_symbol(argument.name.value));
+		// intentionally replace (shadowing)
+		child_scope.symbols.insert_or_assign(
+			argument.name.value.name(),
+			std::vector<Symbol*> {&get_single_symbol(argument.name.value)}
+		);
 	}
 	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
 }
@@ -353,26 +364,29 @@ void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
 			auto& function = std::get<AST::Function>(value);
-			child_scope.symbols.emplace(
-				function.name.value.name(),
-				&get_single_symbol(function.name.value)
-			);
+			if (child_scope.symbols.contains(function.name.value.name()))
+				child_scope.symbols.at(function.name.value.name())
+					.push_back(&get_single_symbol(function.name.value));
+			else
+				child_scope.symbols.emplace(
+					function.name.value.name(),
+					std::vector<Symbol*> {&get_single_symbol(function.name.value)}
+				);
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			auto& submodule = std::get<AST::Module>(value);
 			child_scope.symbols.emplace(
 				submodule.name.value.name(),
-				&get_single_symbol(submodule.name.value)
+				std::vector<Symbol*> {&get_single_symbol(submodule.name.value)}
 			);
 		} else if (std::holds_alternative<AST::Import>(value)) {
 			auto& import = std::get<AST::Import>(value);
 			if (!import.name.value.absolute) continue;
 			resolve(import.name, child_scope, file_id);
 			if (!import.name.value.id.has_value() || import.name.value.id.value().empty()) continue;
+			child_scope.symbols.emplace(import.name.value.last_fragment().value, std::vector<Symbol*> {});
 			for (uint32_t id : import.name.value.id.value()) {
-				child_scope.symbols.emplace(
-					import.name.value.last_fragment().value,
-					&symbol_pool_.at(id)
-				);
+				child_scope.symbols.at(import.name.value.last_fragment().value)
+					.push_back(&symbol_pool_.at(id));
 			}
 		}
 	}
