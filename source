@@ -1,13 +1,13 @@
-import ::my_module::my_submodule::sum_numbers;
+export import ::my_module::my_submodule::sum_numbers;
 
-module a {
+export module a {
 	import ::source::b::b;
-	func a() {}
+	export func a() {}
 }
 
-module b {
+export module b {
 	import ::source::a::a;
-	func b() {}
+	export func b() {}
 }
 
 export module hello {

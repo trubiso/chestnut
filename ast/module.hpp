@@ -2,7 +2,6 @@
 #include "../span.hpp"
 #include "function.hpp"
 #include "identifier.hpp"
-#include "qualified_identifier.hpp"
 #include "tag.hpp"
 
 #include <variant>
@@ -12,12 +11,12 @@ namespace AST {
 
 // TODO: more complex imports
 struct Import {
-	Spanned<QualifiedIdentifier> name;
+	Spanned<Identifier> name;
 };
 
 // TODO: add an item for constants
 struct Module {
-	Spanned<Identifier> name;
+	Spanned<Identifier> name;  // unqualified
 
 	// we cannot make this a struct, because C++ does not allow incomplete types in variants (which is fair, but we
 	// know this will be on the heap anyways).

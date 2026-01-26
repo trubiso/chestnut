@@ -16,7 +16,7 @@ typedef std::vector<Spanned<Statement>> Scope;
 
 struct Statement {
 	struct Declare {
-		Spanned<Identifier>                name;
+		Spanned<Identifier>                name;  // unqualified
 		std::optional<Spanned<Type>>       type;
 		std::optional<Spanned<Expression>> value;
 
@@ -28,7 +28,6 @@ struct Statement {
 		Spanned<Expression> rhs;
 	};
 
-	// TODO: maybe this shouldn't be a separate struct :P
 	struct Return {
 		std::optional<Spanned<Expression>> value;
 	};

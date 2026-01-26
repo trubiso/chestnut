@@ -1,11 +1,9 @@
 #pragma once
 #include "../token.hpp"
 #include "identifier.hpp"
-#include "qualified_identifier.hpp"
 
 #include <memory>
 #include <optional>
-#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -23,32 +21,27 @@ struct Expression {
 
 		struct NumberLiteral {
 			std::string               literal;
-			std::optional<Identifier> suffix;
+			std::optional<Identifier> suffix;  // unqualified
 		};
 
 		struct StringLiteral {
 			std::string               literal;
-			std::optional<Identifier> suffix;
+			std::optional<Identifier> suffix;  // unqualified
 		};
 
 		struct CharLiteral {
 			char                      literal;
-			std::optional<Identifier> suffix;
+			std::optional<Identifier> suffix;  // unqualified
 		};
 
-		typedef std::variant<
-			QualifiedIdentifier,
-			NumberLiteral,
-			StringLiteral,
-			CharLiteral,
-			std::unique_ptr<Expression>>
+		typedef std::variant<Identifier, NumberLiteral, StringLiteral, CharLiteral, std::unique_ptr<Expression>>
 			value_t;
 
 		value_t value;
 
 		inline constexpr Kind kind() const { return (Kind) value.index(); }
 
-		inline static Atom make_identifier(QualifiedIdentifier&& identifier) {
+		inline static Atom make_identifier(Identifier&& identifier) {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
 		}
 
@@ -83,11 +76,9 @@ struct Expression {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
 		}
 
-		inline QualifiedIdentifier const& get_identifier() const {
-			return std::get<(size_t) Kind::Identifier>(value);
-		}
+		inline Identifier const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 
-		inline QualifiedIdentifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
+		inline Identifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline NumberLiteral const& get_number_literal() const {
 			return std::get<(size_t) Kind::NumberLiteral>(value);

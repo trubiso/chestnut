@@ -94,7 +94,7 @@ std::optional<char> Parser::consume_char_literal() {
 	return token.get_char_literal();
 }
 
-std::optional<std::string> Parser::consume_bare_identifier() {
+std::optional<std::string> Parser::consume_bare_unqualified_identifier() {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return {};
 	Token token = maybe_token.value();
@@ -103,11 +103,13 @@ std::optional<std::string> Parser::consume_bare_identifier() {
 	return token.get_identifier();
 }
 
-std::optional<Identifier> Parser::consume_identifier() {
-	return consume_bare_identifier().transform([](auto&& value) { return Identifier(value); });
+std::optional<Identifier> Parser::consume_unqualified_identifier() {
+	return SPANNED(consume_bare_unqualified_identifier).transform([](auto&& value) {
+		return Identifier(std::move(value));
+	});
 }
 
-std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
+std::optional<Identifier> Parser::consume_identifier() {
 	// NOTE: in the future, we will have to account for static members (T::a) and potentially discarded identifiers
 	// at the beginning (_::a)
 
@@ -117,27 +119,28 @@ std::optional<QualifiedIdentifier> Parser::consume_qualified_identifier() {
 	// if :: was consumed, that means this is definitely and unambiguously a qualified identifier now
 	std::optional<Spanned<std::string>> root
 		= absolute ? SPANNED_REASON(
-				     expect_bare_identifier,
+				     expect_bare_unqualified_identifier,
 				     "expected an identifier (`::` starts an absolute qualified identifier)"
 			     )
-	                   : SPANNED(consume_bare_identifier);
+	                   : SPANNED(consume_bare_unqualified_identifier);
 	// now if we didn't find the root we can safely return because, if :: has been parsed, we'll have skipped it :-)
 	if (!root.has_value()) return {};
 	std::vector<Spanned<std::string>> path {root.value()};
 	while (consume_symbol(Token::Symbol::ColonColon)) {
 		std::optional<Spanned<std::string>> piece = SPANNED_REASON(
-			expect_bare_identifier,
+			expect_bare_unqualified_identifier,
 			"expected an identifier (there is a trailing `::` in a preceding qualified identifier)"
 		);
-		if (!piece.has_value()) return QualifiedIdentifier {absolute, {}, path};
+		if (!piece.has_value()) return Identifier(absolute, std::move(path));
 		path.push_back(piece.value());
 	}
-	return QualifiedIdentifier {absolute, {}, path};
+	return Identifier(absolute, std::move(path));
 }
 
 std::optional<Tag> Parser::consume_tag() {
 	if (!consume_symbol(Token::Symbol::At)) return {};
-	std::optional<std::string> name = expect_bare_identifier("expected an identifier (`@` starts a tag)");
+	std::optional<std::string> name
+		= expect_bare_unqualified_identifier("expected an identifier (`@` starts a tag)");
 	if (!name.has_value()) return {};
 	return Tag {name.value()};
 }
@@ -147,7 +150,8 @@ std::optional<Type> Parser::consume_type() {
 	// for now, we're only doing built-in types, so it's much easier for us!
 	// that's also why we're so harsh on retroceding instead of expecting.
 
-	std::optional<std::string_view> maybe_name = consume_bare_identifier();  // all built-ins are just identifiers
+	std::optional<std::string_view> maybe_name
+		= consume_bare_unqualified_identifier();  // all built-ins are just identifiers
 	if (!maybe_name.has_value()) return {};
 	std::string_view name = maybe_name.value();
 
@@ -199,7 +203,7 @@ none_match:
 
 std::optional<Expression> Parser::consume_expression_atom() {
 	// it could be a potentially qualified identifier
-	std::optional<QualifiedIdentifier> identifier = consume_qualified_identifier();
+	std::optional<Identifier> identifier = consume_identifier();
 	if (identifier.has_value())
 		return Expression::make_atom(Expression::Atom::make_identifier(std::move(identifier.value())));
 
@@ -208,19 +212,19 @@ std::optional<Expression> Parser::consume_expression_atom() {
 	std::optional<Identifier>  suffix;  // we always try to consume an extra suffix
 
 	if (sv = consume_number_literal(), sv.has_value()) {
-		suffix = consume_identifier();
+		suffix = consume_unqualified_identifier();
 		return Expression::make_atom(Expression::Atom::make_number_literal(sv.value(), suffix));
 	}
 
 	if (sv = consume_string_literal(), sv.has_value()) {
-		suffix = consume_identifier();
+		suffix = consume_unqualified_identifier();
 		return Expression::make_atom(Expression::Atom::make_string_literal(sv.value(), suffix));
 	}
 
 	std::optional<char> c;
 
 	if (c = consume_char_literal(), c.has_value()) {
-		suffix = consume_identifier();
+		suffix = consume_unqualified_identifier();
 		return Expression::make_atom(Expression::Atom::make_char_literal(c.value(), suffix));
 	}
 
@@ -252,7 +256,7 @@ std::optional<Expression::FunctionCall::Argument> Parser::consume_expression_fun
 	    && argument_lhs.value().value.get_atom().get_identifier().is_unqualified()
 	    && consume_symbol(Token::Symbol::Colon)) {
 		// then, the bare unqualified identifier is the label
-		Spanned<Identifier> label = argument_lhs.value().value.get_atom().get_identifier().get_unqualified();
+		Spanned<Identifier> label = argument_lhs.value().value.get_atom().get_identifier().extract_unqualified_with_span();
 		// and we require an actual argument
 		std::optional<Spanned<Expression>> argument_rhs
 			= SPANNED_REASON(expect_expression, "expected argument value after argument label");
@@ -578,16 +582,16 @@ bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
 	return false;
 }
 
-std::optional<std::string> Parser::expect_bare_identifier(std::string_view reason) {
-	EXPECT(consume_bare_identifier, "identifier");
+std::optional<std::string> Parser::expect_bare_unqualified_identifier(std::string_view reason) {
+	EXPECT(consume_bare_unqualified_identifier, "identifier");
+}
+
+std::optional<Identifier> Parser::expect_unqualified_identifier(std::string_view reason) {
+	EXPECT(consume_unqualified_identifier, "identifier");
 }
 
 std::optional<Identifier> Parser::expect_identifier(std::string_view reason) {
-	EXPECT(consume_identifier, "identifier");
-}
-
-std::optional<QualifiedIdentifier> Parser::expect_qualified_identifier(std::string_view reason) {
-	EXPECT(consume_qualified_identifier, "(qualified) identifier");
+	EXPECT(consume_identifier, "(qualified) identifier");
 }
 
 std::optional<Type> Parser::expect_type(std::string_view reason) {
@@ -670,8 +674,8 @@ std::optional<Function> Parser::parse_function() {
 
 std::optional<Import> Parser::parse_import() {
 	if (!consume_keyword(Keyword::Import)) return {};
-	std::optional<Spanned<QualifiedIdentifier>> name
-		= SPANNED_REASON(expect_qualified_identifier, "expected name of the module to import");
+	std::optional<Spanned<Identifier>> name
+		= SPANNED_REASON(expect_identifier, "expected name of the module to import");
 	if (!name.has_value()) return {};
 	if (!name.value().value.absolute)
 		diagnostics_.push_back(
@@ -737,7 +741,7 @@ std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 Module Parser::parse_all(std::string name) {
 	Module::Body body = parse_module_body(true).value_or(Module::Body {});
 	return Module {
-		Spanned<Identifier> {Span(0), Identifier(name)},
+		Spanned<Identifier> {Span(0), Identifier(Spanned<std::string> {Span(0), name})},
 		std::move(body)
 	};
 }

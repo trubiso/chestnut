@@ -10,11 +10,11 @@ namespace AST {
 
 struct Function {
 	struct Argument {
-		Spanned<Identifier> name;
+		Spanned<Identifier> name;  // unqualified
 		Spanned<Type>       type;
 	};
 
-	Spanned<Identifier>          name;
+	Spanned<Identifier>          name;  // unqualified
 	std::vector<Argument>        arguments;
 	std::optional<Spanned<Type>> return_type;
 

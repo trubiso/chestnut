@@ -3,7 +3,6 @@
 #include "ast/function.hpp"
 #include "ast/identifier.hpp"
 #include "ast/module.hpp"
-#include "ast/qualified_identifier.hpp"
 #include "ast/statement.hpp"
 #include "ast/tag.hpp"
 #include "ast/type.hpp"
@@ -88,9 +87,9 @@ private:
 	std::optional<std::string> consume_string_literal();
 	std::optional<char>        consume_char_literal();
 
-	std::optional<std::string>         consume_bare_identifier();
-	std::optional<Identifier>          consume_identifier();
-	std::optional<QualifiedIdentifier> consume_qualified_identifier();
+	std::optional<std::string> consume_bare_unqualified_identifier();
+	std::optional<Identifier>  consume_unqualified_identifier();
+	std::optional<Identifier>  consume_identifier();
 
 	std::optional<Tag> consume_tag();
 
@@ -126,9 +125,9 @@ private:
 		return expect_symbol(reason, Token::Symbol::Semicolon);
 	}
 
-	std::optional<std::string>         expect_bare_identifier(std::string_view reason);
-	std::optional<Identifier>          expect_identifier(std::string_view reason);
-	std::optional<QualifiedIdentifier> expect_qualified_identifier(std::string_view reason);
+	std::optional<std::string> expect_bare_unqualified_identifier(std::string_view reason);
+	std::optional<Identifier>  expect_unqualified_identifier(std::string_view reason);
+	std::optional<Identifier>  expect_identifier(std::string_view reason);
 
 	std::optional<Type> expect_type(std::string_view reason);
 

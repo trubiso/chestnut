@@ -32,9 +32,9 @@ std::ostream& operator<<(std::ostream& os, Module const& module) {
 
 std::string const& Module::get_name(InnerItem const& inner_item) {
 	if (std::holds_alternative<AST::Function>(inner_item))
-		return std::get<AST::Function>(inner_item).name.value.name;
+		return std::get<AST::Function>(inner_item).name.value.name();
 	else if (std::holds_alternative<AST::Module>(inner_item))
-		return std::get<AST::Module>(inner_item).name.value.name;
+		return std::get<AST::Module>(inner_item).name.value.name();
 	else if (std::holds_alternative<AST::Import>(inner_item))
 		return std::get<AST::Import>(inner_item).name.value.last_fragment().value;
 }

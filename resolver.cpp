@@ -1,8 +1,5 @@
 #include "resolver.hpp"
 
-#include "ast/identifier.hpp"
-#include "ast/qualified_identifier.hpp"
-
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -30,7 +27,7 @@ FileContext Resolver::get_context(uint32_t file_id) {
 
 void Resolver::populate_module_table() {
 	for (ParsedFile& file : parsed_files) {
-		std::string name = file.module.name.value.name;
+		std::string name = file.module.name.value.name();
 		// TODO: do something else about this
 		if (module_table_.contains(name)) std::cout << "this should never happen! clashing names! SOS!";
 		else module_table_.emplace(name, &file.module);
@@ -45,7 +42,12 @@ void Resolver::identify(AST::Module& module, uint32_t file_id) {
 	// TODO: ensure there are no duplicated item names (including imports)
 	identify(module.name.value);
 	symbol_pool_.push_back(
-		Symbol {module.name.value.id.value(), file_id, module.name.span, module.name.value.name, &module, false}
+		Symbol {module.name.value.id.value(),
+	                file_id,
+	                module.name.span,
+	                module.name.value.name(),
+	                &module,
+	                false}
 	);
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
@@ -60,7 +62,7 @@ void Resolver::identify(AST::Function& function, uint32_t file_id) {
 		Symbol {function.name.value.id.value(),
 	                file_id,
 	                function.name.span,
-	                function.name.value.name,
+	                function.name.value.name(),
 	                &function,
 	                false}
 	);
@@ -70,27 +72,33 @@ void Resolver::identify_module_items() {
 	for (ParsedFile& file : parsed_files) { identify(file.module, file.file_id); }
 }
 
-void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& lookup_scope, uint32_t file_id) {
-	if (identifier.value.id.has_value()) return;
+void Resolver::resolve(Spanned<AST::Identifier>& qualified_identifier, Scope const& scope, uint32_t file_id) {
+	// do not try to resolve already resolved identifiers (just in case, i don't think we will ever hit this)
+	if (qualified_identifier.value.id.has_value()) return;
 
-	Scope const* scope = &lookup_scope;
-	while (scope != nullptr) {
-		if (scope->symbols.contains(identifier.value.name)) {
-			identifier.value.id = scope->symbols.at(identifier.value.name)->id;
-			break;
+	// unqualified identifiers get resolved differently
+	if (qualified_identifier.value.is_unqualified()) {
+		// Spanned<AST::Identifier> unqualified = qualified_identifier.value.extract_unqualified_with_span();
+
+		Scope const* traversing_scope = &scope;
+		while (traversing_scope != nullptr) {
+			if (traversing_scope->symbols.contains(qualified_identifier.value.name())) {
+				qualified_identifier.value.id
+					= traversing_scope->symbols.at(qualified_identifier.value.name())->id;
+				return;
+			}
+			traversing_scope = traversing_scope->parent;
 		}
-		scope = scope->parent;
-	}
 
-	if (scope == nullptr) {
-		std::string       title = std::format("unknown symbol '{}'", identifier.value.name);
+		// if we didn't find anything, throw a diagnostic
+		std::string       title = std::format("unknown symbol '{}'", qualified_identifier.value.name());
 		std::stringstream subtitle_stream {};
 		subtitle_stream << "could not find any symbol with that name in the current scope (available: ";
 		std::unordered_set<std::string> available_symbols {};
-		scope = &lookup_scope;
-		while (scope != nullptr) {
-			for (auto const& symbol : scope->symbols) available_symbols.insert(symbol.first);
-			scope = scope->parent;
+		traversing_scope = &scope;
+		while (traversing_scope != nullptr) {
+			for (auto const& symbol : traversing_scope->symbols) available_symbols.insert(symbol.first);
+			traversing_scope = traversing_scope->parent;
 		}
 		size_t count = 0;
 		for (auto const& symbol : available_symbols) {
@@ -103,17 +111,9 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& lookup
 			Diagnostic::error(
 				std::move(title),
 				std::move(subtitle),
-				{Diagnostic::Sample(get_context(file_id), identifier.span)}
+				{Diagnostic::Sample(get_context(file_id), qualified_identifier.span)}
 			)
 		);
-	}
-}
-
-void Resolver::resolve(Spanned<AST::QualifiedIdentifier>& qualified_identifier, Scope const& scope, uint32_t file_id) {
-	if (qualified_identifier.value.is_unqualified()) {
-		Spanned<AST::Identifier> unqualified = qualified_identifier.value.get_unqualified();
-		resolve(unqualified, scope, file_id);
-		qualified_identifier.value.id = unqualified.value.id;
 		return;
 	}
 
@@ -296,7 +296,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	if (atom.kind() == AST::Expression::Atom::Kind::Identifier) {
 		// for identifiers, we create a faux spanned qualified identifier, resolve it and apply that information
 		// here
-		Spanned<AST::QualifiedIdentifier> qualified_identifier {span, atom.get_identifier()};
+		Spanned<AST::Identifier> qualified_identifier {span, atom.get_identifier()};
 		resolve(qualified_identifier, scope, file_id);
 		atom.get_identifier().id = qualified_identifier.value.id;
 	} else if (atom.kind() == AST::Expression::Atom::Kind::Expression) {
@@ -318,11 +318,11 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, uint32_t 
 		Symbol {declare.name.value.id.value(),
 	                file_id,
 	                declare.name.span,
-	                declare.name.value.name,
+	                declare.name.value.name(),
 	                {},
 	                declare.mutable_.value}
 	);
-	scope.symbols.insert_or_assign(declare.name.value.name, &symbol_pool_.at(declare.name.value.id.value()));
+	scope.symbols.insert_or_assign(declare.name.value.name(), &symbol_pool_.at(declare.name.value.id.value()));
 }
 
 void Resolver::resolve(AST::Statement::Set& set, Scope& scope, uint32_t file_id) {
@@ -360,11 +360,14 @@ void Resolver::resolve(AST::Function& function, Scope scope, uint32_t file_id) {
 			Symbol {argument.name.value.id.value(),
 		                file_id,
 		                argument.name.span,
-		                argument.name.value.name,
+		                argument.name.value.name(),
 		                {},
 		                false}
 		);
-		child_scope.symbols.emplace(argument.name.value.name, &symbol_pool_.at(argument.name.value.id.value()));
+		child_scope.symbols.emplace(
+			argument.name.value.name(),
+			&symbol_pool_.at(argument.name.value.id.value())
+		);
 	}
 	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
 }
@@ -376,13 +379,13 @@ void Resolver::resolve(AST::Module& module, Scope scope, uint32_t file_id) {
 		if (std::holds_alternative<AST::Function>(value)) {
 			auto& function = std::get<AST::Function>(value);
 			child_scope.symbols.emplace(
-				function.name.value.name,
+				function.name.value.name(),
 				&symbol_pool_.at(function.name.value.id.value())
 			);
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			auto& submodule = std::get<AST::Module>(value);
 			child_scope.symbols.emplace(
-				submodule.name.value.name,
+				submodule.name.value.name(),
 				&symbol_pool_.at(submodule.name.value.id.value())
 			);
 		} else if (std::holds_alternative<AST::Import>(value)) {
