@@ -356,7 +356,6 @@ Token::Symbol Lexer::consume_symbol() {
 	default:             return partial_symbol;
 	}
 
-	// FIXME: this return is unnecessary, but cppcheck needs it
 	[[assume(false)]];
 	return partial_symbol;
 

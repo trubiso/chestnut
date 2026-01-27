@@ -53,7 +53,8 @@ std::vector<Resolver::ParsedFile> parse_files(std::vector<std::tuple<Stream<Toke
 				std::string(context.source),
 				context.name,
 				context.loc,
-				std::move(parsed)
+				std::move(parsed),
+				{}
 			}
 		);
 	}

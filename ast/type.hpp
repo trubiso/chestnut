@@ -72,6 +72,7 @@ struct Type {
 				case Width::F64:  return 64;
 				case Width::F128: return 128;
 				}
+				[[assume(false)]];
 			}
 		};
 

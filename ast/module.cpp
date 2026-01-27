@@ -10,6 +10,7 @@ std::ostream& operator<<(std::ostream& os, Module::InnerItem const& item) {
 	if (std::holds_alternative<Function>(item)) return os << std::get<Function>(item);
 	else if (std::holds_alternative<Module>(item)) return os << std::get<Module>(item);
 	else if (std::holds_alternative<Import>(item)) return os << std::get<Import>(item);
+	[[assume(false)]];
 }
 
 std::ostream& operator<<(std::ostream& os, Module::Item const& item) {
@@ -37,6 +38,7 @@ std::string const& Module::get_name(InnerItem const& inner_item) {
 		return std::get<AST::Module>(inner_item).name.value.name();
 	else if (std::holds_alternative<AST::Import>(inner_item))
 		return std::get<AST::Import>(inner_item).name.value.last_fragment().value;
+	[[assume(false)]];
 }
 
 }  // namespace AST

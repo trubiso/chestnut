@@ -43,6 +43,7 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	case Expression::Atom::Kind::CharLiteral:   return os << atom.get_char_literal();
 	case Expression::Atom::Kind::Expression:    return os << '(' << *atom.get_expression() << ')';
 	}
+	[[assume(false)]];
 }
 
 std::ostream& operator<<(std::ostream& os, Expression::UnaryOperation const& operation) {
@@ -80,6 +81,7 @@ std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 	case Expression::Kind::BinaryOperation: return os << expression.get_binary_operation();
 	case Expression::Kind::FunctionCall:    return os << expression.get_function_call();
 	}
+	[[assume(false)]];
 }
 
 }  // namespace AST

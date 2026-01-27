@@ -23,12 +23,14 @@ std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	case Type::Atom::Integer::WidthType::Ptr:   return os << "ptr";
 	case Type::Atom::Integer::WidthType::Size:  return os << "size";
 	}
+	[[assume(false)]];
 }
 
 std::ostream& operator<<(std::ostream& os, Type const& type) {
 	switch (type.kind()) {
 	case Type::Kind::Atom: return os << type.get_atom();
 	}
+	[[assume(false)]];
 }
 
 }  // namespace AST
