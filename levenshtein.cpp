@@ -10,12 +10,12 @@ inline size_t min(size_t a, size_t b, size_t c) {
 size_t levenshtein(std::string_view str1, std::string_view str2) {
 	std::vector<size_t> prevRow(str2.length() + 1), currRow(str2.length() + 1);
 
-	for (int j = 0; j <= str2.length(); j++) prevRow[j] = j;
+	for (size_t j = 0; j <= str2.length(); j++) prevRow[j] = j;
 
-	for (int i = 1; i <= str1.length(); i++) {
+	for (size_t i = 1; i <= str1.length(); i++) {
 		currRow[0] = i;
 
-		for (int j = 1; j <= str2.length(); j++)
+		for (size_t j = 1; j <= str2.length(); j++)
 			currRow[j] = (str1[i - 1] == str2[j - 1])
 			                   ? prevRow[j - 1]
 			                   : (1 + min(currRow[j - 1], prevRow[j], prevRow[j - 1]));
