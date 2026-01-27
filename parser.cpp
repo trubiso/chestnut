@@ -145,7 +145,7 @@ std::optional<Tag> Parser::consume_tag() {
 	return Tag {name.value()};
 }
 
-std::optional<Type> Parser::consume_type() {
+std::optional<Type::Atom> Parser::consume_type_atom() {
 	// in the future, this will require atoms and operators just like expression.
 	// for now, we're only doing built-in types, so it's much easier for us!
 	// that's also why we're so harsh on retroceding instead of expecting.
@@ -156,24 +156,24 @@ std::optional<Type> Parser::consume_type() {
 	std::string_view name = maybe_name.value();
 
 	// variables have to declared at the top so c++ won't wail
-	bool                         starts_with_u, starts_with_i;
-	uint32_t                     width;
-	std::from_chars_result       res;
-	std::optional<Type::Integer> int_ {};
-	size_t                       base_length = 0;
+	bool                               starts_with_u, starts_with_i;
+	uint32_t                           width;
+	std::from_chars_result             res;
+	std::optional<Type::Atom::Integer> int_ {};
+	size_t                             base_length = 0;
 
 	// "easy" types
-	if (name == "void") return Type::make_void();
-	if (name == "char") return Type::make_char();
-	if (name == "bool") return Type::make_bool();
+	if (name == "void") return Type::Atom::make_void();
+	if (name == "char") return Type::Atom::make_char();
+	if (name == "bool") return Type::Atom::make_bool();
 
 	// float types (can be bruteforced)
 	if (name.starts_with("float")) {
 		// TODO: support arbitrary sized floats (should we?)
-		if (name == "float16") return Type::make_float(Type::Float::Width::F16);
-		if (name == "float32") return Type::make_float(Type::Float::Width::F32);
-		if (name == "float64") return Type::make_float(Type::Float::Width::F64);
-		if (name == "float128") return Type::make_float(Type::Float::Width::F128);
+		if (name == "float16") return Type::Atom::make_float(Type::Atom::Float::Width::F16);
+		if (name == "float32") return Type::Atom::make_float(Type::Atom::Float::Width::F32);
+		if (name == "float64") return Type::Atom::make_float(Type::Atom::Float::Width::F64);
+		if (name == "float128") return Type::Atom::make_float(Type::Atom::Float::Width::F128);
 		goto none_match;
 	}
 
@@ -183,22 +183,26 @@ std::optional<Type> Parser::consume_type() {
 	if (!starts_with_u && !starts_with_i) goto none_match;
 	// get rid of the easy cases
 	base_length = starts_with_u ? 4 : 3;
-	if (name.length() == base_length) return Type::make_integer(Type::Integer::any(starts_with_i));
+	if (name.length() == base_length) return Type::Atom::make_integer(Type::Atom::Integer::any(starts_with_i));
 	if (name.length() == base_length + 3 && name.ends_with("ptr"))
-		return Type::make_integer(Type::Integer::ptr(starts_with_i));
+		return Type::Atom::make_integer(Type::Atom::Integer::ptr(starts_with_i));
 	if (name.length() == base_length + 4 && name.ends_with("size"))
-		return Type::make_integer(Type::Integer::size(starts_with_i));
+		return Type::Atom::make_integer(Type::Atom::Integer::size(starts_with_i));
 	// we know the name is at least base_length long, so the following is valid
 	res = std::from_chars(name.data() + base_length, name.data() + name.size(), width);
 	if (res.ec != std::errc() || res.ptr != name.data() + name.size()) goto none_match;
-	int_ = Type::Integer::with_width(width, starts_with_i);
+	int_ = Type::Atom::Integer::with_width(width, starts_with_i);
 	if (!int_.has_value()) goto none_match;
-	return Type::make_integer(std::move(int_.value()));
+	return Type::Atom::make_integer(std::move(int_.value()));
 
 none_match:
 	// we need to un-consume the identifier
 	tokens_.retreat();
 	return {};
+}
+
+std::optional<Type> Parser::consume_type() {
+	return consume_type_atom().transform([](Type::Atom&& atom) { return Type::make_atom(std::move(atom)); });
 }
 
 std::optional<Expression> Parser::consume_expression_atom() {
@@ -256,7 +260,8 @@ std::optional<Expression::FunctionCall::Argument> Parser::consume_expression_fun
 	    && argument_lhs.value().value.get_atom().get_identifier().is_unqualified()
 	    && consume_symbol(Token::Symbol::Colon)) {
 		// then, the bare unqualified identifier is the label
-		Spanned<Identifier> label = argument_lhs.value().value.get_atom().get_identifier().extract_unqualified_with_span();
+		Spanned<Identifier> label
+			= argument_lhs.value().value.get_atom().get_identifier().extract_unqualified_with_span();
 		// and we require an actual argument
 		std::optional<Spanned<Expression>> argument_rhs
 			= SPANNED_REASON(expect_expression, "expected argument value after argument label");

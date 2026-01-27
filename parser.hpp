@@ -93,7 +93,8 @@ private:
 
 	std::optional<Tag> consume_tag();
 
-	std::optional<Type> consume_type();
+	std::optional<Type::Atom> consume_type_atom();
+	std::optional<Type>       consume_type();
 
 	std::optional<Expression>                         consume_expression_atom();
 	std::optional<Expression::FunctionCall::Argument> consume_expression_function_call_argument();
