@@ -40,6 +40,7 @@ void Resolver::populate_module_table() {
 }
 
 void Resolver::identify(AST::Identifier& identifier) {
+	assert(!identifier.id.has_value());
 	identifier.id = {next()};
 }
 
@@ -71,6 +72,20 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 	                &function,
 	                false}
 	);
+
+	// we pre-identify arguments for good measure
+	for (auto& argument : function.arguments) {
+		// TODO: mutable arguments
+		identify(argument.name.value);
+		symbol_pool_.push_back(
+			Symbol {argument.name.value.id.value()[0],
+		                file_id,
+		                argument.name.span,
+		                argument.name.value.name(),
+		                {},
+		                false}
+		);
+	}
 }
 
 void Resolver::identify_module_items() {
@@ -285,7 +300,7 @@ void Resolver::resolve(
 void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const& scope, FileContext::ID file_id) {
 	resolve(*function_call.callee, scope, file_id);
 	for (auto& argument : function_call.arguments.ordered) { resolve(argument, scope, file_id); }
-	// FIXME: we need to properly resolve these labels wrt. func args, for which we need to pre-identify func args
+	// we cannot resolve labels just yet, because we need to know the type of the function and signature and etc
 	for (auto& argument : function_call.arguments.labeled) { resolve(std::get<1>(argument), scope, file_id); }
 }
 
@@ -364,16 +379,6 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 void Resolver::resolve(AST::Function& function, Scope scope, FileContext::ID file_id) {
 	Scope child_scope {&scope, {}};
 	for (auto& argument : function.arguments) {
-		identify(argument.name.value);
-		// TODO: support mutable arguments
-		symbol_pool_.push_back(
-			Symbol {argument.name.value.id.value()[0],
-		                file_id,
-		                argument.name.span,
-		                argument.name.value.name(),
-		                {},
-		                false}
-		);
 		// intentionally replace (shadowing)
 		child_scope.symbols.insert_or_assign(
 			argument.name.value.name(),
