@@ -17,6 +17,41 @@ void Resolver::resolve() {
 	resolve_identifiers();
 }
 
+Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom) {
+	switch (atom.kind()) {
+	case AST::Type::Atom::Kind::Float:    return make_known_float(KnownFloat {atom.get_float().width});
+	case AST::Type::Atom::Kind::Void:     return make_known_void();
+	case AST::Type::Atom::Kind::Char:     return make_known_char();
+	case AST::Type::Atom::Kind::Bool:     return make_known_bool();
+	case AST::Type::Atom::Kind::Inferred: return make_unknown();
+	case AST::Type::Atom::Kind::Integer:  break;
+	}
+
+	// for integers, we need to determine how much information we know
+	AST::Type::Atom::Integer const& integer = atom.get_integer();
+	if (integer.width_type() != AST::Type::Atom::Integer::WidthType::Any)
+		return make_known_integer(KnownInteger {integer});
+	else return make_partial_integer(PartialInteger {integer, true});
+}
+
+Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type const& type) {
+	switch (type.kind()) {
+	case AST::Type::Kind::Atom: return from_type(type.get_atom());
+	}
+	[[assume(false)]];
+}
+
+Resolver::TypeInfo::ID Resolver::type_next() {
+	return type_counter_++;
+}
+
+Resolver::TypeInfo::ID Resolver::register_type(Resolver::TypeInfo&& type) {
+	Resolver::TypeInfo::ID id = type_next();
+	assert(type_pool_.size() == id);
+	type_pool_.push_back(std::move(type));
+	return id;
+}
+
 AST::SymbolID Resolver::next() {
 	return counter_++;
 }
@@ -53,6 +88,7 @@ void Resolver::identify(AST::Module& module, FileContext::ID file_id) {
 	                module.name.span,
 	                module.name.value.name(),
 	                &module,
+	                register_type(TypeInfo::make_module()),
 	                false}
 	);
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
@@ -70,6 +106,7 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 	                function.name.span,
 	                function.name.value.name(),
 	                &function,
+	                register_type(TypeInfo::make_function()),
 	                false}
 	);
 
@@ -83,6 +120,7 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 		                argument.name.span,
 		                argument.name.value.name(),
 		                {},
+		                register_type(TypeInfo::from_type(argument.type.value)),
 		                false}
 		);
 	}
@@ -341,6 +379,10 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileConte
 	                declare.name.span,
 	                declare.name.value.name(),
 	                {},
+	                register_type(
+				declare.type.has_value() ? TypeInfo::from_type(declare.type.value().value)
+							 : TypeInfo::make_unknown()
+			),
 	                declare.mutable_.value}
 	);
 	// intentionally replace (shadowing)
