@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++23 -Wall -Wpedantic -g -O3
+CXXFLAGS = -std=c++23 -Wall -Wextra -Wpedantic -g
 
 OBJS = diagnostic.o levenshtein.o lexer.o main.o out_fmt.o parser.o resolver.o token.o ast/expression.o ast/function.o ast/identifier.o ast/module.o ast/statement.o ast/tag.o ast/type.o
 
