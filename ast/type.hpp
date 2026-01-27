@@ -76,14 +76,16 @@ struct Type {
 		};
 
 		enum class Kind {
-			Integer = 0,
-			Float   = 1,
-			Void    = 2,
-			Char    = 3,
-			Bool    = 4,
+			Integer  = 0,
+			Float    = 1,
+			Void     = 2,
+			Char     = 3,
+			Bool     = 4,
+			Inferred = 5,
 		};
 
-		typedef std::variant<Integer, Float, std::monostate, std::monostate, std::monostate> value_t;
+		typedef std::variant<Integer, Float, std::monostate, std::monostate, std::monostate, std::monostate>
+			value_t;
 
 		value_t value;
 
@@ -109,6 +111,10 @@ struct Type {
 
 		inline static Atom make_bool() {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Bool>, std::monostate {}});
+		}
+
+		inline static Atom make_inferred() {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Inferred>, std::monostate {}});
 		}
 
 		inline Integer const& get_integer() const { return std::get<(size_t) Kind::Integer>(value); }

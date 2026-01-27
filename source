@@ -25,7 +25,7 @@ export module hello {
 
 		export func main() void {
 			sum_numbers(2, 3);
-			const a = 30 +- 2 * 3;
+			const a: _ = 30 +- 2 * 3;
 			const kitty = 3;
 			const sul = rifuty + 9;
 			2 + 4;

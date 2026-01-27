@@ -4,11 +4,12 @@ namespace AST {
 
 std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	switch (atom.kind()) {
-	case Type::Atom::Kind::Integer: break;
-	case Type::Atom::Kind::Float:   return os << "float" << (uint32_t) atom.get_float().width_value();
-	case Type::Atom::Kind::Void:    return os << "void";
-	case Type::Atom::Kind::Char:    return os << "char";
-	case Type::Atom::Kind::Bool:    return os << "bool";
+	case Type::Atom::Kind::Integer:  break;
+	case Type::Atom::Kind::Float:    return os << "float" << (uint32_t) atom.get_float().width_value();
+	case Type::Atom::Kind::Void:     return os << "void";
+	case Type::Atom::Kind::Char:     return os << "char";
+	case Type::Atom::Kind::Bool:     return os << "bool";
+	case Type::Atom::Kind::Inferred: return os << "(inferred)";
 	}
 
 	// we know it's an integer now

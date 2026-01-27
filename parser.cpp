@@ -166,6 +166,7 @@ std::optional<Type::Atom> Parser::consume_type_atom() {
 	if (name == "void") return Type::Atom::make_void();
 	if (name == "char") return Type::Atom::make_char();
 	if (name == "bool") return Type::Atom::make_bool();
+	if (name == "_") return Type::Atom::make_inferred();
 
 	// float types (can be bruteforced)
 	if (name.starts_with("float")) {
