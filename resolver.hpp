@@ -78,6 +78,14 @@ private:
 	/// Identifies all module items with an ID, but does not resolve imports.
 	void identify_module_items();
 
+	void add_unknown_symbol_diagnostic(
+		std::string_view                symbol,
+		Span                            span,
+		std::vector<std::string> const& possible_symbols,
+		std::string_view                scope_type,
+		FileContext::ID
+	);
+
 	// TODO: return the ID for ergonomics in some of these
 	void resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::UnaryOperation&, Scope const&, FileContext::ID);

@@ -28,7 +28,7 @@ lex_files(std::vector<std::string> const& sources, std::vector<std::string> cons
 	assert(sources.size() == names.size());
 	size_t diagnostics = 0;
 	for (size_t i = 0; i < sources.size(); ++i) {
-		FileContext   context {names[i], (Resolver::FileContext::ID) i, {0}, sources[i]};
+		FileContext   context {names[i], (FileContext::ID) i, {0}, sources[i]};
 		Lexer         lexer(context, sources[i]);
 		Stream<Token> tokens {std::move(lexer.collect_all())};
 		outputs.push_back({std::move(tokens), lexer.context});

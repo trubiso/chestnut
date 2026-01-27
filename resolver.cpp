@@ -1,10 +1,15 @@
 #include "resolver.hpp"
 
+#include "levenshtein.hpp"
+
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <unordered_set>
 #include <variant>
+
+#define CLOSEST_THRESHOLD 3
+#define CLOSEST_MAX       5
 
 void Resolver::resolve() {
 	populate_module_table();
@@ -72,6 +77,41 @@ void Resolver::identify_module_items() {
 	for (ParsedFile& file : parsed_files) { identify(file.module, file.file_id); }
 }
 
+void Resolver::add_unknown_symbol_diagnostic(
+	std::string_view                symbol,
+	Span                            span,
+	std::vector<std::string> const& possible_symbols,
+	std::string_view                scope_type,
+	FileContext::ID                 file_id
+) {
+	std::string       title = std::format("unknown symbol '{}'", symbol);
+	std::stringstream subtitle_stream {};
+	subtitle_stream << "could not find any symbol with that name in the " << scope_type << " scope";
+	std::unordered_set<std::string> symbol_set {};
+
+	std::vector<std::string_view> closest_symbols
+		= closest(symbol, possible_symbols, CLOSEST_THRESHOLD, CLOSEST_MAX);
+
+	if (!closest_symbols.empty()) {
+		subtitle_stream << " (did you perhaps mean ";
+		for (size_t i = 0; i < closest_symbols.size(); ++i) {
+			subtitle_stream << '\'' << closest_symbols[i] << '\'';
+			if (i + 1 < closest_symbols.size() - 1) subtitle_stream << ", ";
+			else if (i + 1 < closest_symbols.size()) subtitle_stream << " or ";
+		}
+		subtitle_stream << "?)";
+	}
+
+	std::string subtitle = subtitle_stream.str();
+	parsed_files.at(file_id).diagnostics.push_back(
+		Diagnostic::error(
+			std::move(title),
+			std::move(subtitle),
+			{Diagnostic::Sample(get_context(file_id), span)}
+		)
+	);
+}
+
 // FIXME: once more, we don't need this span, since the diagnostics that did need it are gone, maybe we should remove it
 void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope, FileContext::ID file_id) {
 	// do not try to resolve already resolved identifiers (just in case, i don't think we will ever hit this)
@@ -94,29 +134,27 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 		}
 
 		// if we didn't find anything, throw a diagnostic
-		std::string       title = std::format("unknown symbol '{}'", identifier.value.name());
-		std::stringstream subtitle_stream {};
-		subtitle_stream << "could not find any symbol with that name in the current scope (available: ";
-		std::unordered_set<std::string> available_symbols {};
+		std::unordered_set<std::string> symbol_set {};
 		traversing_scope = &scope;
 		while (traversing_scope != nullptr) {
-			for (auto const& symbol : traversing_scope->symbols) available_symbols.insert(symbol.first);
+			for (auto const& symbol : traversing_scope->symbols) symbol_set.insert(symbol.first);
 			traversing_scope = traversing_scope->parent;
 		}
-		size_t count = 0;
-		for (auto const& symbol : available_symbols) {
-			subtitle_stream << '\'' << symbol << '\'';
-			if (++count < available_symbols.size()) subtitle_stream << ", ";
+
+		std::vector<std::string> symbol_vector {};
+		symbol_vector.reserve(symbol_set.size());
+		for (auto it = symbol_set.begin(); it != symbol_set.end();) {
+			symbol_vector.push_back(std::move(symbol_set.extract(it++).value()));
 		}
-		subtitle_stream << ')';
-		std::string subtitle = subtitle_stream.str();
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				std::move(title),
-				std::move(subtitle),
-				{Diagnostic::Sample(get_context(file_id), identifier.span)}
-			)
+
+		add_unknown_symbol_diagnostic(
+			identifier.value.name(),
+			identifier.span,
+			symbol_vector,
+			"current",
+			file_id
 		);
+
 		return;
 	}
 
@@ -129,26 +167,18 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 	// since this is an absolutely qualified identifier, we must find it in the global scope
 	// we do an initial check to ensure that it is in the global scope
 	if (!module_table_.contains(identifier.value.path[0].value)) {
-		std::stringstream title_stream {}, subtitle_stream {};
-		title_stream << "unknown symbol '";
-		title_stream << identifier.value.path[0].value;
-		title_stream << '\'';
-		subtitle_stream << "could not find any symbol with that name in the global scope (available: ";
-		size_t count = 0;
-		for (auto const& v : module_table_) {
-			subtitle_stream << '\'' << v.first << '\'';
-			if (++count < module_table_.size()) subtitle_stream << ", ";
-		}
-		subtitle_stream << ')';
-		std::string title    = title_stream.str();
-		std::string subtitle = subtitle_stream.str();
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				std::move(title),
-				std::move(subtitle),
-				{Diagnostic::Sample(get_context(file_id), identifier.value.path[0].span)}
-			)
+		std::vector<std::string> modules {};
+		modules.reserve(module_table_.size());
+		for (auto const& v : module_table_) modules.push_back(v.first);
+
+		add_unknown_symbol_diagnostic(
+			identifier.value.path[0].value,
+			identifier.value.path[0].span,
+			modules,
+			"global",
+			file_id
 		);
+
 		return;
 	}
 
@@ -218,28 +248,19 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 		}
 
 		if (pointed_items.empty()) {
-			std::stringstream title_stream {}, subtitle_stream {};
-			title_stream << "unknown symbol '";
-			title_stream << identifier.value.path[i].value;
-			title_stream << '\'';
-			subtitle_stream
-				<< "could not find any symbol with that name in the specified scope (available: ";
-			size_t count = 0;
-			for (auto const& item : root_module->body.items) {
-				std::string name = AST::Module::get_name(item.value);
-				subtitle_stream << '\'' << name << '\'';
-				if (++count < root_module->body.items.size()) subtitle_stream << ", ";
-			}
-			subtitle_stream << ')';
-			std::string title    = title_stream.str();
-			std::string subtitle = subtitle_stream.str();
-			parsed_files.at(file_id).diagnostics.push_back(
-				Diagnostic::error(
-					std::move(title),
-					std::move(subtitle),
-					{Diagnostic::Sample(get_context(file_id), identifier.value.path[i].span)}
-				)
+			std::vector<std::string> possibilities {};
+			possibilities.reserve(root_module->body.items.size());
+			for (auto const& item : root_module->body.items)
+				possibilities.push_back(AST::Module::get_name(item.value));
+
+			add_unknown_symbol_diagnostic(
+				identifier.value.path[i].value,
+				identifier.value.path[i].span,
+				possibilities,
+				"specified",
+				file_id
 			);
+
 			break;
 		}
 	}
