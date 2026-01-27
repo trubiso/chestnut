@@ -14,9 +14,9 @@ struct Function {
 		Spanned<Type>       type;
 	};
 
-	Spanned<Identifier>          name;  // unqualified
-	std::vector<Argument>        arguments;
-	std::optional<Spanned<Type>> return_type;
+	Spanned<Identifier>   name;  // unqualified
+	std::vector<Argument> arguments;
+	Spanned<Type>         return_type;
 
 	std::optional<Scope> body;
 };

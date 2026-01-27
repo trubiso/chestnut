@@ -41,6 +41,28 @@ Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type const& type) {
 	[[assume(false)]];
 }
 
+bool Resolver::TypeInfo::is_callable(std::vector<Resolver::TypeInfo> const& pool) const {
+	switch (kind()) {
+	case Kind::Function: return true;
+	case Kind::SameAs:   return pool.at(get_same_as().id).is_callable(pool);
+	case Kind::AnyOf:
+		for (TypeInfo::ID id : get_any_of().ids)
+			if (pool.at(id).is_callable(pool)) return true;
+		return false;
+	case Kind::Unknown:
+	case Kind::Bottom:
+	case Kind::Module:
+	case Kind::KnownVoid:
+	case Kind::KnownChar:
+	case Kind::KnownBool:
+	case Kind::KnownInteger:
+	case Kind::KnownFloat:
+	case Kind::PartialInteger:
+	case Kind::PartialFloat:
+	case Kind::Number:         return false;
+	}
+}
+
 Resolver::TypeInfo::ID Resolver::type_next() {
 	return type_counter_++;
 }
@@ -99,6 +121,27 @@ void Resolver::identify(AST::Module& module, FileContext::ID file_id) {
 }
 
 void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
+	std::vector<std::tuple<std::string, TypeInfo::ID>> arguments {};
+	arguments.reserve(function.arguments.size());
+
+	for (auto& argument : function.arguments) {
+		// TODO: mutable arguments
+		identify(argument.name.value);
+		TypeInfo::ID type_id = register_type(TypeInfo::from_type(argument.type.value));
+		symbol_pool_.push_back(
+			Symbol {argument.name.value.id.value()[0],
+		                file_id,
+		                argument.name.span,
+		                argument.name.value.name(),
+		                {},
+		                type_id,
+		                false}
+		);
+		arguments.push_back({argument.name.value.name(), type_id});
+	}
+
+	TypeInfo::ID return_ = register_type(TypeInfo::from_type(function.return_type.value));
+
 	identify(function.name.value);
 	symbol_pool_.push_back(
 		Symbol {function.name.value.id.value()[0],
@@ -106,24 +149,9 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 	                function.name.span,
 	                function.name.value.name(),
 	                &function,
-	                register_type(TypeInfo::make_function()),
+	                register_type(TypeInfo::make_function(TypeInfo::Function {std::move(arguments), return_})),
 	                false}
 	);
-
-	// we pre-identify arguments for good measure
-	for (auto& argument : function.arguments) {
-		// TODO: mutable arguments
-		identify(argument.name.value);
-		symbol_pool_.push_back(
-			Symbol {argument.name.value.id.value()[0],
-		                file_id,
-		                argument.name.span,
-		                argument.name.value.name(),
-		                {},
-		                register_type(TypeInfo::from_type(argument.type.value)),
-		                false}
-		);
-	}
 }
 
 void Resolver::identify_module_items() {
@@ -474,4 +502,111 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 
 void Resolver::resolve_identifiers() {
 	for (ParsedFile& file : parsed_files) { resolve(file.module, Scope {}, file.file_id); }
+}
+
+Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContext::ID file_id) {
+	switch (atom.kind()) {
+	case AST::Expression::Atom::Kind::NumberLiteral:
+		// TODO: apply suffixes
+		return TypeInfo::make_number();
+	case AST::Expression::Atom::Kind::StringLiteral:
+		// TODO: do string literals
+		std::cout << "unsupported string literal" << std::endl;
+		std::exit(0);
+	case AST::Expression::Atom::Kind::CharLiteral:
+		// TODO: apply suffixes
+		return TypeInfo::make_known_char();
+	case AST::Expression::Atom::Kind::Expression: return infer(*atom.get_expression(), file_id);
+	case AST::Expression::Atom::Kind::Identifier: break;
+	}
+
+	// for identifiers, we match the type in the symbol pool
+	AST::Identifier const& identifier = atom.get_identifier();
+	if (!identifier.id.has_value()) return TypeInfo::make_bottom();  // if we don't know what this is, let's ignore
+	std::vector<AST::SymbolID> const& ids = identifier.id.value();
+	if (ids.empty()) return TypeInfo::make_bottom();
+	std::vector<TypeInfo::ID> type_ids {};
+	type_ids.reserve(ids.size());
+	for (AST::SymbolID id : ids) { type_ids.push_back(get_single_symbol(id).type); }
+	if (type_ids.size() == 1) return TypeInfo::make_same_as(type_ids[0]);
+	else return TypeInfo::make_any_of(std::move(type_ids));
+}
+
+Resolver::TypeInfo Resolver::infer(AST::Expression::UnaryOperation const& unary_operation, FileContext::ID file_id) {
+	// TODO: operators
+	TypeInfo operand = infer(unary_operation.operand->value, file_id);
+	return operand;
+}
+
+Resolver::TypeInfo Resolver::infer(AST::Expression::BinaryOperation const& binary_operation, FileContext::ID file_id) {
+	// TODO: operators
+	TypeInfo lhs = infer(binary_operation.lhs->value, file_id);
+	TypeInfo rhs = infer(binary_operation.rhs->value, file_id);
+
+	TypeInfo::ID lhs_id = register_type(std::move(lhs));
+	TypeInfo::ID rhs_id = register_type(std::move(rhs));
+	unify(lhs_id, rhs_id, file_id);
+
+	return TypeInfo::make_same_as(lhs_id);
+}
+
+Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function_call, FileContext::ID file_id) {
+	TypeInfo callee = infer(function_call.callee->value, file_id);
+
+	TypeInfo::ID callee_id = register_type(std::move(callee));
+
+	if (!type_pool_.at(callee_id).is_callable(type_pool_)) {
+		// TODO: proper diagnostic
+		std::cout << "called a non-function loool" << std::endl;
+		return TypeInfo::make_bottom();
+	}
+}
+
+Resolver::TypeInfo Resolver::infer(AST::Expression const& expression, FileContext::ID file_id) {
+	switch (expression.kind()) {
+	case AST::Expression::Kind::Atom:            return infer(expression.get_atom(), file_id);
+	case AST::Expression::Kind::UnaryOperation:  return infer(expression.get_unary_operation(), file_id);
+	case AST::Expression::Kind::BinaryOperation: return infer(expression.get_binary_operation(), file_id);
+	case AST::Expression::Kind::FunctionCall:    return infer(expression.get_function_call(), file_id);
+	}
+}
+
+void Resolver::infer(AST::Statement::Declare& declare, FileContext::ID file_id) {
+	if (!declare.value.has_value()) return;
+	Symbol& name = get_single_symbol(declare.name.value);
+}
+
+void Resolver::infer(AST::Statement::Set&, FileContext::ID) {}
+
+void Resolver::infer(AST::Statement::Return& return_, AST::Function& function, FileContext::ID file_id) {}
+
+void Resolver::infer(Spanned<AST::Statement>& statement, AST::Function& function, FileContext::ID file_id) {
+	switch (statement.value.kind()) {
+	case AST::Statement::Kind::Declare: infer(statement.value.get_declare(), file_id); return;
+	case AST::Statement::Kind::Set:     infer(statement.value.get_set(), file_id); return;
+	// case AST::Statement::Kind::Expression: infer(statement.value.get_expression(), statement.span, file_id);
+	// return;
+	case AST::Statement::Kind::Return: infer(statement.value.get_return(), function, file_id); return;
+	case AST::Statement::Kind::Scope:  infer(statement.value.get_scope(), function, file_id); return;
+	}
+}
+
+void Resolver::infer(AST::Scope& scope, AST::Function& function, FileContext::ID file_id) {
+	for (auto& statement : scope) { infer(statement, function, file_id); }
+}
+
+void Resolver::infer(AST::Function& function, FileContext::ID file_id) {
+	if (function.body.has_value()) infer(function.body.value(), function, file_id);
+}
+
+void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
+	for (Spanned<AST::Module::Item>& item : module.body.items) {
+		auto& value = std::get<AST::Module::InnerItem>(item.value);
+		if (std::holds_alternative<AST::Function>(value)) infer(std::get<AST::Function>(value), file_id);
+		else if (std::holds_alternative<AST::Module>(value)) infer(std::get<AST::Module>(value), file_id);
+	}
+}
+
+void Resolver::infer_types() {
+	for (ParsedFile& file : parsed_files) { infer(file.module, file.file_id); }
 }

@@ -33,8 +33,17 @@ private:
 	struct TypeInfo {
 		typedef uint32_t ID;
 
+		struct Function {
+			std::vector<std::tuple<std::string, ID>> arguments;
+			ID                                       return_;
+		};
+
 		struct SameAs {
 			ID id;
+		};
+
+		struct AnyOf {
+			std::vector<ID> ids;
 		};
 
 		struct KnownInteger {
@@ -69,6 +78,8 @@ private:
 			Function,
 			/// The exact same as another type.
 			SameAs,
+			/// The exact same as any of the specified candidates.
+			AnyOf,
 			/// Known to be the built-in type 'void'.
 			KnownVoid,
 			/// Known to be the built-in type 'char'.
@@ -83,21 +94,25 @@ private:
 			PartialInteger,
 			/// Partially resolved float type.
 			PartialFloat,
+			/// Any number type.
+			Number,
 		};
 
 		typedef std::variant<
 			std::monostate,  // Unknown
 			std::monostate,  // Bottom
 			std::monostate,  // Module
-			std::monostate,  // Function
+			Function,        // Function
 			SameAs,          // SameAs
+			AnyOf,           // AnyOf
 			std::monostate,  // KnownVoid
 			std::monostate,  // KnownChar
 			std::monostate,  // KnownBool
 			KnownInteger,    // KnownInteger
 			KnownFloat,      // KnownFloat
 			PartialInteger,  // PartialInteger
-			PartialFloat     // PartialFloat
+			PartialFloat,    // PartialFloat
+			std::monostate   // Number
 			>
 			value_t;
 
@@ -117,12 +132,16 @@ private:
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Module>, std::monostate {}});
 		}
 
-		inline static TypeInfo make_function() {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Function>, std::monostate {}});
+		inline static TypeInfo make_function(Function&& function) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Function>, std::move(function)});
 		}
 
 		inline static TypeInfo make_same_as(ID id) {
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::SameAs>, SameAs {id}});
+		}
+
+		inline static TypeInfo make_any_of(std::vector<ID>&& ids) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::AnyOf>, AnyOf {std::move(ids)}});
 		}
 
 		inline static TypeInfo make_known_void() {
@@ -161,7 +180,15 @@ private:
 			);
 		}
 
+		inline static TypeInfo make_number() {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Number>, std::monostate {}});
+		}
+
+		inline Function const& get_function() const { return std::get<(size_t) Kind::Function>(value); }
+
 		inline SameAs const& get_same_as() const { return std::get<(size_t) Kind::SameAs>(value); }
+
+		inline AnyOf const& get_any_of() const { return std::get<(size_t) Kind::AnyOf>(value); }
 
 		inline KnownInteger const& get_known_integer() const {
 			return std::get<(size_t) Kind::KnownInteger>(value);
@@ -179,6 +206,8 @@ private:
 
 		static TypeInfo from_type(AST::Type::Atom const&);
 		static TypeInfo from_type(AST::Type const&);
+
+		bool is_callable(std::vector<TypeInfo> const&) const;
 	};
 
 	std::vector<TypeInfo> type_pool_;
@@ -265,4 +294,20 @@ private:
 	void resolve(AST::Module&, Scope, FileContext::ID);
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
+
+	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID);
+
+	TypeInfo infer(AST::Expression::Atom const&, FileContext::ID);
+	TypeInfo infer(AST::Expression::UnaryOperation const&, FileContext::ID);
+	TypeInfo infer(AST::Expression::BinaryOperation const&, FileContext::ID);
+	TypeInfo infer(AST::Expression::FunctionCall const&, FileContext::ID);
+	TypeInfo infer(AST::Expression const&, FileContext::ID);
+	void     infer(AST::Statement::Declare&, FileContext::ID);
+	void     infer(AST::Statement::Set&, FileContext::ID);
+	void     infer(AST::Statement::Return&, AST::Function&, FileContext::ID);
+	void     infer(Spanned<AST::Statement>&, AST::Function&, FileContext::ID);
+	void     infer(AST::Scope&, AST::Function&, FileContext::ID);
+	void     infer(AST::Function&, FileContext::ID);
+	void     infer(AST::Module&, FileContext::ID);
+	void     infer_types();
 };

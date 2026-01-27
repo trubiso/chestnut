@@ -655,6 +655,11 @@ std::optional<Function> Parser::parse_function() {
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};
 
 	auto return_type = SPANNED(consume_type);
+	// TODO: make return types optional again
+	if (!return_type.has_value()) {
+		std::cout << "return types must have values as of right now" << std::endl;
+		std::exit(0);
+	}
 
 	std::optional<Scope> body {};
 	if (consume_symbol(Token::Symbol::FatArrow)) {
@@ -675,7 +680,7 @@ std::optional<Function> Parser::parse_function() {
 		body = consume_scope();
 	}
 
-	return Function {name.value(), arguments, return_type, std::move(body)};
+	return Function {name.value(), arguments, return_type.value(), std::move(body)};
 }
 
 std::optional<Import> Parser::parse_import() {
