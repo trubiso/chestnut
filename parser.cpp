@@ -645,6 +645,7 @@ std::optional<Function> Parser::parse_function() {
 	// parse args
 	std::vector<Function::Argument> arguments {};
 	while (true) {
+		// TODO: anonymous arguments (cannot be accessed via labels)
 		// FIXME: ensure argument names are not repeated
 		auto argument_name = SPANNED(consume_identifier);
 		if (!argument_name.has_value()) break;

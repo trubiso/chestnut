@@ -35,9 +35,8 @@ private:
 
 		struct Function {
 			// TODO: arguments can have default values! (size_t default_up_to;)
-			// FIXME: arguments don't NEED to have names
-			std::vector<std::tuple<std::string, ID>> arguments;
-			ID                                       return_;
+			std::vector<std::tuple<std::optional<std::string>, ID>> arguments;
+			ID                                                      return_;
 		};
 
 		struct SameAs {

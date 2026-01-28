@@ -96,7 +96,7 @@ void Resolver::debug_print_type(Resolver::TypeInfo::ID id) const {
 		std::cout << "(function with args (";
 		size_t count = 0;
 		for (auto const& [name, type] : function.arguments) {
-			std::cout << name << ": ";
+			std::cout << (name.has_value() ? name.value() : "(anonymous)") << ": ";
 			debug_print_type(type);
 			if (++count < function.arguments.size()) std::cout << ", ";
 		}
@@ -183,7 +183,7 @@ void Resolver::identify(AST::Module& module, FileContext::ID file_id) {
 }
 
 void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
-	std::vector<std::tuple<std::string, TypeInfo::ID>> arguments {};
+	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> arguments {};
 	arguments.reserve(function.arguments.size());
 
 	for (auto& argument : function.arguments) {
@@ -655,7 +655,10 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function
 				function_arguments.size() - function_call.arguments.ordered.size()
 			);
 			for (size_t i = function_call.arguments.ordered.size(); i < function_arguments.size(); ++i)
-				arguments_under_consideration.push_back(std::get<0>(function_arguments.at(i)));
+				if (std::get<0>(function_arguments.at(i)).has_value())
+					arguments_under_consideration.push_back(
+						std::get<0>(function_arguments.at(i)).value()
+					);
 
 			bool all_arguments_exist = true;
 			for (auto const& argument : function_call.arguments.labeled) {
