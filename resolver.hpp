@@ -39,10 +39,6 @@ private:
 		};
 
 		struct SameAs {
-			ID id;
-		};
-
-		struct AnyOf {
 			std::vector<ID> ids;
 		};
 
@@ -76,10 +72,8 @@ private:
 			Module,
 			/// Represents a function. For now, it does not hold any extra information.
 			Function,
-			/// The exact same as another type.
-			SameAs,
 			/// The exact same as any of the specified candidates.
-			AnyOf,
+			SameAs,
 			/// Known to be the built-in type 'void'.
 			KnownVoid,
 			/// Known to be the built-in type 'char'.
@@ -104,7 +98,6 @@ private:
 			std::monostate,  // Module
 			Function,        // Function
 			SameAs,          // SameAs
-			AnyOf,           // AnyOf
 			std::monostate,  // KnownVoid
 			std::monostate,  // KnownChar
 			std::monostate,  // KnownBool
@@ -137,11 +130,11 @@ private:
 		}
 
 		inline static TypeInfo make_same_as(ID id) {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::SameAs>, SameAs {id}});
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::SameAs>, SameAs {{id}}});
 		}
 
-		inline static TypeInfo make_any_of(std::vector<ID>&& ids) {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::AnyOf>, AnyOf {std::move(ids)}});
+		inline static TypeInfo make_same_as(std::vector<ID>&& ids) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::SameAs>, SameAs {std::move(ids)}});
 		}
 
 		inline static TypeInfo make_known_void() {
@@ -187,8 +180,6 @@ private:
 		inline Function const& get_function() const { return std::get<(size_t) Kind::Function>(value); }
 
 		inline SameAs const& get_same_as() const { return std::get<(size_t) Kind::SameAs>(value); }
-
-		inline AnyOf const& get_any_of() const { return std::get<(size_t) Kind::AnyOf>(value); }
 
 		inline KnownInteger const& get_known_integer() const {
 			return std::get<(size_t) Kind::KnownInteger>(value);

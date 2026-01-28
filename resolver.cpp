@@ -44,9 +44,8 @@ Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type const& type) {
 bool Resolver::TypeInfo::is_callable(std::vector<Resolver::TypeInfo> const& pool) const {
 	switch (kind()) {
 	case Kind::Function: return true;
-	case Kind::SameAs:   return pool.at(get_same_as().id).is_callable(pool);
-	case Kind::AnyOf:
-		for (TypeInfo::ID id : get_any_of().ids)
+	case Kind::SameAs:
+		for (TypeInfo::ID id : get_same_as().ids)
 			if (pool.at(id).is_callable(pool)) return true;
 		return false;
 	case Kind::Unknown:
@@ -529,7 +528,7 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContex
 	type_ids.reserve(ids.size());
 	for (AST::SymbolID id : ids) { type_ids.push_back(get_single_symbol(id).type); }
 	if (type_ids.size() == 1) return TypeInfo::make_same_as(type_ids[0]);
-	else return TypeInfo::make_any_of(std::move(type_ids));
+	else return TypeInfo::make_same_as(std::move(type_ids));
 }
 
 Resolver::TypeInfo Resolver::infer(AST::Expression::UnaryOperation const& unary_operation, FileContext::ID file_id) {
