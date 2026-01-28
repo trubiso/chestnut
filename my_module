@@ -6,4 +6,4 @@ export module my_submodule {
 	func sum_numbers(x: uint64) uint64 => x + x;
 }
 
-export func putc(c: char);
+export func putc(c: char) void;

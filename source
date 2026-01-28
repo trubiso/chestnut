@@ -2,12 +2,12 @@ export import ::my_module::my_submodule::sum_numbers;
 
 export module a {
 	import ::source::b::b;
-	export func a() {}
+	export func a() void {}
 }
 
 export module b {
 	import ::source::a::a;
-	export func b() {}
+	export func b() void {}
 }
 
 export module hello {
@@ -19,7 +19,7 @@ export module hello {
 	export module whats {
 		module up {}
 
-		@extern func putc(c: char);
+		@extern func putc(c: char) void;
 
 		func try_shadowing(putc: char, sum_numbers: uint) void;
 
@@ -45,7 +45,7 @@ export module hello {
 		export func lets_do_this1(name: bool, age: intsize, what: float128) uint1382;
 
 /*
-		func john(k: int16) {
+		func john(k: int16) void {
 			const a = 30;
 			mut b: uint;
 			const d: int;
@@ -58,7 +58,7 @@ export module hello {
 */
 	}
 
-	func greet()
+	func greet() void
 }
 
 module yo {

@@ -34,6 +34,8 @@ private:
 		typedef uint32_t ID;
 
 		struct Function {
+			// TODO: arguments can have default values! (size_t default_up_to;)
+			// FIXME: arguments don't NEED to have names
 			std::vector<std::tuple<std::string, ID>> arguments;
 			ID                                       return_;
 		};
@@ -55,10 +57,6 @@ private:
 			// this may be Any
 			AST::Type::Atom::Integer integer;
 			bool                     signed_is_known;
-		};
-
-		struct PartialFloat {
-			std::optional<AST::Type::Atom::Float::Width> width;
 		};
 
 		// TODO: register function argument types and return type
@@ -86,7 +84,7 @@ private:
 			KnownFloat,
 			/// Partially resolved integer type.
 			PartialInteger,
-			/// Partially resolved float type.
+			/// Partially resolved float type, that is, we know it is a float, but not which kind.
 			PartialFloat,
 			/// Any number type.
 			Number,
@@ -104,7 +102,7 @@ private:
 			KnownInteger,    // KnownInteger
 			KnownFloat,      // KnownFloat
 			PartialInteger,  // PartialInteger
-			PartialFloat,    // PartialFloat
+			std::monostate,  // PartialFloat
 			std::monostate   // Number
 			>
 			value_t;
@@ -167,10 +165,8 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_partial_float(PartialFloat&& partial_float) {
-			return TypeInfo(
-				value_t {std::in_place_index<(size_t) Kind::PartialFloat>, std::move(partial_float)}
-			);
+		inline static TypeInfo make_partial_float() {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::PartialFloat>, std::monostate {}});
 		}
 
 		inline static TypeInfo make_number() {
@@ -191,19 +187,20 @@ private:
 			return std::get<(size_t) Kind::PartialInteger>(value);
 		}
 
-		inline PartialFloat const& get_partial_float() const {
-			return std::get<(size_t) Kind::PartialFloat>(value);
-		}
-
 		static TypeInfo from_type(AST::Type::Atom const&);
 		static TypeInfo from_type(AST::Type const&);
 
+		/// Returns whether this type pertains to something which could theoretically be callable.
 		bool is_callable(std::vector<TypeInfo> const&) const;
+		/// Returns all callable subitems within this type.
+		std::vector<ID> get_callable_subitems(ID self_id, std::vector<TypeInfo> const&) const;
 	};
 
 	std::vector<TypeInfo> type_pool_;
 
 	TypeInfo::ID type_counter_ = 0;
+
+	void debug_print_type(TypeInfo::ID) const;
 
 	/// Returns a new ID produced by the type counter.
 	TypeInfo::ID type_next();
@@ -295,9 +292,9 @@ private:
 	TypeInfo infer(AST::Expression const&, FileContext::ID);
 	void     infer(AST::Statement::Declare&, FileContext::ID);
 	void     infer(AST::Statement::Set&, FileContext::ID);
-	void     infer(AST::Statement::Return&, AST::Function&, FileContext::ID);
-	void     infer(Spanned<AST::Statement>&, AST::Function&, FileContext::ID);
-	void     infer(AST::Scope&, AST::Function&, FileContext::ID);
+	void     infer(AST::Statement::Return&, AST::SymbolID function, FileContext::ID);
+	void     infer(Spanned<AST::Statement>&, AST::SymbolID function, FileContext::ID);
+	void     infer(AST::Scope&, AST::SymbolID function, FileContext::ID);
 	void     infer(AST::Function&, FileContext::ID);
 	void     infer(AST::Module&, FileContext::ID);
 	void     infer_types();

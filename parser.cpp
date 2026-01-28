@@ -285,6 +285,7 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 
 		while ((argument = consume_expression_function_call_argument()).has_value()) {
 			if (std::holds_alternative<Expression::FunctionCall::LabeledArgument>(argument.value())) {
+				// FIXME: we need to ensure labeled arguments are not repeated!!
 				auto labeled_argument = std::move(
 					std::get<Expression::FunctionCall::LabeledArgument>(argument.value())
 				);
@@ -644,6 +645,7 @@ std::optional<Function> Parser::parse_function() {
 	// parse args
 	std::vector<Function::Argument> arguments {};
 	while (true) {
+		// FIXME: ensure argument names are not repeated
 		auto argument_name = SPANNED(consume_identifier);
 		if (!argument_name.has_value()) break;
 		if (!expect_symbol("expected ':' to specify argument type", Token::Symbol::Colon)) return {};
@@ -657,7 +659,7 @@ std::optional<Function> Parser::parse_function() {
 	auto return_type = SPANNED(consume_type);
 	// TODO: make return types optional again
 	if (!return_type.has_value()) {
-		std::cout << "return types must have values as of right now" << std::endl;
+		std::cout << "return types must have values as of right now ('" << name.value().value.name() << "')" << std::endl;
 		std::exit(0);
 	}
 
