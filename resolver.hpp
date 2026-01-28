@@ -283,6 +283,12 @@ private:
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
 
+	/// Follows references and returns TypeInfo::SameAs with the new roster or TypeInfo::Bottom if none can be
+	/// unified (throws a diagnostic in that case).
+	TypeInfo follow_references(TypeInfo::ID same_as, TypeInfo::ID, FileContext::ID);
+	/// Handles the case of basic known types which have no extra information, returns whether any of the provided
+	/// types matched the type kind.
+	bool basic_known(TypeInfo::Kind, TypeInfo::ID, TypeInfo::ID, FileContext::ID);
 	/// Equates two types and adds a diagnostic if it fails.
 	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID);
 	/// Returns whether two types can be unified.

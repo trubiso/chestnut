@@ -570,30 +570,105 @@ void Resolver::resolve_identifiers() {
 	for (ParsedFile& file : parsed_files) { resolve(file.module, Scope {}, file.file_id); }
 }
 
-void Resolver::unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo::ID b, FileContext::ID file_id) {
+Resolver::TypeInfo
+Resolver::follow_references(Resolver::TypeInfo::ID same_as, Resolver::TypeInfo::ID other, FileContext::ID file_id) {
+	std::vector<TypeInfo::ID> const& ids = type_pool_.at(same_as).get_same_as().ids;
+	// if we have a single id, unify it as normal
+	if (ids.size() == 1) {
+		unify(ids[0], other, file_id);
+		return TypeInfo::make_same_as(ids[0]);
+	}
+
+	// if we have more than one, filter the non-unifiable ones out
+	std::vector<TypeInfo::ID> new_ids {};
+	for (TypeInfo::ID id : ids)
+		if (can_unify(id, other)) new_ids.push_back(id);
+
+	// if none can be unified, throw a diagnostic and return Bottom
+	if (new_ids.empty()) {
+		// TODO: diagnostic
+		std::cout << "none of these ids can unify with anything from the other side" << std::endl;
+		return TypeInfo::make_bottom();
+	}
+
+	// unify all remaining ids and create a new SameAs
+	for (TypeInfo::ID new_id : new_ids) unify(new_id, other, file_id);
+	return TypeInfo::make_same_as(std::move(new_ids));
+}
+
+bool Resolver::basic_known(
+	Resolver::TypeInfo::Kind kind,
+	Resolver::TypeInfo::ID   a_id,
+	Resolver::TypeInfo::ID   b_id,
+	FileContext::ID          file_id
+) {
+	TypeInfo &a = type_pool_.at(a_id), &b = type_pool_.at(b_id);
+	bool      a_matches = a.kind() == kind, b_matches = b.kind() == kind;
+	if (!a_matches && !b_matches) return false;  // if neither match, this case is not for us
+	if (a_matches && b_matches) return true;     // if both match, this is a freebie
+	// whichever didn't match becomes a bottom
+	if (!a_matches) a = TypeInfo::make_bottom();
+	if (!b_matches) b = TypeInfo::make_bottom();
+	// we add a diagnostic
+	// TODO: diagnostic
+	std::cout << "found basic known type mismatch" << std::endl;
+	return true;
+}
+
+void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, FileContext::ID file_id) {
+	TypeInfo &a = type_pool_.at(a_id), &b = type_pool_.at(b_id);
+
+	// follow references
+	if (a.kind() == TypeInfo::Kind::SameAs) {
+		a = follow_references(a_id, b_id, file_id);
+		return;
+	}
+	if (b.kind() == TypeInfo::Kind::SameAs) {
+		b = follow_references(b_id, a_id, file_id);
+		return;
+	}
+
+	// bottoms don't participate in unification
+	if (a.kind() == TypeInfo::Kind::Bottom || b.kind() == TypeInfo::Kind::Bottom) return;
+
+	// make unknowns known
+	if (a.kind() == TypeInfo::Kind::Unknown) {
+		a = TypeInfo::make_same_as(b_id);
+		return;
+	}
+	if (b.kind() == TypeInfo::Kind::Unknown) {
+		b = TypeInfo::make_same_as(a_id);
+		return;
+	}
+
+	// if any of them is a basic Known type, the other must be exactly the same
+	if (basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, file_id)) return;
+	if (basic_known(TypeInfo::Kind::KnownChar, a_id, b_id, file_id)) return;
+	if (basic_known(TypeInfo::Kind::KnownBool, a_id, b_id, file_id)) return;
+
+	// modules act like basic Known types right now, but this is silly.
+	// TODO: do something better
+	if (basic_known(TypeInfo::Kind::Module, a_id, b_id, file_id)) return;
+
+	// TODO: Function
+	// TODO: KnownInteger
+	// TODO: KnownFloat
+	// TODO: PartialInteger
+	// TODO: PartialFloat
+	// TODO: Number
 	std::cout << "tried to unify ";
-	debug_print_type(a);
+	debug_print_type(a_id);
 	std::cout << " and ";
-	debug_print_type(b);
+	debug_print_type(b_id);
 	std::cout << std::endl;
 }
 
 bool Resolver::can_unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo::ID b) {
-	std::cout << "checking unifiability between ";
-	debug_print_type(a);
-	std::cout << " and ";
-	debug_print_type(b);
-	std::cout << std::endl;
-	return true;
+	return can_unify(type_pool_.at(a), type_pool_.at(b));
 }
 
 bool Resolver::can_unify(Resolver::TypeInfo a, Resolver::TypeInfo::ID b) {
-	std::cout << "checking unifiability between ";
-	debug_print_type(a);
-	std::cout << " and ";
-	debug_print_type(b);
-	std::cout << std::endl;
-	return true;
+	return can_unify(a, type_pool_.at(b));
 }
 
 bool Resolver::can_unify(Resolver::TypeInfo a, Resolver::TypeInfo b) {
@@ -749,6 +824,7 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function
 			arguments.push_back({name, labeled_arguments.at(name.value())});
 		}
 
+		// TODO: once we have generics, we need to instantiate a copy of the function with unknowns
 		TypeInfo function_call_type
 			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), return_});
 		if (can_unify(function_call_type, callable_id)) {
