@@ -200,6 +200,7 @@ private:
 	TypeInfo::ID type_counter_ = 0;
 
 	void debug_print_type(TypeInfo::ID) const;
+	void debug_print_type(TypeInfo) const;
 
 	/// Returns a new ID produced by the type counter.
 	TypeInfo::ID type_next();
@@ -282,7 +283,12 @@ private:
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
 
+	/// Equates two types and adds a diagnostic if it fails.
 	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID);
+	/// Returns whether two types can be unified.
+	bool can_unify(TypeInfo::ID, TypeInfo::ID);
+	bool can_unify(TypeInfo, TypeInfo::ID);
+	bool can_unify(TypeInfo, TypeInfo);
 
 	TypeInfo infer(AST::Expression::Atom const&, FileContext::ID);
 	TypeInfo infer(AST::Expression::UnaryOperation const&, FileContext::ID);

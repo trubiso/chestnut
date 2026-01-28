@@ -75,7 +75,11 @@ std::vector<Resolver::TypeInfo::ID> Resolver::TypeInfo::get_callable_subitems(
 
 void Resolver::debug_print_type(Resolver::TypeInfo::ID id) const {
 	std::cout << "$" << id << " ";
-	switch (type_pool_.at(id).kind()) {
+	debug_print_type(type_pool_.at(id));
+}
+
+void Resolver::debug_print_type(Resolver::TypeInfo type) const {
+	switch (type.kind()) {
 	case TypeInfo::Kind::Unknown:        std::cout << "(unknown type)"; return;
 	case TypeInfo::Kind::Bottom:         std::cout << "(bottom)"; return;
 	case TypeInfo::Kind::Module:         std::cout << "(module)"; return;
@@ -91,34 +95,34 @@ void Resolver::debug_print_type(Resolver::TypeInfo::ID id) const {
 	case TypeInfo::Kind::PartialInteger: break;
 	}
 
-	if (type_pool_.at(id).kind() == TypeInfo::Kind::Function) {
-		TypeInfo::Function const& function = type_pool_.at(id).get_function();
+	if (type.kind() == TypeInfo::Kind::Function) {
+		TypeInfo::Function const& function = type.get_function();
 		std::cout << "(function with args (";
 		size_t count = 0;
-		for (auto const& [name, type] : function.arguments) {
+		for (auto const& [name, arg_type] : function.arguments) {
 			std::cout << (name.has_value() ? name.value() : "(anonymous)") << ": ";
-			debug_print_type(type);
+			debug_print_type(arg_type);
 			if (++count < function.arguments.size()) std::cout << ", ";
 		}
 		std::cout << ") and return type ";
 		debug_print_type(function.return_);
 		std::cout << ")";
-	} else if (type_pool_.at(id).kind() == TypeInfo::Kind::SameAs) {
+	} else if (type.kind() == TypeInfo::Kind::SameAs) {
 		std::cout << "=(";
 		size_t count = 0;
-		for (Resolver::TypeInfo::ID subid : type_pool_.at(id).get_same_as().ids) {
+		for (Resolver::TypeInfo::ID subid : type.get_same_as().ids) {
 			debug_print_type(subid);
-			if (++count < type_pool_.at(id).get_same_as().ids.size()) std::cout << " | ";
+			if (++count < type.get_same_as().ids.size()) std::cout << " | ";
 		}
 		std::cout << ")";
-	} else if (type_pool_.at(id).kind() == TypeInfo::Kind::KnownInteger) {
-		AST::Type::Atom::Integer integer = type_pool_.at(id).get_known_integer().integer;
+	} else if (type.kind() == TypeInfo::Kind::KnownInteger) {
+		AST::Type::Atom::Integer integer = type.get_known_integer().integer;
 		std::cout << AST::Type::Atom::make_integer(std::move(integer));
-	} else if (type_pool_.at(id).kind() == TypeInfo::Kind::KnownFloat) {
-		std::cout << AST::Type::Atom::make_float(type_pool_.at(id).get_known_float().width);
-	} else if (type_pool_.at(id).kind() == TypeInfo::Kind::PartialInteger) {
-		AST::Type::Atom::Integer integer         = type_pool_.at(id).get_partial_integer().integer;
-		bool                     signed_is_known = type_pool_.at(id).get_partial_integer().signed_is_known;
+	} else if (type.kind() == TypeInfo::Kind::KnownFloat) {
+		std::cout << AST::Type::Atom::make_float(type.get_known_float().width);
+	} else if (type.kind() == TypeInfo::Kind::PartialInteger) {
+		AST::Type::Atom::Integer integer         = type.get_partial_integer().integer;
+		bool                     signed_is_known = type.get_partial_integer().signed_is_known;
 		std::cout
 			<< (signed_is_known ? "(unknown sign) " : "")
 			<< AST::Type::Atom::make_integer(std::move(integer));
@@ -574,6 +578,33 @@ void Resolver::unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo::ID b, FileCon
 	std::cout << std::endl;
 }
 
+bool Resolver::can_unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo::ID b) {
+	std::cout << "checking unifiability between ";
+	debug_print_type(a);
+	std::cout << " and ";
+	debug_print_type(b);
+	std::cout << std::endl;
+	return true;
+}
+
+bool Resolver::can_unify(Resolver::TypeInfo a, Resolver::TypeInfo::ID b) {
+	std::cout << "checking unifiability between ";
+	debug_print_type(a);
+	std::cout << " and ";
+	debug_print_type(b);
+	std::cout << std::endl;
+	return true;
+}
+
+bool Resolver::can_unify(Resolver::TypeInfo a, Resolver::TypeInfo b) {
+	std::cout << "checking unifiability between ";
+	debug_print_type(a);
+	std::cout << " and ";
+	debug_print_type(b);
+	std::cout << std::endl;
+	return true;
+}
+
 Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
@@ -643,12 +674,11 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function
 	std::vector<TypeInfo::ID> callable_filtered {};
 	for (TypeInfo::ID callable_id : callable) {
 		assert(type_pool_.at(callable_id).kind() == TypeInfo::Kind::Function);
-		bool argument_count_matches
-			= type_pool_.at(callable_id).get_function().arguments.size() == provided_arguments;
+		auto const& function_arguments     = type_pool_.at(callable_id).get_function().arguments;
+		bool        argument_count_matches = function_arguments.size() == provided_arguments;
 		if (!argument_count_matches) continue;
 		if (!function_call.arguments.labeled.empty()) {
 			// check that all labeled arguments exist
-			auto const& function_arguments = type_pool_.at(callable_id).get_function().arguments;
 			// we only consider arguments that haven't already been provided by the ordered arguments
 			std::vector<std::string_view> arguments_under_consideration {};
 			arguments_under_consideration.reserve(
@@ -677,28 +707,73 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function
 			}
 			if (!all_arguments_exist) continue;
 		}
+		callable_filtered.push_back(callable_id);
 	}
 
 	if (callable_filtered.empty()) {
 		// TODO: throw a really cool diagnostic showing exactly why each function was discarded
-		std::cout << "no function matches lol" << std::endl;
+		std::cout << "no function matches " << function_call << " lol" << std::endl;
 		return TypeInfo::make_bottom();
 	}
 
-	// now we have all candidates for this function
-	// we need to create a function with what we know from this expression
-	// then, we need to unify it with this list of functions
-	// finally, we will get either zero functions (no function matches), more than one (ambiguous) or one
-	// and we need to return the return type of the one function we get in the ideal case
-	// TODO: disambiguate overload by type, unify with expression
-	if (callable_filtered.size() > 1) {
-		std::cout << "gotta disambiguate overload by type!" << std::endl;
+	// it's time to infer the arguments now that we have a set of possible callees
+	std::vector<TypeInfo::ID> ordered_arguments {};
+	ordered_arguments.reserve(function_call.arguments.ordered.size());
+	for (auto const& argument : function_call.arguments.ordered) {
+		ordered_arguments.push_back(register_type(infer(argument.value, file_id)));
+	}
+
+	std::unordered_map<std::string, TypeInfo::ID> labeled_arguments {};
+	ordered_arguments.reserve(function_call.arguments.labeled.size());
+	for (auto const& [identifier, value] : function_call.arguments.labeled) {
+		labeled_arguments.emplace(identifier.value.name(), register_type(infer(value.value, file_id)));
+	}
+
+	TypeInfo::ID return_ = register_type(TypeInfo::make_unknown());
+
+	// we will filter the functions based on whether they are unifiable
+	std::vector<TypeInfo::ID>   found_functions {};
+	std::optional<TypeInfo::ID> call_id = {};
+	for (TypeInfo::ID callable_id : callable_filtered) {
+		assert(type_pool_.at(callable_id).kind() == TypeInfo::Kind::Function);
+		// now we must create the function call type according to the function (due to labeled arguments)
+		auto const& function_arguments = type_pool_.at(callable_id).get_function().arguments;
+		assert(function_arguments.size() == provided_arguments);
+		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> arguments {};
+		arguments.reserve(provided_arguments);
+		for (TypeInfo::ID argument : ordered_arguments) arguments.push_back({std::nullopt, argument});
+		for (size_t i = arguments.size(); i < function_arguments.size(); ++i) {
+			std::optional<std::string> name = std::get<0>(function_arguments.at(i));
+			// if it didn't have a name, it couldn't be a labeled argument
+			assert(name.has_value());
+			arguments.push_back({name, labeled_arguments.at(name.value())});
+		}
+
+		TypeInfo function_call_type
+			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), return_});
+		if (can_unify(function_call_type, callable_id)) {
+			if (found_functions.empty()) {
+				call_id = register_type(std::move(function_call_type));
+				unify(call_id.value(), callable_id, file_id);
+			}
+			found_functions.push_back(callable_id);
+		}
+	}
+
+	if (found_functions.empty() || !call_id.has_value()) {
+		// TODO: throw a diagnostic
+		std::cout << "no function matches after typeres lol" << std::endl;
 		return TypeInfo::make_bottom();
 	}
 
-	// this is a hack just to get this to return for now
-	TypeInfo actual_callee = type_pool_.at(callable_filtered[0]);
-	return TypeInfo::make_same_as(actual_callee.get_function().return_);
+	if (found_functions.size() > 1) {
+		std::cout << "too many functions match" << std::endl;
+		return TypeInfo::make_bottom();
+	}
+
+	// TODO: finish resolving the identifier that is being called?
+
+	return TypeInfo::make_same_as(type_pool_.at(call_id.value()).get_function().return_);
 }
 
 Resolver::TypeInfo Resolver::infer(AST::Expression const& expression, FileContext::ID file_id) {
