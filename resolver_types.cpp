@@ -74,7 +74,6 @@ void Resolver::debug_print_type(Resolver::TypeInfo type) const {
 	case TypeInfo::Kind::KnownChar:      std::cout << "char"; return;
 	case TypeInfo::Kind::KnownBool:      std::cout << "bool"; return;
 	case TypeInfo::Kind::PartialFloat:   std::cout << "(float)"; return;
-	case TypeInfo::Kind::Number:         std::cout << "(numeric)"; return;
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
 	case TypeInfo::Kind::KnownInteger:
@@ -127,8 +126,11 @@ Resolver::TypeInfo::ID Resolver::register_type(Resolver::TypeInfo&& type) {
 	return id;
 }
 
-Resolver::TypeInfo
-Resolver::unify_follow_references(Resolver::TypeInfo::ID same_as, Resolver::TypeInfo::ID other, FileContext::ID file_id) {
+Resolver::TypeInfo Resolver::unify_follow_references(
+	Resolver::TypeInfo::ID same_as,
+	Resolver::TypeInfo::ID other,
+	FileContext::ID        file_id
+) {
 	assert(type_pool_.at(same_as).kind() == TypeInfo::Kind::SameAs);
 	std::vector<TypeInfo::ID> const& ids = type_pool_.at(same_as).get_same_as().ids;
 
@@ -258,7 +260,6 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 	// TODO: KnownFloat
 	// TODO: PartialInteger
 	// TODO: PartialFloat
-	// TODO: Number
 	std::cout << "tried to unify ";
 	debug_print_type(a_id);
 	std::cout << " and ";
@@ -286,8 +287,12 @@ bool Resolver::can_unify(Resolver::TypeInfo a, Resolver::TypeInfo b) {
 Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
-		// TODO: apply suffixes, detect float vs integer
-		return TypeInfo::make_number();
+		// TODO: apply suffixes
+		if (atom.get_number_literal().is_float()) return TypeInfo::make_partial_float();
+		else
+			return TypeInfo::make_partial_integer(
+				TypeInfo::PartialInteger {AST::Type::Atom::Integer::any(false), false}
+			);
 	case AST::Expression::Atom::Kind::StringLiteral:
 		// TODO: do string literals
 		std::cout << "unsupported string literal" << std::endl;

@@ -85,8 +85,6 @@ private:
 			PartialInteger,
 			/// Partially resolved float type, that is, we know it is a float, but not which kind.
 			PartialFloat,
-			/// Any number type.
-			Number,
 		};
 
 		typedef std::variant<
@@ -101,8 +99,7 @@ private:
 			KnownInteger,    // KnownInteger
 			KnownFloat,      // KnownFloat
 			PartialInteger,  // PartialInteger
-			std::monostate,  // PartialFloat
-			std::monostate   // Number
+			std::monostate   // PartialFloat
 			>
 			value_t;
 
@@ -166,10 +163,6 @@ private:
 
 		inline static TypeInfo make_partial_float() {
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::PartialFloat>, std::monostate {}});
-		}
-
-		inline static TypeInfo make_number() {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Number>, std::monostate {}});
 		}
 
 		inline Function const& get_function() const { return std::get<(size_t) Kind::Function>(value); }

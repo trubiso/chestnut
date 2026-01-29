@@ -2,6 +2,11 @@
 
 namespace AST {
 
+bool Expression::Atom::NumberLiteral::is_float() const {
+	// FIXME: this will break as soon as we add different float types
+	return literal.contains('.');
+}
+
 bool Expression::can_be_lhs() const {
 	// TODO: change this once deref, member access exist
 

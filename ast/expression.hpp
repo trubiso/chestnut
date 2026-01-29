@@ -22,6 +22,8 @@ struct Expression {
 		struct NumberLiteral {
 			std::string               literal;
 			std::optional<Identifier> suffix;  // unqualified
+
+			bool is_float() const;
 		};
 
 		struct StringLiteral {
