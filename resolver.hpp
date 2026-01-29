@@ -287,10 +287,10 @@ private:
 
 	/// Follows references and returns TypeInfo::SameAs with the new roster or TypeInfo::Bottom if none can be
 	/// unified (throws a diagnostic in that case).
-	TypeInfo follow_references(TypeInfo::ID same_as, TypeInfo::ID, FileContext::ID);
+	TypeInfo unify_follow_references(TypeInfo::ID same_as, TypeInfo::ID, FileContext::ID);
 	/// Handles the case of basic known types which have no extra information, returns whether any of the provided
 	/// types matched the type kind.
-	bool basic_known(TypeInfo::Kind, TypeInfo::ID, TypeInfo::ID, FileContext::ID);
+	bool unify_basic_known(TypeInfo::Kind, TypeInfo::ID, TypeInfo::ID, FileContext::ID);
 	/// Unifies a function and another type.
 	void unify_functions(TypeInfo::ID function, TypeInfo::ID, FileContext::ID);
 	/// Equates two types and adds a diagnostic if it fails.

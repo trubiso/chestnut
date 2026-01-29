@@ -128,8 +128,10 @@ Resolver::TypeInfo::ID Resolver::register_type(Resolver::TypeInfo&& type) {
 }
 
 Resolver::TypeInfo
-Resolver::follow_references(Resolver::TypeInfo::ID same_as, Resolver::TypeInfo::ID other, FileContext::ID file_id) {
+Resolver::unify_follow_references(Resolver::TypeInfo::ID same_as, Resolver::TypeInfo::ID other, FileContext::ID file_id) {
+	assert(type_pool_.at(same_as).kind() == TypeInfo::Kind::SameAs);
 	std::vector<TypeInfo::ID> const& ids = type_pool_.at(same_as).get_same_as().ids;
+
 	// if we have a single id, unify it as normal
 	if (ids.size() == 1) {
 		unify(ids[0], other, file_id);
@@ -153,14 +155,15 @@ Resolver::follow_references(Resolver::TypeInfo::ID same_as, Resolver::TypeInfo::
 	return TypeInfo::make_same_as(std::move(new_ids));
 }
 
-bool Resolver::basic_known(
+bool Resolver::unify_basic_known(
 	Resolver::TypeInfo::Kind kind,
 	Resolver::TypeInfo::ID   a_id,
 	Resolver::TypeInfo::ID   b_id,
 	FileContext::ID          file_id
 ) {
 	TypeInfo &a = type_pool_.at(a_id), &b = type_pool_.at(b_id);
-	bool      a_matches = a.kind() == kind, b_matches = b.kind() == kind;
+
+	bool a_matches = a.kind() == kind, b_matches = b.kind() == kind;
 	if (!a_matches && !b_matches) return false;  // if neither match, this case is not for us
 	if (a_matches && b_matches) return true;     // if both match, this is a freebie
 	// whichever didn't match becomes a bottom
@@ -218,11 +221,11 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 
 	// follow references
 	if (a.kind() == TypeInfo::Kind::SameAs) {
-		a = follow_references(a_id, b_id, file_id);
+		a = unify_follow_references(a_id, b_id, file_id);
 		return;
 	}
 	if (b.kind() == TypeInfo::Kind::SameAs) {
-		b = follow_references(b_id, a_id, file_id);
+		b = unify_follow_references(b_id, a_id, file_id);
 		return;
 	}
 
@@ -240,13 +243,13 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 	}
 
 	// if any of them is a basic Known type, the other must be exactly the same
-	if (basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, file_id)) return;
-	if (basic_known(TypeInfo::Kind::KnownChar, a_id, b_id, file_id)) return;
-	if (basic_known(TypeInfo::Kind::KnownBool, a_id, b_id, file_id)) return;
+	if (unify_basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, file_id)) return;
+	if (unify_basic_known(TypeInfo::Kind::KnownChar, a_id, b_id, file_id)) return;
+	if (unify_basic_known(TypeInfo::Kind::KnownBool, a_id, b_id, file_id)) return;
 
 	// modules act like basic Known types right now, but this is silly.
 	// TODO: do something better
-	if (basic_known(TypeInfo::Kind::Module, a_id, b_id, file_id)) return;
+	if (unify_basic_known(TypeInfo::Kind::Module, a_id, b_id, file_id)) return;
 
 	if (a.kind() == TypeInfo::Kind::Function) return unify_functions(a_id, b_id, file_id);
 	if (b.kind() == TypeInfo::Kind::Function) return unify_functions(b_id, a_id, file_id);
@@ -283,7 +286,7 @@ bool Resolver::can_unify(Resolver::TypeInfo a, Resolver::TypeInfo b) {
 Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
-		// TODO: apply suffixes
+		// TODO: apply suffixes, detect float vs integer
 		return TypeInfo::make_number();
 	case AST::Expression::Atom::Kind::StringLiteral:
 		// TODO: do string literals
