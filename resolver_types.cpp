@@ -172,6 +172,47 @@ bool Resolver::basic_known(
 	return true;
 }
 
+void Resolver::unify_functions(Resolver::TypeInfo::ID function, Resolver::TypeInfo::ID other, FileContext::ID file_id) {
+	// ensure they're both functions
+	assert(type_pool_.at(function).kind() == TypeInfo::Kind::Function);
+	if (type_pool_.at(other).kind() != TypeInfo::Kind::Function) {
+		// TODO: diagnostic
+		std::cout << "functions must unify with functions" << std::endl;
+		return;
+	}
+
+	TypeInfo::Function &a_function = type_pool_.at(function).get_function(),
+			   &b_function = type_pool_.at(other).get_function();
+
+	// ensure they have the same argument count
+	if (a_function.arguments.size() != b_function.arguments.size()) {
+		// TODO: diagnostic
+		std::cout << "functions must have the same amount of arguments" << std::endl;
+		return;
+	}
+
+	// unify the names and types of arguments
+	for (size_t i = 0; i < a_function.arguments.size(); ++i) {
+		auto& [a_name, a_type] = a_function.arguments.at(i);
+		auto& [b_name, b_type] = b_function.arguments.at(i);
+		bool a_has_name = a_name.has_value(), b_has_name = b_name.has_value();
+		if (a_has_name && b_has_name && (a_name.value() != b_name.value())) {
+			// TODO: diagnostic
+			std::cout
+				<< "functions must have the same argument names (tip: mark a function argument name as anon if the name is unimportant)"
+				<< std::endl;
+		} else if (a_has_name || b_has_name) {
+			if (a_has_name) b_name = a_name;
+			if (b_has_name) a_name = b_name;
+		}
+		unify(a_type, b_type, file_id);
+	}
+
+	// unify the return types
+	unify(a_function.return_, b_function.return_, file_id);
+	return;
+}
+
 void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, FileContext::ID file_id) {
 	TypeInfo &a = type_pool_.at(a_id), &b = type_pool_.at(b_id);
 
@@ -207,7 +248,9 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 	// TODO: do something better
 	if (basic_known(TypeInfo::Kind::Module, a_id, b_id, file_id)) return;
 
-	// TODO: Function
+	if (a.kind() == TypeInfo::Kind::Function) return unify_functions(a_id, b_id, file_id);
+	if (b.kind() == TypeInfo::Kind::Function) return unify_functions(b_id, a_id, file_id);
+
 	// TODO: KnownInteger
 	// TODO: KnownFloat
 	// TODO: PartialInteger

@@ -174,6 +174,8 @@ private:
 
 		inline Function const& get_function() const { return std::get<(size_t) Kind::Function>(value); }
 
+		inline Function& get_function() { return std::get<(size_t) Kind::Function>(value); }
+
 		inline SameAs const& get_same_as() const { return std::get<(size_t) Kind::SameAs>(value); }
 
 		inline KnownInteger const& get_known_integer() const {
@@ -289,6 +291,8 @@ private:
 	/// Handles the case of basic known types which have no extra information, returns whether any of the provided
 	/// types matched the type kind.
 	bool basic_known(TypeInfo::Kind, TypeInfo::ID, TypeInfo::ID, FileContext::ID);
+	/// Unifies a function and another type.
+	void unify_functions(TypeInfo::ID function, TypeInfo::ID, FileContext::ID);
 	/// Equates two types and adds a diagnostic if it fails.
 	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID);
 	/// Returns whether two types can be unified.
