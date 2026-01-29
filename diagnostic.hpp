@@ -34,13 +34,6 @@ struct Diagnostic {
 			explicit Label(Span span, OutFmt::Color color) : span {span}, label {}, color {color} {}
 		};
 
-		/// All titles will be prefixed with "note:".
-		std::optional<std::string> title;
-		/// There must be at least one label!!!
-		std::vector<Label> labels;
-
-		FileContext context;
-
 		explicit Sample(FileContext const& context, std::initializer_list<Label> labels)
 			: title {}
 			, labels {labels}
@@ -55,6 +48,13 @@ struct Diagnostic {
 			: Sample {context, {Label {span, color}}} {}
 
 		explicit Sample(FileContext const& context, Span span) : Sample {context, span, OutFmt::Color::Red} {}
+
+		/// All titles will be prefixed with "note:".
+		std::optional<std::string> title;
+		/// There must be at least one label!!!
+		std::vector<Label> labels;
+
+		FileContext context;
 
 		Span span() const;
 		void print() const;
