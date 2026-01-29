@@ -259,18 +259,152 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 	// TODO: do something better
 	if (unify_basic_known(TypeInfo::Kind::Module, a_id, b_id, file_id)) return;
 
+	// functions
 	if (a.kind() == TypeInfo::Kind::Function) return unify_functions(a_id, b_id, file_id);
 	if (b.kind() == TypeInfo::Kind::Function) return unify_functions(b_id, a_id, file_id);
 
-	// TODO: KnownInteger
-	// TODO: KnownFloat
-	// TODO: PartialInteger
-	// TODO: PartialFloat
-	std::cout << "tried to unify ";
-	debug_print_type(a_id);
-	std::cout << " and ";
-	debug_print_type(b_id);
-	std::cout << std::endl;
+	// now only numeric types are left ([Known/Partial][Integer/Float])
+	bool a_known = a.kind() == TypeInfo::Kind::KnownInteger || a.kind() == TypeInfo::Kind::KnownFloat,
+	     b_known = b.kind() == TypeInfo::Kind::KnownInteger || b.kind() == TypeInfo::Kind::KnownFloat;
+	bool a_float = a.kind() == TypeInfo::Kind::KnownFloat || a.kind() == TypeInfo::Kind::PartialFloat,
+	     b_float = b.kind() == TypeInfo::Kind::KnownFloat || b.kind() == TypeInfo::Kind::PartialFloat;
+
+	// both must be either floats or integers
+	if (a_float != b_float) {
+		// TODO: diagnostic
+		std::cout << "floats and integers do not mix, like water and oil," << std::endl;
+		return;
+	}
+
+	// floats
+	if (a_float) {
+		// if neither are known, there is no information to be learnt, since we can only learn the bit width
+		if (!a_known && !b_known) return;
+
+		// if both are known, we must ensure they don't clash
+		if (a_known && b_known) {
+			if (a.get_known_float().width != b.get_known_float().width) {
+				// TODO: diagnostic
+				std::cout << "floats of incompatible width" << std::endl;
+				return;
+			}
+		}
+
+		// if one is known, we can make the other the same as the other
+		if (a_known) b = TypeInfo::make_same_as(a_id);
+		if (b_known) a = TypeInfo::make_same_as(b_id);
+		return;
+	}
+
+	// integers may clash due to sign and size
+	bool signed_clash = false, size_clash = false;
+	if (a_known && b_known) {
+		// if both are known, we can just check clashes directly
+		if (a.get_known_integer().integer.is_signed() != b.get_known_integer().integer.is_signed())
+			signed_clash = true;
+		if (a.get_known_integer().integer.width_type() != b.get_known_integer().integer.width_type())
+			size_clash = true;
+		if (a.get_known_integer().integer.bit_width() != b.get_known_integer().integer.bit_width())
+			size_clash = true;
+	} else if (a_known != b_known) {
+		// if one isn't known, we must check that there are no clashes
+		TypeInfo::PartialInteger const& partial = a_known ? b.get_partial_integer() : a.get_partial_integer();
+		TypeInfo::KnownInteger const&   known   = a_known ? a.get_known_integer() : b.get_known_integer();
+
+		// if the sign is known, it must not clash
+		if (partial.signed_is_known && partial.integer.is_signed() != known.integer.is_signed())
+			signed_clash = true;
+
+		// if the size is known, it must not clash
+		if (partial.integer.width_type() != AST::Type::Atom::Integer::WidthType::Any) {
+			// the width types must match
+			if (partial.integer.width_type() != known.integer.width_type()) size_clash = true;
+			// if both are fixed width, their widths must match
+			else if (partial.integer.bit_width() != known.integer.bit_width()) size_clash = true;
+		}
+
+		// if no clashes were detected, we unify by setting the partial one to the known one
+		if (!signed_clash && !size_clash) {
+			type_pool_.at(a_known ? b_id : a_id) = TypeInfo::make_same_as(a_known ? a_id : b_id);
+		}
+	} else {
+		// neither are known, so we will construct a unified partial integer for both of them
+		TypeInfo::PartialInteger const &a_partial = a.get_partial_integer(),
+					       &b_partial = b.get_partial_integer();
+
+		// let's determine the sign
+		bool signed_ = false, signed_is_known;
+		if (a_partial.signed_is_known && b_partial.signed_is_known) {
+			// if the sign is known for both, it must not clash
+			if (a_partial.integer.is_signed() != b_partial.integer.is_signed()) signed_clash = true;
+			else {
+				signed_is_known = true;
+				signed_         = a_partial.integer.is_signed();
+			}
+		} else if (a_partial.signed_is_known != b_partial.signed_is_known) {
+			// if the sign is known for one of them, we infer it from there
+			signed_is_known = true;
+			signed_         = a_partial.signed_is_known ? a_partial.integer.is_signed()
+			                                            : b_partial.integer.is_signed();
+		} else {
+			// if it isn't known for either, we don't know anything
+			signed_is_known = false;
+		}
+
+		// let's determine the width
+		uint32_t width      = 0;
+		auto     width_type = AST::Type::Atom::Integer::WidthType::Any;
+
+		bool a_know_width = a_partial.integer.width_type() != AST::Type::Atom::Integer::WidthType::Any,
+		     b_know_width = b_partial.integer.width_type() != AST::Type::Atom::Integer::WidthType::Any;
+		if (a_know_width && b_know_width) {
+			// if the width is known for both, it must not clash
+			if (a_partial.integer.width_type() != b_partial.integer.width_type()) size_clash = true;
+			else if (a_partial.integer.bit_width() != b_partial.integer.bit_width()) size_clash = true;
+			else {
+				width_type = a_partial.integer.width_type();
+				if (width_type == AST::Type::Atom::Integer::WidthType::Fixed)
+					width = a_partial.integer.bit_width().value();
+			}
+		} else if (a_know_width != b_know_width) {
+			// if the width is known for only one of them, we infer it from there
+			width_type = a_know_width ? a_partial.integer.width_type() : b_partial.integer.width_type();
+			if (width_type == AST::Type::Atom::Integer::WidthType::Fixed)
+				width = a_know_width ? a_partial.integer.bit_width().value()
+				                     : b_partial.integer.bit_width().value();
+		}
+
+		if (!signed_clash && !size_clash) {
+			// create the unified integer type
+			AST::Type::Atom::Integer integer
+				= width_type == AST::Type::Atom::Integer::WidthType::Any
+			                ? AST::Type::Atom::Integer::any(signed_)
+			        : width_type == AST::Type::Atom::Integer::WidthType::Size
+			                ? AST::Type::Atom::Integer::size(signed_)
+			        : width_type == AST::Type::Atom::Integer::WidthType::Ptr
+			                ? AST::Type::Atom::Integer::ptr(signed_)
+			                : AST::Type::Atom::Integer::with_width(width, signed_).value();
+
+			TypeInfo new_type;
+			if (signed_is_known && width_type != AST::Type::Atom::Integer::WidthType::Any) {
+				// we know everything
+				new_type = TypeInfo::make_known_integer(TypeInfo::KnownInteger {integer});
+			} else {
+				// we don't know everything, so this must be partial
+				new_type = TypeInfo::make_partial_integer(
+					TypeInfo::PartialInteger {integer, signed_is_known}
+				);
+			}
+
+			// this is arbitrary, it works both ways
+			b = new_type;
+			a = TypeInfo::make_same_as(b_id);
+		}
+	}
+
+	if (signed_clash) { std::cout << "signed clash!" << std::endl; }
+
+	if (size_clash) { std::cout << "size clash!" << std::endl; }
 }
 
 bool Resolver::can_unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo::ID b) {

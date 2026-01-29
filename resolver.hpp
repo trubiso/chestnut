@@ -181,6 +181,8 @@ private:
 			return std::get<(size_t) Kind::PartialInteger>(value);
 		}
 
+		inline PartialInteger& get_partial_integer() { return std::get<(size_t) Kind::PartialInteger>(value); }
+
 		static TypeInfo from_type(AST::Type::Atom const&);
 		static TypeInfo from_type(AST::Type const&);
 
