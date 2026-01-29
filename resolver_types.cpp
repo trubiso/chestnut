@@ -107,11 +107,17 @@ void Resolver::debug_print_type(Resolver::TypeInfo type) const {
 	} else if (type.kind() == TypeInfo::Kind::KnownFloat) {
 		std::cout << AST::Type::Atom::make_float(type.get_known_float().width);
 	} else if (type.kind() == TypeInfo::Kind::PartialInteger) {
-		AST::Type::Atom::Integer integer         = type.get_partial_integer().integer;
-		bool                     signed_is_known = type.get_partial_integer().signed_is_known;
-		std::cout
-			<< (signed_is_known ? "(unknown sign) " : "")
-			<< AST::Type::Atom::make_integer(std::move(integer));
+		AST::Type::Atom::Integer integer = type.get_partial_integer().integer;
+
+		bool signed_is_known = type.get_partial_integer().signed_is_known;
+
+		std::cout << (signed_is_known ? (integer.is_signed() ? "" : "u") : "?") << "int";
+		switch (integer.width_type()) {
+		case AST::Type::Atom::Integer::WidthType::Fixed: std::cout << integer.bit_width().value(); break;
+		case AST::Type::Atom::Integer::WidthType::Any:   break;
+		case AST::Type::Atom::Integer::WidthType::Ptr:   std::cout << "ptr"; break;
+		case AST::Type::Atom::Integer::WidthType::Size:  std::cout << "size"; break;
+		}
 	}
 }
 
