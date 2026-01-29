@@ -28,6 +28,7 @@ export module hello {
 				const q = my_var;
 			}
 			const q = my_var;
+			q = 'h';
 		}
 
 		export func main() void {

@@ -466,7 +466,7 @@ std::optional<Statement> Parser::consume_statement_set() {
 		diagnostics_.push_back(
 			Diagnostic::error(
 				"invalid left-hand side for set statement",
-				"set statements can only take lvalues (identifiers, function calls, dereferences and access expressions) in their left-hand side",
+				"set statements can only take lvalues (identifiers, dereferences and access expressions) in their left-hand side",
 				{Diagnostic::Sample(context_, lhs.span)}
 			)
 		);

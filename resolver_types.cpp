@@ -760,13 +760,24 @@ void Resolver::infer(AST::Statement::Declare& declare, FileContext::ID file_id) 
 
 void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 	// skip all invalid LHS
-	if (set.lhs.value.kind() != AST::Expression::Kind::Atom) {
+	if (!set.lhs.value.can_be_lhs()) return;
+	// we can only deal with identifiers rn
+	if (set.lhs.value.get_atom().kind() != AST::Expression::Atom::Kind::Identifier) return;
+	// if name resolution failed, we must move on
+	if (!set.lhs.value.get_atom().get_identifier().id.has_value()) return;
+	if (set.lhs.value.get_atom().get_identifier().id.value().empty()) return;
+	// TODO: remove this, because set statements either have one lhs or most likely they should be forbidden
+	if (set.lhs.value.get_atom().get_identifier().id.value().size() > 1) {
 		std::cout
-			<< "unsupported set statement (this could also go for functions which, tbh, why can you even assign values to them)"
+			<< "we gotta resolve the lhs for some reason? check whether nameres threw a diagnostic"
 			<< std::endl;
 		return;
 	}
-	if (set.lhs.value.get_atom().kind() != AST::Expression::Atom::Kind::Identifier) return;
+	// lhs and rhs must have the same type
+	Symbol const& lhs      = symbol_pool_.at(set.lhs.value.get_atom().get_identifier().id.value().at(0));
+	TypeInfo      rhs      = infer(set.rhs.value, set.rhs.span, file_id);
+	TypeInfo::ID  rhs_type = register_type(std::move(rhs), set.rhs.span);
+	unify(lhs.type, rhs_type, file_id);
 }
 
 void Resolver::infer(AST::Statement::Return& return_, Span span, AST::SymbolID function, FileContext::ID file_id) {
