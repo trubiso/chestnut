@@ -21,7 +21,14 @@ export module hello {
 
 		@extern func putc(c: char) void;
 
-		func try_shadowing(putc: char, sum_numbers: uint) void;
+		func try_shadowing(putc: char, sum_numbers: uint) void {
+			const my_var = 5;
+			{
+				const my_var = 'h';
+				const q = my_var;
+			}
+			const q = my_var;
+		}
 
 		export func main() void {
 			sum_numbers(2, 3);
