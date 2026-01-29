@@ -402,26 +402,156 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 		}
 	}
 
+	// TODO: diagnostic
 	if (signed_clash) { std::cout << "signed clash!" << std::endl; }
-
+	// TODO: diagnostic
 	if (size_clash) { std::cout << "size clash!" << std::endl; }
 }
 
-bool Resolver::can_unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo::ID b) {
+bool Resolver::can_unify_follow_references(Resolver::TypeInfo const& same_as, Resolver::TypeInfo const& other) const {
+	assert(same_as.kind() == TypeInfo::Kind::SameAs);
+	std::vector<TypeInfo::ID> const& ids = same_as.get_same_as().ids;
+	for (TypeInfo::ID id : ids)
+		if (can_unify(id, other)) return true;
+	return false;
+}
+
+std::optional<bool> Resolver::can_unify_basic_known(
+	Resolver::TypeInfo::Kind  kind,
+	Resolver::TypeInfo const& a,
+	Resolver::TypeInfo const& b
+) const {
+	bool a_matches = a.kind() == kind, b_matches = b.kind() == kind;
+	if (!a_matches && !b_matches) return std::nullopt;  // if neither match, this case is not for us
+	if (a_matches && b_matches) return true;            // if both match, this is a freebie
+	return false;                                       // if neither match, it won't work
+}
+
+bool Resolver::can_unify_functions(Resolver::TypeInfo const& function, Resolver::TypeInfo const& other) const {
+	// ensure they're both functions
+	assert(function.kind() == TypeInfo::Kind::Function);
+	if (function.kind() != TypeInfo::Kind::Function) { return false; }
+
+	TypeInfo::Function const &a_function = function.get_function(), &b_function = other.get_function();
+
+	// ensure they have the same argument count
+	if (a_function.arguments.size() != b_function.arguments.size()) { return false; }
+
+	// unify the names and types of arguments
+	for (size_t i = 0; i < a_function.arguments.size(); ++i) {
+		auto& [a_name, a_type] = a_function.arguments.at(i);
+		auto& [b_name, b_type] = b_function.arguments.at(i);
+		if (a_name.has_value() && b_name.has_value() && (a_name.value() != b_name.value())) { return false; }
+		if (!can_unify(a_type, b_type)) return false;
+	}
+
+	// unify the return types
+	return can_unify(a_function.return_, b_function.return_);
+}
+
+bool Resolver::can_unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo::ID b) const {
 	return can_unify(type_pool_.at(a), type_pool_.at(b));
 }
 
-bool Resolver::can_unify(Resolver::TypeInfo a, Resolver::TypeInfo::ID b) {
+bool Resolver::can_unify(Resolver::TypeInfo const& a, Resolver::TypeInfo::ID b) const {
 	return can_unify(a, type_pool_.at(b));
 }
 
-bool Resolver::can_unify(Resolver::TypeInfo a, Resolver::TypeInfo b) {
-	std::cout << "checking unifiability between ";
-	debug_print_type(a);
-	std::cout << " and ";
-	debug_print_type(b);
-	std::cout << std::endl;
-	return true;
+bool Resolver::can_unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo const& b) const {
+	return can_unify(type_pool_.at(a), b);
+}
+
+bool Resolver::can_unify(Resolver::TypeInfo const& a, Resolver::TypeInfo const& b) const {
+	// follow references
+	if (a.kind() == TypeInfo::Kind::SameAs) return can_unify_follow_references(a, b);
+	if (b.kind() == TypeInfo::Kind::SameAs) return can_unify_follow_references(b, a);
+
+	// bottoms don't participate in unification
+	if (a.kind() == TypeInfo::Kind::Bottom || b.kind() == TypeInfo::Kind::Bottom) return true;
+
+	// make unknowns known
+	if (a.kind() == TypeInfo::Kind::Unknown) return true;
+	if (b.kind() == TypeInfo::Kind::Unknown) return true;
+
+	// if any of them is a basic Known type, the other must be exactly the same
+	std::optional<bool> attempt;
+	attempt = can_unify_basic_known(TypeInfo::Kind::KnownVoid, a, b);
+	if (attempt.has_value()) return attempt.value();
+	attempt = can_unify_basic_known(TypeInfo::Kind::KnownChar, a, b);
+	if (attempt.has_value()) return attempt.value();
+	attempt = can_unify_basic_known(TypeInfo::Kind::KnownBool, a, b);
+	if (attempt.has_value()) return attempt.value();
+
+	// modules act like basic Known types right now, but this is silly.
+	// TODO: do something better
+	attempt = can_unify_basic_known(TypeInfo::Kind::Module, a, b);
+	if (attempt.has_value()) return attempt.value();
+
+	// functions
+	if (a.kind() == TypeInfo::Kind::Function) return can_unify_functions(a, b);
+	if (b.kind() == TypeInfo::Kind::Function) return can_unify_functions(b, a);
+
+	// now only numeric types are left ([Known/Partial][Integer/Float])
+	bool a_known = a.kind() == TypeInfo::Kind::KnownInteger || a.kind() == TypeInfo::Kind::KnownFloat,
+	     b_known = b.kind() == TypeInfo::Kind::KnownInteger || b.kind() == TypeInfo::Kind::KnownFloat;
+	bool a_float = a.kind() == TypeInfo::Kind::KnownFloat || a.kind() == TypeInfo::Kind::PartialFloat,
+	     b_float = b.kind() == TypeInfo::Kind::KnownFloat || b.kind() == TypeInfo::Kind::PartialFloat;
+
+	// both must be either floats or integers
+	if (a_float != b_float) return false;
+
+	// floats
+	if (a_float) {
+		if (!a_known && !b_known) return true;
+		if (a_known && b_known && a.get_known_float().width != b.get_known_float().width) return false;
+		return true;
+	}
+
+	// integers may clash due to sign and size
+	if (a_known && b_known) {
+		// if both are known, we can just check clashes directly
+		if (a.get_known_integer().integer.is_signed() != b.get_known_integer().integer.is_signed())
+			return false;
+		if (a.get_known_integer().integer.width_type() != b.get_known_integer().integer.width_type())
+			return false;
+		if (a.get_known_integer().integer.bit_width() != b.get_known_integer().integer.bit_width())
+			return false;
+		return true;
+	} else if (a_known != b_known) {
+		// if one isn't known, we must check that there are no clashes
+		TypeInfo::PartialInteger const& partial = a_known ? b.get_partial_integer() : a.get_partial_integer();
+		TypeInfo::KnownInteger const&   known   = a_known ? a.get_known_integer() : b.get_known_integer();
+
+		// if the sign is known, it must not clash
+		if (partial.signed_is_known && partial.integer.is_signed() != known.integer.is_signed()) return false;
+
+		// if the size is known, it must not clash
+		if (partial.integer.width_type() != AST::Type::Atom::Integer::WidthType::Any) {
+			if (partial.integer.width_type() != known.integer.width_type()) return false;
+			else if (partial.integer.bit_width() != known.integer.bit_width()) return false;
+		}
+
+		// if no clashes were detected, we unify by setting the partial one to the known one
+		return true;
+	} else {
+		// neither are known, so we will construct a unified partial integer for both of them
+		TypeInfo::PartialInteger const &a_partial = a.get_partial_integer(),
+					       &b_partial = b.get_partial_integer();
+
+		// if the sign is known for both, it must not clash
+		if (a_partial.signed_is_known
+		    && b_partial.signed_is_known
+		    && a_partial.integer.is_signed() != b_partial.integer.is_signed())
+			return false;
+
+		// if the width is known for both, it must not clash
+		if (a_partial.integer.width_type() != AST::Type::Atom::Integer::WidthType::Any
+		    && b_partial.integer.width_type() != AST::Type::Atom::Integer::WidthType::Any) {
+			if (a_partial.integer.width_type() != b_partial.integer.width_type()) return false;
+			else if (a_partial.integer.bit_width() != b_partial.integer.bit_width()) return false;
+		}
+		return true;
+	}
 }
 
 Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContext::ID file_id) {

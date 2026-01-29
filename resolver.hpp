@@ -290,10 +290,18 @@ private:
 	void unify_functions(TypeInfo::ID function, TypeInfo::ID, FileContext::ID);
 	/// Equates two types and adds a diagnostic if it fails.
 	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID);
+
+	/// Returns whether any of the
+	bool can_unify_follow_references(TypeInfo const& same_as, TypeInfo const&) const;
+	/// Returns whether a basic known type can be unified with another one, given it matches, otherwise returns null.
+	std::optional<bool> can_unify_basic_known(TypeInfo::Kind, TypeInfo const&, TypeInfo const&) const;
+	/// Returns whether a function and another type can be unified.
+	bool can_unify_functions(TypeInfo const& function, TypeInfo const&) const;
 	/// Returns whether two types can be unified.
-	bool can_unify(TypeInfo::ID, TypeInfo::ID);
-	bool can_unify(TypeInfo, TypeInfo::ID);
-	bool can_unify(TypeInfo, TypeInfo);
+	bool can_unify(TypeInfo::ID, TypeInfo::ID) const;
+	bool can_unify(TypeInfo const&, TypeInfo::ID) const;
+	bool can_unify(TypeInfo::ID, TypeInfo const&) const;
+	bool can_unify(TypeInfo const&, TypeInfo const&) const;
 
 	TypeInfo infer(AST::Expression::Atom const&, FileContext::ID);
 	TypeInfo infer(AST::Expression::UnaryOperation const&, FileContext::ID);
