@@ -125,10 +125,12 @@ Resolver::TypeInfo::ID Resolver::type_next() {
 	return type_counter_++;
 }
 
-Resolver::TypeInfo::ID Resolver::register_type(Resolver::TypeInfo&& type) {
+Resolver::TypeInfo::ID Resolver::register_type(Resolver::TypeInfo&& type, Span span) {
 	Resolver::TypeInfo::ID id = type_next();
 	assert(type_pool_.size() == id);
+	assert(type_span_pool_.size() == id);
 	type_pool_.push_back(std::move(type));
+	type_span_pool_.push_back(span);
 	return id;
 }
 
@@ -554,7 +556,7 @@ bool Resolver::can_unify(Resolver::TypeInfo const& a, Resolver::TypeInfo const& 
 	}
 }
 
-Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContext::ID file_id) {
+Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, Span span, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
 		// TODO: apply suffixes
@@ -570,7 +572,7 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContex
 	case AST::Expression::Atom::Kind::CharLiteral:
 		// TODO: apply suffixes
 		return TypeInfo::make_known_char();
-	case AST::Expression::Atom::Kind::Expression: return infer(*atom.get_expression(), file_id);
+	case AST::Expression::Atom::Kind::Expression: return infer(*atom.get_expression(), span, file_id);
 	case AST::Expression::Atom::Kind::Identifier: break;
 	}
 
@@ -586,29 +588,32 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, FileContex
 	else return TypeInfo::make_same_as(std::move(type_ids));
 }
 
-Resolver::TypeInfo Resolver::infer(AST::Expression::UnaryOperation const& unary_operation, FileContext::ID file_id) {
+Resolver::TypeInfo
+Resolver::infer(AST::Expression::UnaryOperation const& unary_operation, Span span, FileContext::ID file_id) {
 	// TODO: operators
-	TypeInfo operand = infer(unary_operation.operand->value, file_id);
+	TypeInfo operand = infer(unary_operation.operand->value, span, file_id);
 	return operand;
 }
 
-Resolver::TypeInfo Resolver::infer(AST::Expression::BinaryOperation const& binary_operation, FileContext::ID file_id) {
+Resolver::TypeInfo
+Resolver::infer(AST::Expression::BinaryOperation const& binary_operation, Span span, FileContext::ID file_id) {
 	// TODO: operators
-	TypeInfo lhs = infer(binary_operation.lhs->value, file_id);
-	TypeInfo rhs = infer(binary_operation.rhs->value, file_id);
+	TypeInfo lhs = infer(binary_operation.lhs->value, span, file_id);
+	TypeInfo rhs = infer(binary_operation.rhs->value, span, file_id);
 
-	TypeInfo::ID lhs_id = register_type(std::move(lhs));
-	TypeInfo::ID rhs_id = register_type(std::move(rhs));
+	TypeInfo::ID lhs_id = register_type(std::move(lhs), binary_operation.lhs->span);
+	TypeInfo::ID rhs_id = register_type(std::move(rhs), binary_operation.rhs->span);
 	unify(lhs_id, rhs_id, file_id);
 
 	return TypeInfo::make_same_as(lhs_id);
 }
 
-Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function_call, FileContext::ID file_id) {
+Resolver::TypeInfo
+Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, FileContext::ID file_id) {
 	// for function calls, we need to resolve or partially resolve the overload
-	TypeInfo callee = infer(function_call.callee->value, file_id);
+	TypeInfo callee = infer(function_call.callee->value, span, file_id);
 
-	TypeInfo::ID callee_id = register_type(std::move(callee));
+	TypeInfo::ID callee_id = register_type(std::move(callee), function_call.callee->span);
 
 	// first, we ensure that there is at least one callable item
 	if (!type_pool_.at(callee_id).is_callable(type_pool_)) {
@@ -673,16 +678,21 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function
 	std::vector<TypeInfo::ID> ordered_arguments {};
 	ordered_arguments.reserve(function_call.arguments.ordered.size());
 	for (auto const& argument : function_call.arguments.ordered) {
-		ordered_arguments.push_back(register_type(infer(argument.value, file_id)));
+		ordered_arguments.push_back(
+			register_type(infer(argument.value, argument.span, file_id), argument.span)
+		);
 	}
 
 	std::unordered_map<std::string, TypeInfo::ID> labeled_arguments {};
 	ordered_arguments.reserve(function_call.arguments.labeled.size());
 	for (auto const& [identifier, value] : function_call.arguments.labeled) {
-		labeled_arguments.emplace(identifier.value.name(), register_type(infer(value.value, file_id)));
+		labeled_arguments.emplace(
+			identifier.value.name(),
+			register_type(infer(value.value, value.span, file_id), value.span)
+		);
 	}
 
-	TypeInfo::ID return_ = register_type(TypeInfo::make_unknown());
+	TypeInfo::ID return_ = register_type(TypeInfo::make_unknown(), span);
 
 	// we will filter the functions based on whether they are unifiable
 	std::vector<TypeInfo::ID>   found_functions {};
@@ -707,7 +717,7 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function
 			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), return_});
 		if (can_unify(function_call_type, callable_id)) {
 			if (found_functions.empty()) {
-				call_id = register_type(std::move(function_call_type));
+				call_id = register_type(std::move(function_call_type), span);
 				unify(call_id.value(), callable_id, file_id);
 			}
 			found_functions.push_back(callable_id);
@@ -730,20 +740,20 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::FunctionCall const& function
 	return TypeInfo::make_same_as(type_pool_.at(call_id.value()).get_function().return_);
 }
 
-Resolver::TypeInfo Resolver::infer(AST::Expression const& expression, FileContext::ID file_id) {
+Resolver::TypeInfo Resolver::infer(AST::Expression const& expression, Span span, FileContext::ID file_id) {
 	switch (expression.kind()) {
-	case AST::Expression::Kind::Atom:            return infer(expression.get_atom(), file_id);
-	case AST::Expression::Kind::UnaryOperation:  return infer(expression.get_unary_operation(), file_id);
-	case AST::Expression::Kind::BinaryOperation: return infer(expression.get_binary_operation(), file_id);
-	case AST::Expression::Kind::FunctionCall:    return infer(expression.get_function_call(), file_id);
+	case AST::Expression::Kind::Atom:            return infer(expression.get_atom(), span, file_id);
+	case AST::Expression::Kind::UnaryOperation:  return infer(expression.get_unary_operation(), span, file_id);
+	case AST::Expression::Kind::BinaryOperation: return infer(expression.get_binary_operation(), span, file_id);
+	case AST::Expression::Kind::FunctionCall:    return infer(expression.get_function_call(), span, file_id);
 	}
 }
 
 void Resolver::infer(AST::Statement::Declare& declare, FileContext::ID file_id) {
 	if (!declare.value.has_value()) return;
 	TypeInfo::ID variable_type = get_single_symbol(declare.name.value).type;
-	TypeInfo     value         = infer(declare.value.value().value, file_id);
-	TypeInfo::ID value_type    = register_type(std::move(value));
+	TypeInfo     value         = infer(declare.value.value().value, declare.value.value().span, file_id);
+	TypeInfo::ID value_type    = register_type(std::move(value), declare.value.value().span);
 	// we must make sure that the declared and actual type match
 	unify(variable_type, value_type, file_id);
 }
@@ -759,13 +769,15 @@ void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 	if (set.lhs.value.get_atom().kind() != AST::Expression::Atom::Kind::Identifier) return;
 }
 
-void Resolver::infer(AST::Statement::Return& return_, AST::SymbolID function, FileContext::ID file_id) {
-	TypeInfo     return_value    = return_.value.has_value()
-                                      // if we do have a value, get its expression type
-	                                     ? infer(return_.value.value().value, file_id)
-                                      // if we don't, that's a return void
-	                                     : TypeInfo::make_known_void();
-	TypeInfo::ID return_value_id = register_type(std::move(return_value));
+void Resolver::infer(AST::Statement::Return& return_, Span span, AST::SymbolID function, FileContext::ID file_id) {
+	TypeInfo return_value = return_.value.has_value()
+	                              // if we do have a value, get its expression type
+	                              ? infer(return_.value.value().value, return_.value.value().span, file_id)
+	                              // if we don't, that's a return void
+	                              : TypeInfo::make_known_void();
+
+	TypeInfo::ID return_value_id
+		= register_type(std::move(return_value), return_.value.has_value() ? return_.value.value().span : span);
 	// we must make sure that the return type and the returned value match
 	unify(return_value_id, type_pool_.at(symbol_pool_.at(function).type).get_function().return_, file_id);
 }
@@ -775,10 +787,13 @@ void Resolver::infer(Spanned<AST::Statement>& statement, AST::SymbolID function,
 	case AST::Statement::Kind::Declare: infer(statement.value.get_declare(), file_id); return;
 	case AST::Statement::Kind::Set:     infer(statement.value.get_set(), file_id); return;
 	case AST::Statement::Kind::Expression:
-		infer(statement.value.get_expression(), file_id);  // TODO: should we unify this with void?
+		// TODO: should we unify this with void?
+		infer(statement.value.get_expression(), statement.span, file_id);
 		return;
-	case AST::Statement::Kind::Return: infer(statement.value.get_return(), function, file_id); return;
-	case AST::Statement::Kind::Scope:  infer(statement.value.get_scope(), function, file_id); return;
+	case AST::Statement::Kind::Return:
+		infer(statement.value.get_return(), statement.span, function, file_id);
+		return;
+	case AST::Statement::Kind::Scope: infer(statement.value.get_scope(), function, file_id); return;
 	}
 }
 

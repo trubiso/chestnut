@@ -1,6 +1,5 @@
-#include "resolver.hpp"
-
 #include "levenshtein.hpp"
+#include "resolver.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -266,7 +265,8 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileConte
 	                {},
 	                register_type(
 				declare.type.has_value() ? TypeInfo::from_type(declare.type.value().value)
-							 : TypeInfo::make_unknown()
+							 : TypeInfo::make_unknown(),
+				declare.type.has_value() ? declare.type.value().span : declare.name.span
 			),
 	                declare.mutable_.value}
 	);

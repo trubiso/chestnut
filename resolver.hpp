@@ -195,6 +195,7 @@ private:
 	};
 
 	std::vector<TypeInfo> type_pool_;
+	std::vector<Span> type_span_pool_;
 
 	TypeInfo::ID type_counter_ = 0;
 
@@ -205,7 +206,7 @@ private:
 	TypeInfo::ID type_next();
 
 	/// Registers a type in the type pool and returns its ID.
-	TypeInfo::ID register_type(TypeInfo&&);
+	TypeInfo::ID register_type(TypeInfo&&, Span);
 
 	struct Symbol {
 		AST::SymbolID   id;
@@ -305,14 +306,14 @@ private:
 	bool can_unify(TypeInfo::ID, TypeInfo const&) const;
 	bool can_unify(TypeInfo const&, TypeInfo const&) const;
 
-	TypeInfo infer(AST::Expression::Atom const&, FileContext::ID);
-	TypeInfo infer(AST::Expression::UnaryOperation const&, FileContext::ID);
-	TypeInfo infer(AST::Expression::BinaryOperation const&, FileContext::ID);
-	TypeInfo infer(AST::Expression::FunctionCall const&, FileContext::ID);
-	TypeInfo infer(AST::Expression const&, FileContext::ID);
+	TypeInfo infer(AST::Expression::Atom const&, Span, FileContext::ID);
+	TypeInfo infer(AST::Expression::UnaryOperation const&, Span, FileContext::ID);
+	TypeInfo infer(AST::Expression::BinaryOperation const&, Span, FileContext::ID);
+	TypeInfo infer(AST::Expression::FunctionCall const&, Span, FileContext::ID);
+	TypeInfo infer(AST::Expression const&, Span, FileContext::ID);
 	void     infer(AST::Statement::Declare&, FileContext::ID);
 	void     infer(AST::Statement::Set&, FileContext::ID);
-	void     infer(AST::Statement::Return&, AST::SymbolID function, FileContext::ID);
+	void     infer(AST::Statement::Return&, Span, AST::SymbolID function, FileContext::ID);
 	void     infer(Spanned<AST::Statement>&, AST::SymbolID function, FileContext::ID);
 	void     infer(AST::Scope&, AST::SymbolID function, FileContext::ID);
 	void     infer(AST::Function&, FileContext::ID);
