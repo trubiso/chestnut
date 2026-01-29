@@ -81,4 +81,6 @@ int main(void) {
 
 	for (auto const& file : resolver.parsed_files)
 		for (auto const& diagnostic : file.diagnostics) diagnostic.print();
+
+	resolver.dump();
 }

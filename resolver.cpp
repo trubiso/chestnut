@@ -9,6 +9,17 @@ void Resolver::resolve() {
 	infer_types();
 }
 
+void Resolver::dump() const {
+	std::cout << symbol_pool_.size() << " symbols, " << type_pool_.size() << " types\n";
+	for (Symbol const& symbol : symbol_pool_) {
+		std::cout << '@' << symbol.id << " (file #" << symbol.file_id << "): " << symbol.name;
+		if (symbol.mutable_) std::cout << " (mutable)";
+		std::cout << "\n    ";
+		debug_print_type(symbol.type);
+		std::cout << std::endl;
+	}
+}
+
 FileContext Resolver::get_context(FileContext::ID file_id) {
 	return FileContext {
 		parsed_files.at(file_id).name,

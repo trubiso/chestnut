@@ -29,6 +29,8 @@ public:
 
 	void resolve();
 
+	void dump() const;
+
 private:
 	struct TypeInfo {
 		typedef uint32_t ID;
