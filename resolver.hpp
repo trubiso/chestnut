@@ -202,6 +202,11 @@ private:
 	void debug_print_type(TypeInfo::ID) const;
 	void debug_print_type(TypeInfo) const;
 
+	/// Returns a name for a type suitable for a diagnostic.
+	std::string get_type_name(TypeInfo::ID) const;
+	/// Returns a type sample for the provided type ID.
+	Diagnostic::Sample get_type_sample(TypeInfo::ID, OutFmt::Color) const;
+
 	/// Returns a new ID produced by the type counter.
 	TypeInfo::ID type_next();
 
@@ -244,7 +249,7 @@ private:
 	AST::SymbolID next();
 
 	/// Returns the file context for the requested file ID.
-	FileContext get_context(FileContext::ID);
+	FileContext get_context(FileContext::ID) const;
 
 	/// Populates the module table according to the parsed files.
 	void populate_module_table();

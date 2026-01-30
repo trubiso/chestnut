@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <variant>
 
 Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom) {
@@ -119,6 +120,71 @@ void Resolver::debug_print_type(Resolver::TypeInfo type) const {
 		case AST::Type::Atom::Integer::WidthType::Size:  std::cout << "size"; break;
 		}
 	}
+}
+
+std::string Resolver::get_type_name(Resolver::TypeInfo::ID id) const {
+	Resolver::TypeInfo const& type = type_pool_.at(id);
+	switch (type.kind()) {
+	case TypeInfo::Kind::Unknown:        return "unknown";
+	case TypeInfo::Kind::Bottom:         return "bottom";
+	case TypeInfo::Kind::Module:         return "module";
+	case TypeInfo::Kind::KnownVoid:      return "void";
+	case TypeInfo::Kind::KnownChar:      return "char";
+	case TypeInfo::Kind::KnownBool:      return "bool";
+	case TypeInfo::Kind::PartialFloat:   return "float";
+	case TypeInfo::Kind::Function:
+	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::KnownInteger:
+	case TypeInfo::Kind::KnownFloat:
+	case TypeInfo::Kind::PartialInteger: break;
+	}
+
+	std::stringstream output {};
+	if (type.kind() == TypeInfo::Kind::Function) {
+		TypeInfo::Function const& function = type.get_function();
+		output << "func(";
+		size_t count = 0;
+		for (auto const& [name, arg_type] : function.arguments) {
+			output << (name.has_value() ? name.value() : "_") << ": ";
+			output << get_type_name(arg_type);
+			if (++count < function.arguments.size()) output << ", ";
+		}
+		output << ") " << get_type_name(function.return_) << "";
+	} else if (type.kind() == TypeInfo::Kind::SameAs) {
+		if (type.get_same_as().ids.size() > 1) output << '(';
+		size_t count = 0;
+		for (Resolver::TypeInfo::ID subid : type.get_same_as().ids) {
+			output << get_type_name(subid);
+			if (++count < type.get_same_as().ids.size()) output << " | ";
+		}
+		if (type.get_same_as().ids.size() > 1) output << ')';
+	} else if (type.kind() == TypeInfo::Kind::KnownInteger) {
+		AST::Type::Atom::Integer integer = type.get_known_integer().integer;
+		output << AST::Type::Atom::make_integer(std::move(integer));
+	} else if (type.kind() == TypeInfo::Kind::KnownFloat) {
+		output << AST::Type::Atom::make_float(type.get_known_float().width);
+	} else if (type.kind() == TypeInfo::Kind::PartialInteger) {
+		AST::Type::Atom::Integer integer = type.get_partial_integer().integer;
+
+		bool signed_is_known = type.get_partial_integer().signed_is_known;
+
+		output << (signed_is_known ? (integer.is_signed() ? "" : "u") : "(u)") << "int";
+		switch (integer.width_type()) {
+		case AST::Type::Atom::Integer::WidthType::Fixed: output << integer.bit_width().value(); break;
+		case AST::Type::Atom::Integer::WidthType::Any:   break;
+		case AST::Type::Atom::Integer::WidthType::Ptr:   output << "ptr"; break;
+		case AST::Type::Atom::Integer::WidthType::Size:  output << "size"; break;
+		}
+	}
+
+	return output.str();
+}
+
+Diagnostic::Sample Resolver::get_type_sample(Resolver::TypeInfo::ID id, OutFmt::Color color) const {
+	return Diagnostic::Sample(
+		get_context(std::get<1>(type_span_pool_.at(id))),
+		{Diagnostic::Sample::Label(std::get<0>(type_span_pool_.at(id)), get_type_name(id), color)}
+	);
 }
 
 Resolver::TypeInfo::ID Resolver::type_next() {

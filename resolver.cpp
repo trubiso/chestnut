@@ -20,7 +20,7 @@ void Resolver::dump() const {
 	}
 }
 
-FileContext Resolver::get_context(FileContext::ID file_id) {
+FileContext Resolver::get_context(FileContext::ID file_id) const {
 	return FileContext {
 		parsed_files.at(file_id).name,
 		file_id,
