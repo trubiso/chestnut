@@ -3,7 +3,6 @@
 
 #include <cstddef>
 #include <ostream>
-#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -69,8 +68,7 @@ struct Token {
 		Symbol        = 4,
 	};
 
-	// TODO: change char to std::string so that we can support more escape things
-	typedef std::variant<std::string, std::string, std::string, char, Symbol> value_t;
+	typedef std::variant<std::string, std::string, std::string, std::string, Symbol> value_t;
 
 	size_t  begin;
 	value_t value;
@@ -95,7 +93,7 @@ struct Token {
 		return Token(begin, value_t {std::in_place_index<(size_t) Kind::StringLiteral>, literal});
 	}
 
-	inline static Token make_char_literal(size_t begin, char value) {
+	inline static Token make_char_literal(size_t begin, std::string value) {
 		return Token(begin, value_t {std::in_place_index<(size_t) Kind::CharLiteral>, value});
 	}
 
@@ -113,13 +111,13 @@ struct Token {
 
 	inline bool is_symbol() const { return kind() == Kind::Symbol; }
 
-	inline std::string get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
+	inline std::string const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 
-	inline std::string get_number_literal() const { return std::get<(size_t) Kind::NumberLiteral>(value); }
+	inline std::string const& get_number_literal() const { return std::get<(size_t) Kind::NumberLiteral>(value); }
 
-	inline std::string get_string_literal() const { return std::get<(size_t) Kind::StringLiteral>(value); }
+	inline std::string const& get_string_literal() const { return std::get<(size_t) Kind::StringLiteral>(value); }
 
-	inline char get_char_literal() const { return std::get<(size_t) Kind::CharLiteral>(value); }
+	inline std::string const& get_char_literal() const { return std::get<(size_t) Kind::CharLiteral>(value); }
 
 	inline Symbol get_symbol() const { return std::get<(size_t) Kind::Symbol>(value); }
 

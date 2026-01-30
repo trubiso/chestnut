@@ -26,7 +26,7 @@ bool Lexer::advance() {
 	std::optional<Token> token = {};
 	Token::Symbol        s;
 
-#define MAKE_STRVIEW_TOKEN(kind)                                            \
+#define MAKE_STR_TOKEN(kind)                                                \
 	Token(begin,                                                        \
 	      Token::value_t {                                              \
 		      std::in_place_index<(size_t) kind>,                   \
@@ -35,15 +35,16 @@ bool Lexer::advance() {
 
 	if (is_id_start(current_value)) {
 		consume_identifier();
-		token = MAKE_STRVIEW_TOKEN(Token::Kind::Identifier);
+		token = MAKE_STR_TOKEN(Token::Kind::Identifier);
 	} else if (is_digit(current_value)) {
 		consume_number_literal();
-		token = MAKE_STRVIEW_TOKEN(Token::Kind::NumberLiteral);
+		token = MAKE_STR_TOKEN(Token::Kind::NumberLiteral);
 	} else if (current_value == '"') {
 		consume_string_literal();
-		token = MAKE_STRVIEW_TOKEN(Token::Kind::StringLiteral);
+		token = MAKE_STR_TOKEN(Token::Kind::StringLiteral);
 	} else if (current_value == '\'') {
-		token = Token::make_char_literal(begin, consume_char_literal());
+		consume_char_literal();
+		token = MAKE_STR_TOKEN(Token::Kind::CharLiteral);
 	} else if (is_symbol_start(current_value)) {
 		s = consume_symbol();
 		if (s == Token::Symbol::CommentStart || s == Token::Symbol::CommentMultilineStart) return true;
@@ -69,7 +70,7 @@ bool Lexer::advance() {
 
 	return true;
 
-#undef MAKE_STRVIEW_TOKEN
+#undef MAKE_STR_TOKEN
 }
 
 void consume_base_number_lit_after_zero(Lexer& lexer, std::predicate<char> auto is_base_digit) {
@@ -185,10 +186,9 @@ void Lexer::consume_string_literal() {
 		);
 }
 
-char Lexer::consume_char_literal() {
+void Lexer::consume_char_literal() {
 	size_t char_begin = stream_.index();
 	stream_.advance();  // consume opening quote
-	char                c = '\0';
 	std::optional<char> e;
 	auto                current = stream_.consume();  // consume the character within
 	if (!current.has_value()) goto unclosed_literal;
@@ -208,16 +208,12 @@ char Lexer::consume_char_literal() {
 		if (!current.has_value()) goto unclosed_literal;
 		// TODO: support \xFF sequences
 		e = lookup_escaped(current.value());
-		if (e.has_value()) {
-			c = e.value();
-		} else {
+		if (!e.has_value()) {
 			// the escape sequence does not exist
-			// fallback strategy: use the character
-			c = current.value();
 			diagnostics_.push_back(
 				Diagnostic::error(
 					"invalid escape sequence",
-					std::format("found invalid sequence \\{}", c),
+					std::format("found invalid sequence \\{}", current.value()),
 					{Diagnostic::Sample(context, Span(stream_.index() - 2, stream_.index()))}
 				)
 			);
@@ -225,7 +221,7 @@ char Lexer::consume_char_literal() {
 		break;
 	default:
 		// regular character
-		c = current.value();
+		break;
 	}
 
 	// find closing quote
@@ -234,7 +230,7 @@ char Lexer::consume_char_literal() {
 	if (current.value() != '\'') goto unclosed_literal;
 	stream_.advance();
 ret:
-	return c;
+	return;
 
 unclosed_literal:
 	diagnostics_.push_back(
@@ -243,7 +239,6 @@ unclosed_literal:
 			{Diagnostic::Sample(context, Span(char_begin, stream_.index()))}
 		)
 	);
-	goto ret;
 }
 
 Token::Symbol Lexer::consume_symbol() {

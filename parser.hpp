@@ -85,7 +85,7 @@ private:
 
 	std::optional<std::string> consume_number_literal();
 	std::optional<std::string> consume_string_literal();
-	std::optional<char>        consume_char_literal();
+	std::optional<std::string> consume_char_literal();
 
 	std::optional<std::string> consume_bare_unqualified_identifier();
 	std::optional<Identifier>  consume_unqualified_identifier();

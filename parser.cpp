@@ -85,7 +85,7 @@ std::optional<std::string> Parser::consume_string_literal() {
 	return token.get_string_literal();
 }
 
-std::optional<char> Parser::consume_char_literal() {
+std::optional<std::string> Parser::consume_char_literal() {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return {};
 	Token token = maybe_token.value();
@@ -226,11 +226,9 @@ std::optional<Expression> Parser::consume_expression_atom() {
 		return Expression::make_atom(Expression::Atom::make_string_literal(sv.value(), suffix));
 	}
 
-	std::optional<char> c;
-
-	if (c = consume_char_literal(), c.has_value()) {
+	if (sv = consume_char_literal(), sv.has_value()) {
 		suffix = consume_unqualified_identifier();
-		return Expression::make_atom(Expression::Atom::make_char_literal(c.value(), suffix));
+		return Expression::make_atom(Expression::Atom::make_char_literal(sv.value(), suffix));
 	}
 
 	if (consume_symbol(Token::Symbol::LParen)) {
@@ -660,7 +658,11 @@ std::optional<Function> Parser::parse_function() {
 	auto return_type = SPANNED(consume_type);
 	// TODO: make return types optional again
 	if (!return_type.has_value()) {
-		std::cout << "return types must have values as of right now ('" << name.value().value.name() << "')" << std::endl;
+		std::cout
+			<< "return types must have values as of right now ('"
+			<< name.value().value.name()
+			<< "')"
+			<< std::endl;
 		std::exit(0);
 	}
 

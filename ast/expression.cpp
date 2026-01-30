@@ -31,11 +31,10 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom::StringLiteral const
 }
 
 std::ostream& operator<<(std::ostream& os, Expression::Atom::CharLiteral const& literal) {
-	// FIXME: we must escape the char
 	if (literal.suffix.has_value()) {
-		return os << "['" << literal.literal << "' w/ suffix " << literal.suffix.value() << ']';
+		return os << '[' << literal.literal << " w/ suffix " << literal.suffix.value() << ']';
 	} else {
-		return os << '\'' << literal.literal << '\'';
+		return os << literal.literal;
 	}
 }
 

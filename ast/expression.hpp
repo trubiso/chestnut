@@ -34,7 +34,7 @@ struct Expression {
 		};
 
 		struct CharLiteral {
-			char                      literal;
+			std::string               literal;
 			std::optional<Identifier> suffix;  // unqualified
 		};
 
@@ -67,7 +67,7 @@ struct Expression {
 			);
 		}
 
-		inline static Atom make_char_literal(char literal, std::optional<Identifier> suffix) {
+		inline static Atom make_char_literal(std::string literal, std::optional<Identifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::CharLiteral>,

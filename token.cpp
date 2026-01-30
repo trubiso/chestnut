@@ -4,8 +4,8 @@ size_t Token::size() const {
 	switch (kind()) {
 	case Kind::Identifier:    return std::get<(size_t) Kind::Identifier>(value).size();
 	case Kind::NumberLiteral: return std::get<(size_t) Kind::NumberLiteral>(value).size();
-	case Kind::StringLiteral: return std::get<(size_t) Kind::StringLiteral>(value).size() + 2;
-	case Kind::CharLiteral:   return 3;  // FIXME: this could actually be more if the character is escaped
+	case Kind::StringLiteral: return std::get<(size_t) Kind::StringLiteral>(value).size();
+	case Kind::CharLiteral:   return std::get<(size_t) Kind::CharLiteral>(value).size();
 	case Kind::Symbol:
 		switch (std::get<(size_t) Kind::Symbol>(value)) {
 		case Symbol::Plus:
