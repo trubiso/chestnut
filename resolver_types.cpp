@@ -221,8 +221,20 @@ Resolver::TypeInfo Resolver::unify_follow_references(
 
 	// if none can be unified, throw a diagnostic and return Bottom
 	if (new_ids.empty()) {
-		// TODO: diagnostic
-		std::cout << "none of these ids can unify with anything from the other side" << std::endl;
+		std::stringstream subtitle_stream {};
+		subtitle_stream
+			<< "none of the candidates for the type "
+			<< get_type_name(same_as)
+			<< " are compatible with the type "
+			<< get_type_name(other);
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				subtitle_stream.str(),
+				{get_type_sample(same_as, OutFmt::Color::Cyan),
+		                 get_type_sample(other, OutFmt::Color::Yellow)}
+			)
+		);
 		return TypeInfo::make_bottom();
 	}
 
@@ -242,12 +254,24 @@ bool Resolver::unify_basic_known(
 	bool a_matches = a.kind() == kind, b_matches = b.kind() == kind;
 	if (!a_matches && !b_matches) return false;  // if neither match, this case is not for us
 	if (a_matches && b_matches) return true;     // if both match, this is a freebie
+	// we add a diagnostic
+	std::stringstream subtitle_stream {};
+	subtitle_stream
+		<< "expected both types to be "
+		<< (a_matches ? get_type_name(a_id) : get_type_name(b_id))
+		<< "; got "
+		<< (a_matches ? get_type_name(b_id) : get_type_name(a_id));
+	parsed_files.at(file_id).diagnostics.push_back(
+		Diagnostic::error(
+			"type mismatch",
+			subtitle_stream.str(),
+			{get_type_sample(a_matches ? a_id : b_id, OutFmt::Color::Cyan),
+	                 get_type_sample(a_matches ? b_id : a_id, OutFmt::Color::Yellow)}
+		)
+	);
 	// whichever didn't match becomes a bottom
 	if (!a_matches) a = TypeInfo::make_bottom();
 	if (!b_matches) b = TypeInfo::make_bottom();
-	// we add a diagnostic
-	// TODO: diagnostic
-	std::cout << "found basic known type mismatch" << std::endl;
 	return true;
 }
 
@@ -255,8 +279,16 @@ void Resolver::unify_functions(Resolver::TypeInfo::ID function, Resolver::TypeIn
 	// ensure they're both functions
 	assert(type_pool_.at(function).kind() == TypeInfo::Kind::Function);
 	if (type_pool_.at(other).kind() != TypeInfo::Kind::Function) {
-		// TODO: diagnostic
-		std::cout << "functions must unify with functions" << std::endl;
+		std::stringstream subtitle_stream {};
+		subtitle_stream << "expected both types to be functions; got " << get_type_name(other);
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				subtitle_stream.str(),
+				{get_type_sample(function, OutFmt::Color::Cyan),
+		                 get_type_sample(other, OutFmt::Color::Yellow)}
+			)
+		);
 		return;
 	}
 
@@ -265,8 +297,14 @@ void Resolver::unify_functions(Resolver::TypeInfo::ID function, Resolver::TypeIn
 
 	// ensure they have the same argument count
 	if (a_function.arguments.size() != b_function.arguments.size()) {
-		// TODO: diagnostic
-		std::cout << "functions must have the same amount of arguments" << std::endl;
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				"expected both functions to have the same amount of arguments",
+				{get_type_sample(function, OutFmt::Color::Cyan),
+		                 get_type_sample(other, OutFmt::Color::Yellow)}
+			)
+		);
 		return;
 	}
 
@@ -274,17 +312,28 @@ void Resolver::unify_functions(Resolver::TypeInfo::ID function, Resolver::TypeIn
 	for (size_t i = 0; i < a_function.arguments.size(); ++i) {
 		auto& [a_name, a_type] = a_function.arguments.at(i);
 		auto& [b_name, b_type] = b_function.arguments.at(i);
+
+		// unify the type first for diagnostics' sake
+		bool can_unify_type = can_unify(a_type, b_type);
+		unify(a_type, b_type, file_id);
+
 		bool a_has_name = a_name.has_value(), b_has_name = b_name.has_value();
 		if (a_has_name && b_has_name && (a_name.value() != b_name.value())) {
-			// TODO: diagnostic
-			std::cout
-				<< "functions must have the same argument names (tip: mark a function argument name as anon if the name is unimportant)"
-				<< std::endl;
+			// we don't want to throw the diagnostic if the type cannot be unified to begin with
+			if (can_unify_type) {
+				// FIXME: we don't have the span/fileid for the argument, so we can't show a sample!
+				parsed_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"type mismatch",
+						"expected both functions to have the same argument names, since neither argument name is marked as anonymous",
+						{}
+					)
+				);
+			}
 		} else if (a_has_name || b_has_name) {
 			if (a_has_name) b_name = a_name;
 			if (b_has_name) a_name = b_name;
 		}
-		unify(a_type, b_type, file_id);
 	}
 
 	// unify the return types
@@ -339,21 +388,34 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 
 	// both must be either floats or integers
 	if (a_float != b_float) {
-		// TODO: diagnostic
-		std::cout << "floats and integers do not mix, like water and oil," << std::endl;
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				"incompatible numeric types: either the float must be truncated to an integer or the integer must be cast to a float",
+				{get_type_sample(a_id, OutFmt::Color::Cyan),
+		                 get_type_sample(b_id, OutFmt::Color::Yellow)}
+			)
+		);
 		return;
 	}
 
 	// floats
 	if (a_float) {
-		// if neither are known, there is no information to be learnt, since we can only learn the bit width
+		// if neither are known, there is no information to be learnt, since we can only learn the bit
+		// width
 		if (!a_known && !b_known) return;
 
 		// if both are known, we must ensure they don't clash
 		if (a_known && b_known) {
 			if (a.get_known_float().width != b.get_known_float().width) {
-				// TODO: diagnostic
-				std::cout << "floats of incompatible width" << std::endl;
+				parsed_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"type mismatch",
+						"incompatible numeric types: floats of incompatible size",
+						{get_type_sample(a_id, OutFmt::Color::Cyan),
+				                 get_type_sample(b_id, OutFmt::Color::Yellow)}
+					)
+				);
 				return;
 			}
 		}
@@ -470,10 +532,24 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 		}
 	}
 
-	// TODO: diagnostic
-	if (signed_clash) { std::cout << "signed clash!" << std::endl; }
-	// TODO: diagnostic
-	if (size_clash) { std::cout << "size clash!" << std::endl; }
+	if (signed_clash)
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				"incompatible numeric types: integers of incompatible sign",
+				{get_type_sample(a_id, OutFmt::Color::Cyan),
+		                 get_type_sample(b_id, OutFmt::Color::Yellow)}
+			)
+		);
+	if (size_clash)
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				"incompatible numeric types: integers of incompatible size",
+				{get_type_sample(a_id, OutFmt::Color::Cyan),
+		                 get_type_sample(b_id, OutFmt::Color::Yellow)}
+			)
+		);
 }
 
 bool Resolver::can_unify_follow_references(Resolver::TypeInfo const& same_as, Resolver::TypeInfo const& other) const {
@@ -703,7 +779,8 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 		if (!argument_count_matches) continue;
 		if (!function_call.arguments.labeled.empty()) {
 			// check that all labeled arguments exist
-			// we only consider arguments that haven't already been provided by the ordered arguments
+			// we only consider arguments that haven't already been provided by the ordered
+			// arguments
 			std::vector<std::string_view> arguments_under_consideration {};
 			arguments_under_consideration.reserve(
 				function_arguments.size() - function_call.arguments.ordered.size()
@@ -765,7 +842,8 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 	std::optional<TypeInfo::ID> call_id = {};
 	for (TypeInfo::ID callable_id : callable_filtered) {
 		assert(type_pool_.at(callable_id).kind() == TypeInfo::Kind::Function);
-		// now we must create the function call type according to the function (due to labeled arguments)
+		// now we must create the function call type according to the function (due to labeled
+		// arguments)
 		auto const& function_arguments = type_pool_.at(callable_id).get_function().arguments;
 		assert(function_arguments.size() == provided_arguments);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> arguments {};

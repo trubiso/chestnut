@@ -31,10 +31,18 @@ export module hello {
 			q = 'h';
 		}
 
+		func sample1(name: bool, age: int) void;
+		func sample2(jones: void, rage: uint) uint;
+
 		export func main() void {
-			sum_numbers(2, 3);
+			try_shadowing = 'h';
+			sum_numbers(2, 3, 4);
 			const a: _ = 30 +- 2 * 3;
+			a = sum_numbers;
 			const kitty = 3;
+			kitty = hey;
+			lets_do_this1 = lets_do_this2;
+			sample1 = sample2;
 			const sul = rifuty + 9;
 			2 + 4;
 			{
@@ -48,9 +56,20 @@ export module hello {
 			return ::u::b::q;
 		}
 
+		func test_numeric_inference() void {
+			const a: float16 = 3.0;
+			const b: float32 = 9.0;
+			const c = a + b;
+			const d = 9.0 - 3;
+			const e: uint32 = 42;
+			const f: int64 = -99;
+			const g: float128 = e - f;
+		}
+
 		func hey(cool: uintptr) uint => 2 + 2 / -cool;
 
 		export func lets_do_this1(name: bool, age: intsize, what: float128) uint1382;
+		export func lets_do_this2(jame: bool, aje: intsize, wjat: float128) uint1382;
 
 /*
 		func john(k: int16) void {
