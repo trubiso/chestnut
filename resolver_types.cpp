@@ -698,14 +698,19 @@ bool Resolver::can_unify(Resolver::TypeInfo const& a, Resolver::TypeInfo const& 
 	}
 }
 
-Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, Span span, FileContext::ID file_id) {
+Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom const& atom, Span span, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
 		// TODO: apply suffixes
-		if (atom.get_number_literal().is_float()) return TypeInfo::make_partial_float();
+		if (atom.get_number_literal().is_float())
+			return register_type(TypeInfo::make_partial_float(), span, file_id);
 		else
-			return TypeInfo::make_partial_integer(
-				TypeInfo::PartialInteger {AST::Type::Atom::Integer::any(false), false}
+			return register_type(
+				TypeInfo::make_partial_integer(
+					TypeInfo::PartialInteger {AST::Type::Atom::Integer::any(false), false}
+				),
+				span,
+				file_id
 			);
 	case AST::Expression::Atom::Kind::StringLiteral:
 		// TODO: do string literals
@@ -713,55 +718,54 @@ Resolver::TypeInfo Resolver::infer(AST::Expression::Atom const& atom, Span span,
 		std::exit(0);
 	case AST::Expression::Atom::Kind::CharLiteral:
 		// TODO: apply suffixes
-		return TypeInfo::make_known_char();
+		return register_type(TypeInfo::make_known_char(), span, file_id);
 	case AST::Expression::Atom::Kind::Expression: return infer(*atom.get_expression(), span, file_id);
 	case AST::Expression::Atom::Kind::Identifier: break;
 	}
 
 	// for identifiers, we match the type in the symbol pool
 	AST::Identifier const& identifier = atom.get_identifier();
-	if (!identifier.id.has_value()) return TypeInfo::make_bottom();  // if we don't know what this is, let's ignore
+	if (!identifier.id.has_value())
+		return register_type(
+			TypeInfo::make_bottom(),
+			span,
+			file_id
+		);  // if we don't know what this is, let's ignore
 	std::vector<AST::SymbolID> const& ids = identifier.id.value();
-	if (ids.empty()) return TypeInfo::make_bottom();
+	if (ids.empty()) return register_type(TypeInfo::make_bottom(), span, file_id);
 	std::vector<TypeInfo::ID> type_ids {};
 	type_ids.reserve(ids.size());
 	for (AST::SymbolID id : ids) { type_ids.push_back(get_single_symbol(id).type); }
-	if (type_ids.size() == 1) return TypeInfo::make_same_as(type_ids[0]);
-	else return TypeInfo::make_same_as(std::move(type_ids));
+	if (type_ids.size() == 1) return register_type(TypeInfo::make_same_as(type_ids[0]), span, file_id);
+	else return register_type(TypeInfo::make_same_as(std::move(type_ids)), span, file_id);
 }
 
-Resolver::TypeInfo
+Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::UnaryOperation const& unary_operation, Span span, FileContext::ID file_id) {
 	// TODO: operators
-	TypeInfo operand = infer(unary_operation.operand->value, span, file_id);
-	return operand;
+	TypeInfo::ID operand = infer(unary_operation.operand->value, unary_operation.operand->span, file_id);
+	return register_type(TypeInfo::make_same_as(operand), span, file_id);
 }
 
-Resolver::TypeInfo
+Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::BinaryOperation const& binary_operation, Span span, FileContext::ID file_id) {
 	// TODO: operators
-	TypeInfo lhs = infer(binary_operation.lhs->value, span, file_id);
-	TypeInfo rhs = infer(binary_operation.rhs->value, span, file_id);
-
-	TypeInfo::ID lhs_id = register_type(std::move(lhs), binary_operation.lhs->span, file_id);
-	TypeInfo::ID rhs_id = register_type(std::move(rhs), binary_operation.rhs->span, file_id);
+	TypeInfo::ID lhs_id = infer(binary_operation.lhs->value, binary_operation.lhs->span, file_id);
+	TypeInfo::ID rhs_id = infer(binary_operation.rhs->value, binary_operation.rhs->span, file_id);
 	unify(lhs_id, rhs_id, file_id);
-
-	return TypeInfo::make_same_as(lhs_id);
+	return register_type(TypeInfo::make_same_as(lhs_id), span, file_id);
 }
 
-Resolver::TypeInfo
+Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, FileContext::ID file_id) {
 	// for function calls, we need to resolve or partially resolve the overload
-	TypeInfo callee = infer(function_call.callee->value, span, file_id);
-
-	TypeInfo::ID callee_id = register_type(std::move(callee), function_call.callee->span, file_id);
+	TypeInfo::ID callee_id = infer(function_call.callee->value, function_call.callee->span, file_id);
 
 	// first, we ensure that there is at least one callable item
 	if (!type_pool_.at(callee_id).is_callable(type_pool_)) {
 		// TODO: proper diagnostic
 		std::cout << "called a non-function loool" << std::endl;
-		return TypeInfo::make_bottom();
+		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
 	// now, we flatten this type to a SameAs which points at all the callable types
@@ -814,25 +818,20 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 	if (callable_filtered.empty()) {
 		// TODO: throw a really cool diagnostic showing exactly why each function was discarded
 		std::cout << "no function matches " << function_call << " lol" << std::endl;
-		return TypeInfo::make_bottom();
+		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
 	// it's time to infer the arguments now that we have a set of possible callees
 	std::vector<TypeInfo::ID> ordered_arguments {};
 	ordered_arguments.reserve(function_call.arguments.ordered.size());
 	for (auto const& argument : function_call.arguments.ordered) {
-		ordered_arguments.push_back(
-			register_type(infer(argument.value, argument.span, file_id), argument.span, file_id)
-		);
+		ordered_arguments.push_back(infer(argument.value, argument.span, file_id));
 	}
 
 	std::unordered_map<std::string, TypeInfo::ID> labeled_arguments {};
 	ordered_arguments.reserve(function_call.arguments.labeled.size());
 	for (auto const& [identifier, value] : function_call.arguments.labeled) {
-		labeled_arguments.emplace(
-			identifier.value.name(),
-			register_type(infer(value.value, value.span, file_id), value.span, file_id)
-		);
+		labeled_arguments.emplace(identifier.value.name(), infer(value.value, value.span, file_id));
 	}
 
 	TypeInfo::ID return_ = register_type(TypeInfo::make_unknown(), span, file_id);
@@ -871,20 +870,24 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 	if (found_functions.empty() || !call_id.has_value()) {
 		// TODO: throw a diagnostic
 		std::cout << "no function matches after typeres lol" << std::endl;
-		return TypeInfo::make_bottom();
+		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
 	if (found_functions.size() > 1) {
 		std::cout << "too many functions match" << std::endl;
-		return TypeInfo::make_bottom();
+		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
 	// TODO: finish resolving the identifier that is being called?
 
-	return TypeInfo::make_same_as(type_pool_.at(call_id.value()).get_function().return_);
+	return register_type(
+		TypeInfo::make_same_as(type_pool_.at(call_id.value()).get_function().return_),
+		span,
+		file_id
+	);
 }
 
-Resolver::TypeInfo Resolver::infer(AST::Expression const& expression, Span span, FileContext::ID file_id) {
+Resolver::TypeInfo::ID Resolver::infer(AST::Expression const& expression, Span span, FileContext::ID file_id) {
 	switch (expression.kind()) {
 	case AST::Expression::Kind::Atom:            return infer(expression.get_atom(), span, file_id);
 	case AST::Expression::Kind::UnaryOperation:  return infer(expression.get_unary_operation(), span, file_id);
@@ -896,8 +899,7 @@ Resolver::TypeInfo Resolver::infer(AST::Expression const& expression, Span span,
 void Resolver::infer(AST::Statement::Declare& declare, FileContext::ID file_id) {
 	if (!declare.value.has_value()) return;
 	TypeInfo::ID variable_type = get_single_symbol(declare.name.value).type;
-	TypeInfo     value         = infer(declare.value.value().value, declare.value.value().span, file_id);
-	TypeInfo::ID value_type    = register_type(std::move(value), declare.value.value().span, file_id);
+	TypeInfo::ID value_type    = infer(declare.value.value().value, declare.value.value().span, file_id);
 	// we must make sure that the declared and actual type match
 	unify(variable_type, value_type, file_id);
 }
@@ -919,25 +921,18 @@ void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 	}
 	// lhs and rhs must have the same type
 	Symbol const& lhs      = symbol_pool_.at(set.lhs.value.get_atom().get_identifier().id.value().at(0));
-	TypeInfo      rhs      = infer(set.rhs.value, set.rhs.span, file_id);
-	TypeInfo::ID  rhs_type = register_type(std::move(rhs), set.rhs.span, file_id);
+	TypeInfo ::ID rhs_type = infer(set.rhs.value, set.rhs.span, file_id);
 	unify(lhs.type, rhs_type, file_id);
 }
 
 void Resolver::infer(AST::Statement::Return& return_, Span span, AST::SymbolID function, FileContext::ID file_id) {
-	TypeInfo return_value = return_.value.has_value()
-	                              // if we do have a value, get its expression type
-	                              ? infer(return_.value.value().value, return_.value.value().span, file_id)
-	                              // if we don't, that's a return void
-	                              : TypeInfo::make_known_void();
-
-	TypeInfo::ID return_value_id = register_type(
-		std::move(return_value),
-		return_.value.has_value() ? return_.value.value().span : span,
-		file_id
-	);
+	TypeInfo::ID return_value = return_.value.has_value()
+	                                  // if we do have a value, get its expression type
+	                                  ? infer(return_.value.value().value, return_.value.value().span, file_id)
+	                                  // if we don't, that's a return void
+	                                  : register_type(TypeInfo::make_known_void(), span, file_id);
 	// we must make sure that the return type and the returned value match
-	unify(return_value_id, type_pool_.at(symbol_pool_.at(function).type).get_function().return_, file_id);
+	unify(return_value, type_pool_.at(symbol_pool_.at(function).type).get_function().return_, file_id);
 }
 
 void Resolver::infer(Spanned<AST::Statement>& statement, AST::SymbolID function, FileContext::ID file_id) {

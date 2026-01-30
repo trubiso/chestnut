@@ -194,7 +194,7 @@ private:
 		std::vector<ID> get_callable_subitems(ID self_id, std::vector<TypeInfo> const&) const;
 	};
 
-	std::vector<TypeInfo> type_pool_;
+	std::vector<TypeInfo>                          type_pool_;
 	std::vector<std::tuple<Span, FileContext::ID>> type_span_pool_;
 
 	TypeInfo::ID type_counter_ = 0;
@@ -288,6 +288,8 @@ private:
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
 
+	// FIXME: unification diagnostics suck because we point at the original SameAs type.
+
 	/// Follows references and returns TypeInfo::SameAs with the new roster or TypeInfo::Bottom if none can be
 	/// unified (throws a diagnostic in that case).
 	TypeInfo unify_follow_references(TypeInfo::ID same_as, TypeInfo::ID, FileContext::ID);
@@ -299,9 +301,10 @@ private:
 	/// Equates two types and adds a diagnostic if it fails.
 	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID);
 
-	/// Returns whether any of the
+ 	/// Returns whether any of the references in a TypeInfo::SameAs can be followed to be unified.
 	bool can_unify_follow_references(TypeInfo const& same_as, TypeInfo const&) const;
-	/// Returns whether a basic known type can be unified with another one, given it matches, otherwise returns null.
+	/// Returns whether a basic known type can be unified with another one, given it matches, otherwise returns
+	/// null.
 	std::optional<bool> can_unify_basic_known(TypeInfo::Kind, TypeInfo const&, TypeInfo const&) const;
 	/// Returns whether a function and another type can be unified.
 	bool can_unify_functions(TypeInfo const& function, TypeInfo const&) const;
@@ -311,17 +314,17 @@ private:
 	bool can_unify(TypeInfo::ID, TypeInfo const&) const;
 	bool can_unify(TypeInfo const&, TypeInfo const&) const;
 
-	TypeInfo infer(AST::Expression::Atom const&, Span, FileContext::ID);
-	TypeInfo infer(AST::Expression::UnaryOperation const&, Span, FileContext::ID);
-	TypeInfo infer(AST::Expression::BinaryOperation const&, Span, FileContext::ID);
-	TypeInfo infer(AST::Expression::FunctionCall const&, Span, FileContext::ID);
-	TypeInfo infer(AST::Expression const&, Span, FileContext::ID);
-	void     infer(AST::Statement::Declare&, FileContext::ID);
-	void     infer(AST::Statement::Set&, FileContext::ID);
-	void     infer(AST::Statement::Return&, Span, AST::SymbolID function, FileContext::ID);
-	void     infer(Spanned<AST::Statement>&, AST::SymbolID function, FileContext::ID);
-	void     infer(AST::Scope&, AST::SymbolID function, FileContext::ID);
-	void     infer(AST::Function&, FileContext::ID);
-	void     infer(AST::Module&, FileContext::ID);
-	void     infer_types();
+	TypeInfo::ID infer(AST::Expression::Atom const&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression::UnaryOperation const&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression::BinaryOperation const&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression::FunctionCall const&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression const&, Span, FileContext::ID);
+	void         infer(AST::Statement::Declare&, FileContext::ID);
+	void         infer(AST::Statement::Set&, FileContext::ID);
+	void         infer(AST::Statement::Return&, Span, AST::SymbolID function, FileContext::ID);
+	void         infer(Spanned<AST::Statement>&, AST::SymbolID function, FileContext::ID);
+	void         infer(AST::Scope&, AST::SymbolID function, FileContext::ID);
+	void         infer(AST::Function&, FileContext::ID);
+	void         infer(AST::Module&, FileContext::ID);
+	void         infer_types();
 };
