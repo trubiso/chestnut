@@ -122,8 +122,7 @@ void Resolver::debug_print_type(Resolver::TypeInfo type) const {
 	}
 }
 
-std::string Resolver::get_type_name(Resolver::TypeInfo::ID id) const {
-	Resolver::TypeInfo const& type = type_pool_.at(id);
+std::string Resolver::get_type_name(Resolver::TypeInfo const& type) const {
 	switch (type.kind()) {
 	case TypeInfo::Kind::Unknown:        return "unknown";
 	case TypeInfo::Kind::Bottom:         return "bottom";
@@ -180,10 +179,14 @@ std::string Resolver::get_type_name(Resolver::TypeInfo::ID id) const {
 	return output.str();
 }
 
+std::string Resolver::get_type_name(Resolver::TypeInfo::ID id) const {
+	return get_type_name(type_pool_.at(id));
+}
+
 Diagnostic::Sample Resolver::get_type_sample(Resolver::TypeInfo::ID id, OutFmt::Color color) const {
 	return Diagnostic::Sample(
-		get_context(std::get<1>(type_span_pool_.at(id))),
-		{Diagnostic::Sample::Label(std::get<0>(type_span_pool_.at(id)), get_type_name(id), color)}
+		get_context(get_type_file_id(id)),
+		{Diagnostic::Sample::Label(get_type_span(id), get_type_name(id), color)}
 	);
 }
 
@@ -763,8 +766,13 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 
 	// first, we ensure that there is at least one callable item
 	if (!type_pool_.at(callee_id).is_callable(type_pool_)) {
-		// TODO: proper diagnostic
-		std::cout << "called a non-function loool" << std::endl;
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				"attempted to call a non-function",
+				{get_type_sample(callee_id, OutFmt::Color::Red)}
+			)
+		);
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
@@ -776,11 +784,35 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 	// TODO: this works for now, but will break once arguments have default values
 	size_t provided_arguments = function_call.arguments.labeled.size() + function_call.arguments.ordered.size();
 	std::vector<TypeInfo::ID> callable_filtered {};
+	// this list holds all function rejections as code samples so we can provide a rich diagnostic
+	std::vector<Diagnostic::Sample> rejections {};
+	// we do add the function call as a sample even though it is not a rejection
+	rejections.push_back(
+		Diagnostic::Sample(
+			get_context(file_id),
+			"call site",
+			{Diagnostic::Sample::Label(span, "function call", OutFmt::Color::Gray)}
+		)
+	);
 	for (TypeInfo::ID callable_id : callable) {
 		assert(type_pool_.at(callable_id).kind() == TypeInfo::Kind::Function);
 		auto const& function_arguments     = type_pool_.at(callable_id).get_function().arguments;
 		bool        argument_count_matches = function_arguments.size() == provided_arguments;
-		if (!argument_count_matches) continue;
+		if (!argument_count_matches) {
+			rejections.push_back(
+				Diagnostic::Sample(
+					get_context(get_type_file_id(callable_id)),
+					{Diagnostic::Sample::Label(
+						get_type_span(callable_id),
+						function_arguments.size() < provided_arguments
+							? "incompatible argument count (too many were provided)"
+							: "incompatible argument count (too few were provided)",
+						OutFmt::Color::BrightBlue
+					)}
+				)
+			);
+			continue;
+		}
 		if (!function_call.arguments.labeled.empty()) {
 			// check that all labeled arguments exist
 			// we only consider arguments that haven't already been provided by the ordered
@@ -806,6 +838,18 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 					}
 				}
 				if (!argument_exists) {
+					std::stringstream text {};
+					text << "missing labeled argument '" << identifier.value.name() << "'";
+					rejections.push_back(
+						Diagnostic::Sample(
+							get_context(get_type_file_id(callable_id)),
+							{Diagnostic::Sample::Label(
+								get_type_span(callable_id),
+								text.str(),
+								OutFmt::Color::BrightGreen
+							)}
+						)
+					);
 					all_arguments_exist = false;
 					break;
 				}
@@ -816,8 +860,13 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 	}
 
 	if (callable_filtered.empty()) {
-		// TODO: throw a really cool diagnostic showing exactly why each function was discarded
-		std::cout << "no function matches " << function_call << " lol" << std::endl;
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"could not resolve function overload",
+				"no function matched the constraints imposed by the function call",
+				std::move(rejections)
+			)
+		);
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
@@ -864,21 +913,46 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 				unify(call_id.value(), callable_id, file_id);
 			}
 			found_functions.push_back(callable_id);
+		} else {
+			std::stringstream text {};
+			text
+				<< "function signature ("
+				<< get_type_name(callable_id)
+				<< ") is incompatible with the function call signature ("
+				<< get_type_name(function_call_type)
+				<< ")";
+			rejections.push_back(
+				Diagnostic::Sample(
+					get_context(get_type_file_id(callable_id)),
+					{Diagnostic::Sample::Label(
+						get_type_span(callable_id),
+						text.str(),
+						OutFmt::Color::Magenta
+					)}
+				)
+			);
 		}
 	}
 
 	if (found_functions.empty() || !call_id.has_value()) {
-		// TODO: throw a diagnostic
-		std::cout << "no function matches after typeres lol" << std::endl;
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"could not resolve function overload",
+				"no function matched the constraints imposed by the function call",
+				std::move(rejections)
+			)
+		);
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
+	// FIXME: this is not being triggered for sum_numbers right now
 	if (found_functions.size() > 1) {
+		// TODO: too many functions diagnostic
 		std::cout << "too many functions match" << std::endl;
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
-	// TODO: finish resolving the identifier that is being called?
+	// TODO: finish resolving the identifier that is being called!
 
 	return register_type(
 		TypeInfo::make_same_as(type_pool_.at(call_id.value()).get_function().return_),

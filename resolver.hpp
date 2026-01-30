@@ -197,6 +197,10 @@ private:
 	std::vector<TypeInfo>                          type_pool_;
 	std::vector<std::tuple<Span, FileContext::ID>> type_span_pool_;
 
+	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }
+
+	inline FileContext::ID get_type_file_id(TypeInfo::ID id) const { return std::get<1>(type_span_pool_.at(id)); }
+
 	TypeInfo::ID type_counter_ = 0;
 
 	void debug_print_type(TypeInfo::ID) const;
@@ -204,6 +208,8 @@ private:
 
 	/// Returns a name for a type suitable for a diagnostic.
 	std::string get_type_name(TypeInfo::ID) const;
+	/// Returns a name for a type suitable for a diagnostic.
+	std::string get_type_name(TypeInfo const&) const;
 	/// Returns a type sample for the provided type ID.
 	Diagnostic::Sample get_type_sample(TypeInfo::ID, OutFmt::Color) const;
 
@@ -301,7 +307,7 @@ private:
 	/// Equates two types and adds a diagnostic if it fails.
 	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID);
 
- 	/// Returns whether any of the references in a TypeInfo::SameAs can be followed to be unified.
+	/// Returns whether any of the references in a TypeInfo::SameAs can be followed to be unified.
 	bool can_unify_follow_references(TypeInfo const& same_as, TypeInfo const&) const;
 	/// Returns whether a basic known type can be unified with another one, given it matches, otherwise returns
 	/// null.

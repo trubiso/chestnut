@@ -76,11 +76,27 @@ struct Diagnostic {
 		, subtitle {subtitle}
 		, samples {samples} {}
 
+	explicit Diagnostic(
+		Severity                   severity,
+		std::string&&              title,
+		std::optional<std::string> subtitle = {},
+		std::vector<Sample>&&      samples  = {}
+	)
+		: severity {severity}
+		, title {title}
+		, subtitle {subtitle}
+		, samples {std::move(samples)} {}
+
 	static inline Diagnostic
 	error(std::string&&                 title,
 	      std::optional<std::string>    subtitle = {},
 	      std::initializer_list<Sample> samples  = {}) {
 		return Diagnostic(Severity::Error, std::move(title), subtitle, samples);
+	}
+
+	static inline Diagnostic
+	error(std::string&& title, std::optional<std::string> subtitle, std::vector<Sample>&& samples) {
+		return Diagnostic(Severity::Error, std::move(title), subtitle, std::move(samples));
 	}
 
 	static inline Diagnostic error(std::string&& title, std::initializer_list<Sample> samples) {

@@ -65,6 +65,15 @@ export module hello {
 			const f: int64 = -99;
 			const g: float128 = e - f;
 		}
+		
+		func whatever() void {
+			const q = 3();
+			const few_args = sum_numbers();
+			const many_args = sum_numbers(2, 3, 4);
+			const nonexistent_argument = sum_numbers(2, e: 3);
+			const mix = sum_numbers(b: 2, a: 'h');
+			const a = sum_numbers(2, 3);
+		}
 
 		func hey(cool: uintptr) uint => 2 + 2 / -cool;
 
