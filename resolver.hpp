@@ -195,7 +195,7 @@ private:
 	};
 
 	std::vector<TypeInfo> type_pool_;
-	std::vector<Span> type_span_pool_;
+	std::vector<std::tuple<Span, FileContext::ID>> type_span_pool_;
 
 	TypeInfo::ID type_counter_ = 0;
 
@@ -206,7 +206,7 @@ private:
 	TypeInfo::ID type_next();
 
 	/// Registers a type in the type pool and returns its ID.
-	TypeInfo::ID register_type(TypeInfo&&, Span);
+	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID);
 
 	struct Symbol {
 		AST::SymbolID   id;
