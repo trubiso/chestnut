@@ -498,7 +498,7 @@ std::optional<bool> Resolver::can_unify_basic_known(
 bool Resolver::can_unify_functions(Resolver::TypeInfo const& function, Resolver::TypeInfo const& other) const {
 	// ensure they're both functions
 	assert(function.kind() == TypeInfo::Kind::Function);
-	if (function.kind() != TypeInfo::Kind::Function) { return false; }
+	if (other.kind() != TypeInfo::Kind::Function) { return false; }
 
 	TypeInfo::Function const &a_function = function.get_function(), &b_function = other.get_function();
 
