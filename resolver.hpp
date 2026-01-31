@@ -196,6 +196,7 @@ private:
 
 	std::vector<TypeInfo>                          type_pool_;
 	std::vector<std::tuple<Span, FileContext::ID>> type_span_pool_;
+	std::vector<std::optional<AST::SymbolID>> type_symbol_mapping_;
 
 	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }
 
@@ -217,7 +218,7 @@ private:
 	TypeInfo::ID type_next();
 
 	/// Registers a type in the type pool and returns its ID.
-	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID);
+	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
 
 	struct Symbol {
 		AST::SymbolID   id;
@@ -323,8 +324,8 @@ private:
 	TypeInfo::ID infer(AST::Expression::Atom const&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::UnaryOperation const&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::BinaryOperation const&, Span, FileContext::ID);
-	TypeInfo::ID infer(AST::Expression::FunctionCall const&, Span, FileContext::ID);
-	TypeInfo::ID infer(AST::Expression const&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression::FunctionCall&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression&, Span, FileContext::ID);
 	void         infer(AST::Statement::Declare&, FileContext::ID);
 	void         infer(AST::Statement::Set&, FileContext::ID);
 	void         infer(AST::Statement::Return&, Span, AST::SymbolID function, FileContext::ID);

@@ -194,12 +194,19 @@ Resolver::TypeInfo::ID Resolver::type_next() {
 	return type_counter_++;
 }
 
-Resolver::TypeInfo::ID Resolver::register_type(Resolver::TypeInfo&& type, Span span, FileContext::ID file_id) {
+Resolver::TypeInfo::ID Resolver::register_type(
+	Resolver::TypeInfo&&         type,
+	Span                         span,
+	FileContext::ID              file_id,
+	std::optional<AST::SymbolID> symbol_id
+) {
 	Resolver::TypeInfo::ID id = type_next();
 	assert(type_pool_.size() == id);
 	assert(type_span_pool_.size() == id);
+	assert(type_symbol_mapping_.size() == id);
 	type_pool_.push_back(std::move(type));
 	type_span_pool_.push_back({span, file_id});
+	type_symbol_mapping_.push_back(symbol_id);
 	return id;
 }
 
@@ -760,7 +767,7 @@ Resolver::infer(AST::Expression::BinaryOperation const& binary_operation, Span s
 }
 
 Resolver::TypeInfo::ID
-Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, FileContext::ID file_id) {
+Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileContext::ID file_id) {
 	// for function calls, we need to resolve or partially resolve the overload
 	TypeInfo::ID callee_id = infer(function_call.callee->value, function_call.callee->span, file_id);
 
@@ -873,13 +880,13 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 	// it's time to infer the arguments now that we have a set of possible callees
 	std::vector<TypeInfo::ID> ordered_arguments {};
 	ordered_arguments.reserve(function_call.arguments.ordered.size());
-	for (auto const& argument : function_call.arguments.ordered) {
+	for (auto& argument : function_call.arguments.ordered) {
 		ordered_arguments.push_back(infer(argument.value, argument.span, file_id));
 	}
 
 	std::unordered_map<std::string, TypeInfo::ID> labeled_arguments {};
 	ordered_arguments.reserve(function_call.arguments.labeled.size());
-	for (auto const& [identifier, value] : function_call.arguments.labeled) {
+	for (auto& [identifier, value] : function_call.arguments.labeled) {
 		labeled_arguments.emplace(identifier.value.name(), infer(value.value, value.span, file_id));
 	}
 
@@ -952,7 +959,19 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
-	// TODO: finish resolving the identifier that is being called!
+	// if we're calling an identifier, let's finish resolving it
+	if (function_call.callee->value.kind() == AST::Expression::Kind::Atom
+	    || function_call.callee->value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier) {
+		if (!type_symbol_mapping_.at(found_functions[0]).has_value()) {
+			// TODO: think about when this would ever happen
+			std::cout << "there is no value for this call id what?: ";
+			debug_print_type(found_functions[0]);
+			std::cout << std::endl;
+		} else {
+			function_call.callee->value.get_atom().get_identifier().id
+				= {type_symbol_mapping_.at(found_functions[0]).value()};
+		}
+	}
 
 	return register_type(
 		TypeInfo::make_same_as(type_pool_.at(call_id.value()).get_function().return_),
@@ -961,7 +980,7 @@ Resolver::infer(AST::Expression::FunctionCall const& function_call, Span span, F
 	);
 }
 
-Resolver::TypeInfo::ID Resolver::infer(AST::Expression const& expression, Span span, FileContext::ID file_id) {
+Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, FileContext::ID file_id) {
 	switch (expression.kind()) {
 	case AST::Expression::Kind::Atom:            return infer(expression.get_atom(), span, file_id);
 	case AST::Expression::Kind::UnaryOperation:  return infer(expression.get_unary_operation(), span, file_id);

@@ -16,7 +16,12 @@ void Resolver::identify(AST::Module& module, FileContext::ID file_id) {
 	                module.name.span,
 	                module.name.value.name(),
 	                &module,
-	                register_type(TypeInfo::make_module(), module.name.span, file_id),
+	                register_type(
+				TypeInfo::make_module(),
+				module.name.span,
+				file_id,
+				module.name.value.id.value()[0]
+			),
 	                false}
 	);
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
@@ -33,8 +38,12 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 	for (auto& argument : function.arguments) {
 		// TODO: mutable arguments
 		identify(argument.name.value);
-		TypeInfo::ID type_id
-			= register_type(TypeInfo::from_type(argument.type.value), argument.type.span, file_id);
+		TypeInfo::ID type_id = register_type(
+			TypeInfo::from_type(argument.type.value),
+			argument.type.span,
+			file_id,
+			argument.name.value.id.value()[0]
+		);
 		symbol_pool_.push_back(
 			Symbol {argument.name.value.id.value()[0],
 		                file_id,
@@ -60,7 +69,8 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 	                register_type(
 				TypeInfo::make_function(TypeInfo::Function {std::move(arguments), return_}),
 				function.name.span,
-				file_id
+				file_id,
+				function.name.value.id.value()[0]
 			),
 	                false}
 	);
