@@ -982,11 +982,18 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, FileContext::ID file_id) {
 	switch (expression.kind()) {
-	case AST::Expression::Kind::Atom:            return infer(expression.get_atom(), span, file_id);
-	case AST::Expression::Kind::UnaryOperation:  return infer(expression.get_unary_operation(), span, file_id);
-	case AST::Expression::Kind::BinaryOperation: return infer(expression.get_binary_operation(), span, file_id);
-	case AST::Expression::Kind::FunctionCall:    return infer(expression.get_function_call(), span, file_id);
+	case AST::Expression::Kind::Atom: expression.type = infer(expression.get_atom(), span, file_id); break;
+	case AST::Expression::Kind::UnaryOperation:
+		expression.type = infer(expression.get_unary_operation(), span, file_id);
+		break;
+	case AST::Expression::Kind::BinaryOperation:
+		expression.type = infer(expression.get_binary_operation(), span, file_id);
+		break;
+	case AST::Expression::Kind::FunctionCall:
+		expression.type = infer(expression.get_function_call(), span, file_id);
+		break;
 	}
+	return expression.type.value();
 }
 
 void Resolver::infer(AST::Statement::Declare& declare, FileContext::ID file_id) {

@@ -129,6 +129,8 @@ struct Expression {
 	typedef std::variant<Atom, UnaryOperation, BinaryOperation, FunctionCall> value_t;
 
 	value_t value;
+	// TODO: move TypeInfo::ID elsewhere to have it here
+	std::optional<uint32_t> type = {};
 
 	inline constexpr Kind kind() const { return (Kind) value.index(); }
 
