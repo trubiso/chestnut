@@ -368,6 +368,8 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 	if (a.kind() == TypeInfo::Kind::Bottom || b.kind() == TypeInfo::Kind::Bottom) return;
 
 	// make unknowns known
+	// FIXME: cyclic types completely break this and produce a well-deserved segfault, we actually need to traverse
+	// the SameAs to find what we're actually going to end up setting this type to
 	if (a.kind() == TypeInfo::Kind::Unknown) {
 		a = TypeInfo::make_same_as(b_id);
 		return;

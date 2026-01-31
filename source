@@ -75,6 +75,16 @@ export module hello {
 			const a = sum_numbers(2, 3);
 		}
 
+/*
+		func cycle() void {
+			const a;
+			const b = a;
+			a = b;  // segfaults the compiler LOL
+		}
+*/
+
+		func invalid_types(cool: _) _;
+
 		func hey(cool: uintptr) uint => 2 + 2 / -cool;
 
 		export func lets_do_this1(name: bool, age: intsize, what: float128) uint1382;

@@ -336,10 +336,11 @@ private:
 	void         infer(AST::Module&, FileContext::ID);
 	void         infer_types();
 
-	/// Reconstructs an inferred type.
+	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
+	/// values and expressions, as it does not allow functions or modules to be values directly.
 	IR::Type reconstruct_type(TypeInfo::ID);
 	/// Lowers a type known since parsing, turning non-specific types specific.
-	Spanned<IR::Type> lower_type(Spanned<AST::Type>);
+	Spanned<IR::Type> lower_type(Spanned<AST::Type>, FileContext::ID);
 
 	/// Lowers any identifier into its IR equivalent and type.
 	std::tuple<Spanned<IR::Identifier>, IR::Type> lower(Spanned<AST::Identifier> const&);

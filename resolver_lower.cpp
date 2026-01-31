@@ -5,6 +5,183 @@
 #include <sstream>
 #include <variant>
 
+uint32_t const                     DEFAULT_INTEGER_WIDTH = 32;
+IR::Type::Atom::Float::Width const DEFAULT_FLOAT_WIDTH   = IR::Type::Atom::Float::Width::F32;
+
+IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
+	TypeInfo const& type = type_pool_.at(type_id);
+	switch (type.kind()) {
+	// bottoms directly correspond to overconstrained types
+	case TypeInfo::Kind::Bottom:    return IR::Type::make_atom(IR::Type::Atom::make_error());
+	case TypeInfo::Kind::KnownVoid: return IR::Type::make_atom(IR::Type::Atom::make_void());
+	case TypeInfo::Kind::KnownChar: return IR::Type::make_atom(IR::Type::Atom::make_char());
+	case TypeInfo::Kind::KnownBool: return IR::Type::make_atom(IR::Type::Atom::make_bool());
+	case TypeInfo::Kind::KnownFloat:
+		return IR::Type::make_atom(
+			IR::Type::Atom::make_float((IR::Type::Atom::Float::Width) type.get_known_float().width)
+		);
+	case TypeInfo::Kind::PartialFloat:   return IR::Type::make_atom(IR::Type::Atom::make_float(DEFAULT_FLOAT_WIDTH));
+	case TypeInfo::Kind::Unknown:
+	case TypeInfo::Kind::Module:
+	case TypeInfo::Kind::Function:
+	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::KnownInteger:
+	case TypeInfo::Kind::PartialInteger: break;
+	}
+
+	auto [span, file_id] = type_span_pool_.at(type_id);
+	if (type.kind() == TypeInfo::Kind::Unknown) {
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"unknown type",
+				"this type cannot be inferred automatically",
+				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+			)
+		);
+		return IR::Type::make_atom(IR::Type::Atom::make_error());
+	} else if (type.kind() == TypeInfo::Kind::Module) {
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"invalid type",
+				"modules cannot be used as values",
+				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+			)
+		);
+		return IR::Type::make_atom(IR::Type::Atom::make_error());
+	} else if (type.kind() == TypeInfo::Kind::Function) {
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"invalid type",
+				"functions cannot be used as values",
+				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+			)
+		);
+		return IR::Type::make_atom(IR::Type::Atom::make_error());
+	} else if (type.kind() == TypeInfo::Kind::SameAs) {
+		TypeInfo::SameAs const& same_as = type.get_same_as();
+		// we should never reach this case
+		assert(!same_as.ids.empty());
+		if (same_as.ids.size() == 1) return reconstruct_type(same_as.ids.at(0));
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"unknown type",
+				"this type cannot be decided from its possibilities",
+				{get_type_sample(type_id, OutFmt::Color::Red)}
+			)
+		);
+		return IR::Type::make_atom(IR::Type::Atom::make_error());
+	} else if (type.kind() == TypeInfo::Kind::KnownInteger) {
+		auto const& integer = type.get_known_integer().integer;
+		switch (integer.width_type()) {
+		case AST::Type::Atom::Integer::WidthType::Fixed:
+			return IR::Type::make_atom(
+				IR::Type::Atom::make_integer(
+					IR::Type::Atom::Integer::with_width(
+						integer.bit_width().value(),
+						integer.is_signed()
+					)
+						.value()
+				)
+			);
+		case AST::Type::Atom::Integer::WidthType::Ptr:
+			return IR::Type::make_atom(
+				IR::Type::Atom::make_integer(IR::Type::Atom::Integer::ptr(integer.is_signed()))
+			);
+		case AST::Type::Atom::Integer::WidthType::Size:
+			return IR::Type::make_atom(
+				IR::Type::Atom::make_integer(IR::Type::Atom::Integer::size(integer.is_signed()))
+			);
+		case AST::Type::Atom::Integer::WidthType::Any: [[assume(false)]]; break;
+		}
+	} else if (type.kind() == TypeInfo::Kind::PartialInteger) {
+		bool        signed_ = false;
+		auto const& integer = type.get_partial_integer().integer;
+		if (type.get_partial_integer().signed_is_known) signed_ = integer.is_signed();
+		switch (integer.width_type()) {
+		case AST::Type::Atom::Integer::WidthType::Any:
+		case AST::Type::Atom::Integer::WidthType::Fixed:
+			return IR::Type::make_atom(
+				IR::Type::Atom::make_integer(
+					IR::Type::Atom::Integer::with_width(
+						integer.width_type() == AST::Type::Atom::Integer::WidthType::Any
+							? DEFAULT_INTEGER_WIDTH
+							: integer.bit_width().value(),
+						signed_
+					)
+						.value()
+				)
+			);
+		case AST::Type::Atom::Integer::WidthType::Ptr:
+			return IR::Type::make_atom(IR::Type::Atom::make_integer(IR::Type::Atom::Integer::ptr(signed_)));
+		case AST::Type::Atom::Integer::WidthType::Size:
+			return IR::Type::make_atom(
+				IR::Type::Atom::make_integer(IR::Type::Atom::Integer::size(signed_))
+			);
+		}
+	}
+}
+
+Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type> spanned_type, FileContext::ID file_id) {
+	auto [span, type] = std::move(spanned_type);
+	if (type.kind() != AST::Type::Kind::Atom) {
+		std::cout << "unsupported type non-atom" << std::endl;
+		std::exit(0);
+	}
+	auto atom = type.get_atom();
+	switch (atom.kind()) {
+	case AST::Type::Atom::Kind::Float:
+		return {span,
+		        IR::Type::make_atom(
+				IR::Type::Atom::make_float((IR::Type::Atom::Float::Width) atom.get_float().width)
+			)};
+	case AST::Type::Atom::Kind::Void:     return {span, IR::Type::make_atom(IR::Type::Atom::make_void())};
+	case AST::Type::Atom::Kind::Char:     return {span, IR::Type::make_atom(IR::Type::Atom::make_char())};
+	case AST::Type::Atom::Kind::Bool:     return {span, IR::Type::make_atom(IR::Type::Atom::make_bool())};
+	case AST::Type::Atom::Kind::Integer:
+	case AST::Type::Atom::Kind::Inferred: break;
+	}
+
+	if (atom.kind() == AST::Type::Atom::Kind::Integer) {
+		auto const& integer = atom.get_integer();
+		switch (integer.width_type()) {
+		case AST::Type::Atom::Integer::WidthType::Any:
+		case AST::Type::Atom::Integer::WidthType::Fixed:
+			return {span,
+			        IR::Type::make_atom(
+					IR::Type::Atom::make_integer(
+						IR::Type::Atom::Integer::with_width(
+							integer.width_type() == AST::Type::Atom::Integer::WidthType::Any
+								? DEFAULT_INTEGER_WIDTH
+								: integer.bit_width().value(),
+							integer.is_signed()
+						)
+							.value()
+					)
+				)};
+		case AST::Type::Atom::Integer::WidthType::Ptr:
+			return {span,
+			        IR::Type::make_atom(
+					IR::Type::Atom::make_integer(IR::Type::Atom::Integer::ptr(integer.is_signed()))
+				)};
+		case AST::Type::Atom::Integer::WidthType::Size:
+			return {span,
+			        IR::Type::make_atom(
+					IR::Type::Atom::make_integer(IR::Type::Atom::Integer::size(integer.is_signed()))
+				)};
+		}
+	} else if (atom.kind() == AST::Type::Atom::Kind::Inferred) {
+		// this is invalid!! top level types must not be inferred
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type may not be inferred",
+				"module item types must be fully specified",
+				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+			)
+		);
+		return {span, IR::Type::make_atom(IR::Type::Atom::make_error())};
+	}
+}
+
 std::tuple<Spanned<IR::Identifier>, IR::Type> Resolver::lower(Spanned<AST::Identifier> const& identifier) {
 	auto [id, type] = lower(identifier.value);
 	return {
@@ -176,8 +353,7 @@ Resolver::lower(AST::Expression const& expression, Span span, IR::Scope& scope, 
 		return lower(expression.get_unary_operation(), span, scope, file_id);
 	case AST::Expression::Kind::BinaryOperation:
 		return lower(expression.get_binary_operation(), span, scope, file_id);
-	case AST::Expression::Kind::FunctionCall:
-		return lower(expression.get_function_call(), span, scope, file_id);
+	case AST::Expression::Kind::FunctionCall: return lower(expression.get_function_call(), span, scope, file_id);
 	}
 }
 
@@ -249,6 +425,7 @@ Resolver::lower(Spanned<AST::Statement> const& statement, IR::Scope& scope, File
 	// however, when we resolve expressions, we do extract all potential inner function calls
 	auto expression = lower(statement.value.get_expression(), statement.span, scope, file_id);
 	if (expression.value.kind() != IR::Expression::Kind::FunctionCall) {
+		// FIXME: this gets triggered for bottoms
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::warning(
 				"expression statement is not a function call",
@@ -284,13 +461,13 @@ IR::Function Resolver::lower(AST::Function const& function, FileContext::ID file
 	std::vector<IR::Function::Argument> arguments {};
 	arguments.reserve(function.arguments.size());
 	for (auto const& [name, type] : function.arguments) {
-		arguments.push_back(IR::Function::Argument {lower_identifier(name), lower_type(type)});
+		arguments.push_back(IR::Function::Argument {lower_identifier(name), lower_type(type, file_id)});
 	}
 	auto body = function.body.transform([file_id, this](auto&& body) { return lower(body, file_id); });
 	return IR::Function {
 		{function.name.span, function.name.value.id.value()[0]},
 		std::move(arguments),
-		lower_type(function.return_type),
+		lower_type(function.return_type, file_id),
 		body
 	};
 }
