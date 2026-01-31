@@ -76,14 +76,7 @@ struct Type {
 			}
 		};
 
-		enum class Kind {
-			Integer  = 0,
-			Float    = 1,
-			Void     = 2,
-			Char     = 3,
-			Bool     = 4,
-			Inferred = 5,
-		};
+		enum class Kind { Integer, Float, Void, Char, Bool, Inferred };
 
 		typedef std::variant<Integer, Float, std::monostate, std::monostate, std::monostate, std::monostate>
 			value_t;
@@ -123,9 +116,7 @@ struct Type {
 		inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
 	};
 
-	enum class Kind {
-		Atom = 0,
-	};
+	enum class Kind { Atom };
 
 	typedef std::variant<Atom> value_t;
 

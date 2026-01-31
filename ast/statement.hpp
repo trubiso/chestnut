@@ -32,13 +32,7 @@ struct Statement {
 		std::optional<Spanned<Expression>> value;
 	};
 
-	enum class Kind {
-		Declare    = 0,
-		Set        = 1,
-		Expression = 2,
-		Return     = 3,
-		Scope      = 4,
-	};
+	enum class Kind { Declare, Set, Expression, Return, Scope };
 
 	typedef std::variant<Declare, Set, Expression, Return, Scope> value_t;
 

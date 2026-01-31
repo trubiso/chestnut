@@ -60,13 +60,7 @@ struct Token {
 
 	// TODO: make special case for the _ identifier which is treated as discard/nothing.
 
-	enum class Kind {
-		Identifier    = 0,
-		NumberLiteral = 1,
-		StringLiteral = 2,
-		CharLiteral   = 3,
-		Symbol        = 4,
-	};
+	enum class Kind { Identifier, NumberLiteral, StringLiteral, CharLiteral, Symbol };
 
 	typedef std::variant<std::string, std::string, std::string, std::string, Symbol> value_t;
 

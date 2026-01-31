@@ -13,13 +13,7 @@ struct Expression {
 	// TODO: potentially store an optional TypeID for lowering
 
 	struct Atom {
-		enum class Kind {
-			Identifier    = 0,
-			NumberLiteral = 1,
-			StringLiteral = 2,
-			CharLiteral   = 3,
-			Expression    = 4,
-		};
+		enum class Kind { Identifier, NumberLiteral, StringLiteral, CharLiteral, Expression };
 
 		struct NumberLiteral {
 			std::string               literal;
@@ -130,12 +124,7 @@ struct Expression {
 		} arguments;
 	};
 
-	enum class Kind {
-		Atom            = 0,
-		UnaryOperation  = 1,
-		BinaryOperation = 2,
-		FunctionCall    = 3,
-	};
+	enum class Kind { Atom, UnaryOperation, BinaryOperation, FunctionCall };
 
 	typedef std::variant<Atom, UnaryOperation, BinaryOperation, FunctionCall> value_t;
 
