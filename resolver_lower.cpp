@@ -122,7 +122,6 @@ Spanned<IR::Expression> Resolver::lower(
 
 Spanned<IR::Expression> Resolver::lower(
 	AST::Expression::FunctionCall const& function_call,
-	TypeInfo::ID                         type_id,
 	Span                                 span,
 	IR::Scope&                           scope,
 	FileContext::ID                      file_id
@@ -139,9 +138,10 @@ Spanned<IR::Expression> Resolver::lower(
 
 	// now we need to reconstruct the argument order from the type
 	// these assertions shouldn't fail if we've successfully resolved, but you never know!
+	TypeInfo::ID function_id = symbol_pool_.at(callee_identifier.value).type;
+	if (type_pool_.at(function_id).kind() != TypeInfo::Kind::Function) return error_expression;
+	TypeInfo::Function const& function = type_pool_.at(function_id).get_function();
 	size_t argument_count = function_call.arguments.ordered.size() + function_call.arguments.labeled.size();
-	assert(type_pool_.at(type_id).kind() == TypeInfo::Kind::Function);
-	TypeInfo::Function const& function = type_pool_.at(type_id).get_function();
 	assert(function.arguments.size() == argument_count);
 	std::vector<Spanned<IR::Expression::Atom>> arguments {};
 	arguments.reserve(argument_count);
@@ -177,7 +177,7 @@ Resolver::lower(AST::Expression const& expression, Span span, IR::Scope& scope, 
 	case AST::Expression::Kind::BinaryOperation:
 		return lower(expression.get_binary_operation(), span, scope, file_id);
 	case AST::Expression::Kind::FunctionCall:
-		return lower(expression.get_function_call(), expression.type.value(), span, scope, file_id);
+		return lower(expression.get_function_call(), span, scope, file_id);
 	}
 }
 

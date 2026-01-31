@@ -351,8 +351,7 @@ private:
 	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, IR::Scope&, FileContext::ID);
 	Spanned<IR::Expression::Atom> extract_expression(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID);
 
-	Spanned<IR::Expression>
-	lower(AST::Expression::FunctionCall const&, TypeInfo::ID, Span, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression> lower(AST::Expression::FunctionCall const&, Span, IR::Scope&, FileContext::ID);
 	Spanned<IR::Expression> lower(AST::Expression::Atom const&, Span, IR::Scope&, FileContext::ID);
 	Spanned<IR::Expression> lower(AST::Expression::UnaryOperation const&, Span, IR::Scope&, FileContext::ID);
 	Spanned<IR::Expression> lower(AST::Expression::BinaryOperation const&, Span, IR::Scope&, FileContext::ID);
