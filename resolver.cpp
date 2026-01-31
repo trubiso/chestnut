@@ -2,11 +2,13 @@
 
 #include <iostream>
 
-void Resolver::resolve() {
+std::vector<IR::Module> Resolver::resolve() {
 	populate_module_table();
 	identify_module_items();
 	resolve_identifiers();
 	infer_types();
+
+	return lower();
 }
 
 void Resolver::dump() const {

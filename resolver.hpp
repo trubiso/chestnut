@@ -2,6 +2,7 @@
 #include "ast/function.hpp"
 #include "ast/identifier.hpp"
 #include "ast/module.hpp"
+#include "ir.hpp"
 #include "lexer.hpp"
 
 #include <cstdint>
@@ -27,7 +28,7 @@ public:
 		, module_table_ {}
 		, counter_ {0} {}
 
-	void resolve();
+	std::vector<IR::Module> resolve();
 
 	void dump() const;
 
@@ -196,7 +197,7 @@ private:
 
 	std::vector<TypeInfo>                          type_pool_;
 	std::vector<std::tuple<Span, FileContext::ID>> type_span_pool_;
-	std::vector<std::optional<AST::SymbolID>> type_symbol_mapping_;
+	std::vector<std::optional<AST::SymbolID>>      type_symbol_mapping_;
 
 	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }
 
@@ -334,4 +335,34 @@ private:
 	void         infer(AST::Function&, FileContext::ID);
 	void         infer(AST::Module&, FileContext::ID);
 	void         infer_types();
+
+	/// Reconstructs an inferred type.
+	IR::Type reconstruct_type(TypeInfo::ID);
+	/// Lowers a type known since parsing, turning non-specific types specific.
+	Spanned<IR::Type> lower_type(Spanned<AST::Type>);
+
+	/// Lowers any identifier into its IR equivalent and type.
+	std::tuple<Spanned<IR::Identifier>, IR::Type> lower(Spanned<AST::Identifier> const&);
+	/// Lowers any identifier into its IR equivalent and type.
+	std::tuple<IR::Identifier, IR::Type> lower(AST::Identifier const&);
+	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-import module items).
+	Spanned<IR::Identifier> lower_identifier(Spanned<AST::Identifier> const&);
+
+	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression::Atom> extract_expression(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID);
+
+	Spanned<IR::Expression>
+	lower(AST::Expression::FunctionCall const&, TypeInfo::ID, Span, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression> lower(AST::Expression::Atom const&, Span, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression> lower(AST::Expression::UnaryOperation const&, Span, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression> lower(AST::Expression::BinaryOperation const&, Span, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression> lower(AST::Expression const&, Span, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression> lower(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID);
+	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Declare const&, Span, IR::Scope&, FileContext::ID);
+	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Set const&, Span, IR::Scope&, FileContext::ID);
+	std::optional<Spanned<IR::Statement>> lower(Spanned<AST::Statement> const&, IR::Scope&, FileContext::ID);
+	IR::Scope                             lower(AST::Scope const&, FileContext::ID);
+	IR::Function                          lower(AST::Function const&, FileContext::ID);
+	IR::Module                            lower(AST::Module const&, FileContext::ID);
+	std::vector<IR::Module>               lower();
 };
