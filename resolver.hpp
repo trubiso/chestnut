@@ -61,8 +61,6 @@ private:
 			bool                     signed_is_known;
 		};
 
-		// TODO: register function argument types and return type
-
 		enum class Kind {
 			/// Completely unknown type.
 			Unknown,
@@ -251,9 +249,11 @@ private:
 
 	std::unordered_map<std::string, AST::Module*> module_table_;
 
+	// TODO: rename symbol stuff to have 'symbol' in its name
 	AST::SymbolID counter_;
 
 	/// Returns a new ID produced by the counter.
+	// TODO: assert that the produced ID corresponds to symbol_pool_.size()
 	AST::SymbolID next();
 
 	/// Returns the file context for the requested file ID.

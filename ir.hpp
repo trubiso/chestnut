@@ -134,8 +134,6 @@ std::ostream& operator<<(std::ostream&, Type::Atom const&);
 std::ostream& operator<<(std::ostream&, Type const&);
 
 struct Expression {
-	// TODO: potentially store an optional TypeID for lowering
-
 	// atoms must now be either variables or literals
 	struct Atom {
 		enum class Kind {

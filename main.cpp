@@ -77,7 +77,7 @@ int main(void) {
 	Resolver resolver {std::move(parsed_files)};
 	std::vector<IR::Module> modules = resolver.resolve();
 
-	for (auto const& module : modules) { std::cout << module << std::endl; }
+	// for (auto const& module : modules) { std::cout << module << std::endl; }
 
 	for (auto const& file : resolver.parsed_files)
 		for (auto const& diagnostic : file.diagnostics) diagnostic.print();
