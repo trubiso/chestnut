@@ -423,9 +423,9 @@ Resolver::lower(Spanned<AST::Statement> const& statement, IR::Scope& scope, File
 
 	// for expressions, it's a special case because we only care about function calls
 	// however, when we resolve expressions, we do extract all potential inner function calls
+	if (type_pool_.at(statement.value.get_expression().type.value()).kind() == TypeInfo::Kind::Bottom) return {};
 	auto expression = lower(statement.value.get_expression(), statement.span, scope, file_id);
 	if (expression.value.kind() != IR::Expression::Kind::FunctionCall) {
-		// FIXME: this gets triggered for bottoms
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::warning(
 				"expression statement is not a function call",
