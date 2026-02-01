@@ -21,6 +21,8 @@ export module hello {
 
 		@extern func putc(c: char) void;
 
+		func try_anon(anon argument: uint32) void;
+
 		func try_shadowing(putc: char, sum_numbers: uint) void {
 			const my_var = 5;
 			{
@@ -35,6 +37,7 @@ export module hello {
 		func sample2(jones: void, rage: uint) uint;
 
 		export func main() void {
+			try_anon(argument: 95);
 			try_shadowing = 'h';
 			sum_numbers(2, 3, 4);
 			const a: _ = 30 +- 2 * 3;

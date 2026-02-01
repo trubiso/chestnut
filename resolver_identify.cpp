@@ -53,7 +53,9 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 		                type_id,
 		                false}
 		);
-		arguments.push_back({argument.name.value.name(), type_id});
+		arguments.push_back(
+			{argument.anonymous ? std::nullopt : std::optional {argument.name.value.name()}, type_id}
+		);
 	}
 
 	TypeInfo::ID return_

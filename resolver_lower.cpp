@@ -483,6 +483,7 @@ IR::Function Resolver::lower(AST::Function const& function, FileContext::ID file
 	std::vector<IR::Function::Argument> arguments {};
 	arguments.reserve(function.arguments.size());
 	for (auto const& [name, type, anonymous] : function.arguments) {
+		// we don't need to push anonymous arguments as anonymous, we only cared during resolution and stuff
 		arguments.push_back(IR::Function::Argument {lower_identifier(name), lower_type(type, file_id)});
 	}
 	auto body = function.body.transform([file_id, this](auto&& body) { return lower(body, file_id); });
