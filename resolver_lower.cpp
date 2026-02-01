@@ -389,10 +389,31 @@ Resolver::lower(AST::Statement::Set const& set, Span span, IR::Scope& scope, Fil
 	// skip invalid lhs
 	if (!set.lhs.value.can_be_lhs()) return {};
 	// TODO: in the future, once we do derefs, this will look different
-	// TODO: check variable mutability?
 	auto lhs            = lower(set.lhs, scope, file_id);
 	auto lhs_identifier = Spanned<IR::Identifier> {lhs.span, lhs.value.get_atom().get_identifier()};
-	auto value          = lower(set.rhs, scope, file_id);
+	// check that we're setting an actually mutable variable
+	if (!symbol_pool_.at(lhs_identifier.value).mutable_) {
+		Symbol const&     symbol = symbol_pool_.at(lhs_identifier.value);
+		std::stringstream subtitle {};
+		subtitle << "symbol '" << symbol.name << "' was not declared as mutable";
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"tried to mutate immutable symbol",
+				subtitle.str(),
+				{Diagnostic::Sample(
+					 get_context(symbol.file_id),
+					 "declaration",
+					 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
+				 ),
+		                 Diagnostic::Sample(
+					 get_context(file_id),
+					 "mutation",
+					 {Diagnostic::Sample::Label(lhs_identifier.span, OutFmt::Color::Red)}
+				 )}
+			)
+		);
+	}
+	auto value = lower(set.rhs, scope, file_id);
 
 	return Spanned<IR::Statement> {span, IR::Statement::make_set(IR::Statement::Set {lhs_identifier, value})};
 }
