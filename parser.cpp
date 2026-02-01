@@ -634,7 +634,6 @@ void Parser::skip_semis() {
 }
 
 std::optional<Function> Parser::parse_function() {
-	// FIXME: this does not require ; after non-scope body/lack thereof
 	if (!consume_keyword(Keyword::Func)) return {};
 	auto name = SPANNED_REASON(expect_identifier, "expected function name");
 	if (!name.has_value()) return {};
@@ -680,9 +679,15 @@ std::optional<Function> Parser::parse_function() {
 			body = Scope {};
 			body.value().push_back(Spanned<Statement> {expression.value().span, std::move(statement)});
 		}
+
+		// we need to delimit the expression by a semicolon
+		expect_semicolon("expected semicolon after function body shorthand");
 	} else {
 		// otherwise, we get a regular body
 		body = consume_scope();
+
+		// if we didn't get a body, we need a semicolon once more
+		if (!body.has_value()) expect_semicolon("expected semicolon after function declaration without body");
 	}
 
 	return Function {name.value(), arguments, return_type.value(), std::move(body)};

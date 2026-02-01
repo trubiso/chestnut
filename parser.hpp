@@ -122,6 +122,7 @@ private:
 
 	bool expect_symbol(std::string_view reason, Token::Symbol);
 
+	// TODO: point one token further back so it is clearer where the semicolon is missing
 	inline bool expect_semicolon(std::string_view reason) {
 		return expect_symbol(reason, Token::Symbol::Semicolon);
 	}
