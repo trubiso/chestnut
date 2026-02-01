@@ -967,10 +967,28 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
-	// if too many are unifiable, we unify with none and throw a diagnostic.
+	// if too many are unifiable, we unify with none and throw a diagnostic. it is more sensible to do it this way
+	// than to unify with the first one we see!
 	if (found_functions.size() > 1) {
-		// TODO: too many functions diagnostic
-		std::cout << "too many functions match" << std::endl;
+		std::vector<Diagnostic::Sample> samples = {rejections.at(0)};
+
+		size_t count = 0;
+		for (TypeInfo::ID id : found_functions)
+			samples.push_back(
+				Diagnostic::Sample(
+					get_context(get_type_file_id(id)),
+					std::format("candidate #{}", ++count),
+					{Diagnostic::Sample::Label(get_type_span(id), OutFmt::Color::Cyan)}
+				)
+			);
+
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"could not resolve function overload",
+				"more than one function matches the function call, so it must be manually disambiguated",
+				std::move(samples)
+			)
+		);
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
