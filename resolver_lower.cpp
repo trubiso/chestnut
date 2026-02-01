@@ -29,6 +29,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
 	case TypeInfo::Kind::PartialInteger: break;
 	}
 
+	// FIXME: we throw a million diagnostics when there are resolved type cycles
 	auto [span, file_id] = type_span_pool_.at(type_id);
 	if (type.kind() == TypeInfo::Kind::Unknown) {
 		parsed_files.at(file_id).diagnostics.push_back(

@@ -298,6 +298,7 @@ private:
 
 	// FIXME: unification diagnostics suck because we point at the original SameAs type.
 
+	void set_same_as(TypeInfo::ID to, TypeInfo::ID from);
 	/// Follows references and returns TypeInfo::SameAs with the new roster or TypeInfo::Bottom if none can be
 	/// unified (throws a diagnostic in that case).
 	TypeInfo unify_follow_references(TypeInfo::ID same_as, TypeInfo::ID, FileContext::ID);

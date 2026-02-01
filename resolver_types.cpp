@@ -210,6 +210,24 @@ Resolver::TypeInfo::ID Resolver::register_type(
 	return id;
 }
 
+void Resolver::set_same_as(Resolver::TypeInfo::ID to, Resolver::TypeInfo::ID from) {
+	// set_same_as(a, a) is a noop
+	if (to == from) return;
+	// the normal case works as always
+	if (type_pool_.at(from).kind() != TypeInfo::Kind::SameAs) {
+		type_pool_.at(to) = TypeInfo::make_same_as(from);
+		return;
+	}
+	// for a single candidate, we simply go through and check what it is
+	if (type_pool_.at(from).get_same_as().ids.size() == 1) {
+		set_same_as(to, type_pool_.at(from).get_same_as().ids.at(0));
+		return;
+	}
+	// for many candidates, we don't do anything yet
+	// TODO: filter ourselves out from this pool
+	type_pool_.at(to) = type_pool_.at(from);
+}
+
 Resolver::TypeInfo Resolver::unify_follow_references(
 	Resolver::TypeInfo::ID same_as,
 	Resolver::TypeInfo::ID other,
@@ -368,14 +386,12 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 	if (a.kind() == TypeInfo::Kind::Bottom || b.kind() == TypeInfo::Kind::Bottom) return;
 
 	// make unknowns known
-	// FIXME: cyclic types completely break this and produce a well-deserved segfault, we actually need to traverse
-	// the SameAs to find what we're actually going to end up setting this type to
 	if (a.kind() == TypeInfo::Kind::Unknown) {
-		a = TypeInfo::make_same_as(b_id);
+		set_same_as(a_id, b_id);
 		return;
 	}
 	if (b.kind() == TypeInfo::Kind::Unknown) {
-		b = TypeInfo::make_same_as(a_id);
+		set_same_as(b_id, a_id);
 		return;
 	}
 
@@ -433,8 +449,8 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 		}
 
 		// if one is known, we can make the other the same as the other
-		if (a_known) b = TypeInfo::make_same_as(a_id);
-		if (b_known) a = TypeInfo::make_same_as(b_id);
+		if (a_known) set_same_as(b_id, a_id);
+		if (b_known) set_same_as(a_id, b_id);
 		return;
 	}
 
@@ -467,7 +483,7 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 
 		// if no clashes were detected, we unify by setting the partial one to the known one
 		if (!signed_clash && !size_clash) {
-			type_pool_.at(a_known ? b_id : a_id) = TypeInfo::make_same_as(a_known ? a_id : b_id);
+			set_same_as(a_known ? b_id : a_id, a_known ? a_id : b_id);
 		}
 	} else {
 		// neither are known, so we will construct a unified partial integer for both of them

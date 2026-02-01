@@ -75,13 +75,14 @@ export module hello {
 			const a = sum_numbers(2, 3);
 		}
 
-/*
 		func cycle() void {
-			const a;
-			const b = a;
-			a = b;  // segfaults the compiler LOL
+			const cycle_a;
+			const cycle_b;
+			const cycle_c;
+			cycle_b = cycle_a;
+			cycle_a = cycle_c;
+			cycle_c = cycle_b;
 		}
-*/
 
 		func invalid_types(cool: _) _;
 
