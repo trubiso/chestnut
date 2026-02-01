@@ -37,7 +37,7 @@ export module hello {
 		func sample2(jones: void, rage: uint) uint;
 
 		export func main() void {
-			try_anon(argument: 95);
+			try_anon(argument: 95, argument: 64);
 			try_shadowing = 'h';
 			sum_numbers(2, 3, 4);
 			const a: _ = 30 +- 2 * 3;

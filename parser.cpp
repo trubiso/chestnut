@@ -283,11 +283,37 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 
 		while ((argument = consume_expression_function_call_argument()).has_value()) {
 			if (std::holds_alternative<Expression::FunctionCall::LabeledArgument>(argument.value())) {
-				// FIXME: we need to ensure labeled arguments are not repeated!!
 				auto labeled_argument = std::move(
 					std::get<Expression::FunctionCall::LabeledArgument>(argument.value())
 				);
-				arguments.labeled.push_back(std::move(labeled_argument));
+				bool duplicate = false;
+				for (auto const& existing_argument : arguments.labeled) {
+					if (std::get<0>(existing_argument).value.name()
+					    == std::get<0>(labeled_argument).value.name()) {
+						diagnostics_.push_back(
+							Diagnostic::error(
+								"duplicate argument name",
+								"argument name used twice in function call",
+								{Diagnostic::Sample(
+									context_,
+									{Diagnostic::Sample::Label(
+										 std::get<0>(labeled_argument).span,
+										 OutFmt::Color::Red
+									 ),
+						                         Diagnostic::Sample::Label(
+										 std::get<0>(existing_argument).span,
+										 "first used here",
+										 OutFmt::Color::Cyan
+									 )}
+								)}
+							)
+						);
+						duplicate = true;
+						break;
+					}
+				}
+				// we don't want to confuse later stages
+				if (!duplicate) arguments.labeled.push_back(std::move(labeled_argument));
 			} else {
 				auto ordered_argument = std::move(
 					std::get<Expression::FunctionCall::OrderedArgument>(argument.value())
