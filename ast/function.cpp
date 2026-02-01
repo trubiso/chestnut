@@ -6,7 +6,9 @@ std::ostream& operator<<(std::ostream& os, Function const& function) {
 	os << "declare function " << function.name.value << " w/ args (";
 	size_t count = 0;
 	for (auto const& arg : function.arguments) {
-		os << arg.name.value << ": " << arg.type.value;
+		if (arg.anonymous) os << "(anonymous \"" << arg.name.value << "\")";
+		else os << arg.name.value;
+		os << ": " << arg.type.value;
 		if (++count < function.arguments.size()) os << ", ";
 	}
 	os << ")";

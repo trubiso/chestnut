@@ -482,7 +482,7 @@ IR::Scope Resolver::lower(AST::Scope const& original_scope, FileContext::ID file
 IR::Function Resolver::lower(AST::Function const& function, FileContext::ID file_id) {
 	std::vector<IR::Function::Argument> arguments {};
 	arguments.reserve(function.arguments.size());
-	for (auto const& [name, type] : function.arguments) {
+	for (auto const& [name, type, anonymous] : function.arguments) {
 		arguments.push_back(IR::Function::Argument {lower_identifier(name), lower_type(type, file_id)});
 	}
 	auto body = function.body.transform([file_id, this](auto&& body) { return lower(body, file_id); });

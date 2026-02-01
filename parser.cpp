@@ -552,6 +552,12 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	return false;
 }
 
+bool Parser::peek_unqualified_identifier() const {
+	auto maybe_token = tokens_.peek();
+	if (!maybe_token.has_value()) return false;
+	return maybe_token.value().is_identifier();
+}
+
 // TODO: add more context to some expected diagnoses (e.g. maybe for closing brace, add the header of what we want to
 // close?). also because some of these stop making sense (e.g. if it wants an argument type but doesn't find it, it goes
 // up and ends up expecting module closure or something)
@@ -640,16 +646,48 @@ std::optional<Function> Parser::parse_function() {
 
 	if (!expect_symbol("expected opening parenthesis to begin argument list", Token::Symbol::LParen)) return {};
 	// parse args
+	// TODO: do not allow any type in function signatures to be non-specific uint/int.
 	std::vector<Function::Argument> arguments {};
 	while (true) {
-		// TODO: anonymous arguments (cannot be accessed via labels)
-		// FIXME: ensure argument names are not repeated
-		auto argument_name = SPANNED(consume_identifier);
+		// TODO: mutable arguments
+		auto argument_name = SPANNED(consume_unqualified_identifier);
 		if (!argument_name.has_value()) break;
+		bool anonymous = false;
+		// if we got 'anon', it might be qualifying an argument as anonymous
+		if (argument_name.value().value.name() == "anon" && peek_unqualified_identifier()) {
+			anonymous     = true;
+			argument_name = SPANNED(consume_unqualified_identifier);
+		}
 		if (!expect_symbol("expected ':' to specify argument type", Token::Symbol::Colon)) return {};
 		auto argument_type = SPANNED_REASON(expect_type, "expected argument type");
 		if (!argument_type.has_value()) return {};
-		arguments.emplace_back(argument_name.value(), argument_type.value());
+		bool duplicate = false;
+		for (Function::Argument const& argument : arguments) {
+			if (argument.name.value.name() == argument_name.value().value.name()) {
+				diagnostics_.push_back(
+					Diagnostic::error(
+						"duplicate argument name",
+						"argument name used twice in function declaration",
+						{Diagnostic::Sample(
+							context_,
+							{Diagnostic::Sample::Label(
+								 argument_name.value().span,
+								 OutFmt::Color::Red
+							 ),
+				                         Diagnostic::Sample::Label(
+								 argument.name.span,
+								 "first used here",
+								 OutFmt::Color::Cyan
+							 )}
+						)}
+					)
+				);
+				duplicate = true;
+				break;
+			}
+		}
+		// we don't want to confuse later stages
+		if (!duplicate) arguments.emplace_back(argument_name.value(), argument_type.value(), anonymous);
 		if (!consume_single_comma_or_more()) break;
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};

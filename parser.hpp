@@ -115,6 +115,7 @@ private:
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;
 	bool peek_keyword(Keyword) const;
+	bool peek_unqualified_identifier() const;
 
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
 	// upon failure. The reason string is only copied if a diagnostic is thrown.

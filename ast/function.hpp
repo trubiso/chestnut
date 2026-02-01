@@ -12,6 +12,7 @@ struct Function {
 	struct Argument {
 		Spanned<Identifier> name;  // unqualified
 		Spanned<Type>       type;
+		bool                anonymous;
 	};
 
 	Spanned<Identifier>   name;  // unqualified
