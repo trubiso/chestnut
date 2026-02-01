@@ -482,9 +482,7 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 		}
 
 		// if no clashes were detected, we unify by setting the partial one to the known one
-		if (!signed_clash && !size_clash) {
-			set_same_as(a_known ? b_id : a_id, a_known ? a_id : b_id);
-		}
+		if (!signed_clash && !size_clash) { set_same_as(a_known ? b_id : a_id, a_known ? a_id : b_id); }
 	} else {
 		// neither are known, so we will construct a unified partial integer for both of them
 		TypeInfo::PartialInteger const &a_partial = a.get_partial_integer(),
@@ -911,8 +909,8 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	TypeInfo::ID return_ = register_type(TypeInfo::make_unknown(), span, file_id);
 
 	// we will filter the functions based on whether they are unifiable
-	std::vector<TypeInfo::ID>   found_functions {};
-	std::optional<TypeInfo::ID> call_id = {};
+	std::vector<TypeInfo::ID> found_functions {};
+	std::vector<TypeInfo>     function_call_types {};
 	for (TypeInfo::ID callable_id : callable_filtered) {
 		assert(type_pool_.at(callable_id).kind() == TypeInfo::Kind::Function);
 		// now we must create the function call type according to the function (due to labeled
@@ -933,12 +931,10 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		TypeInfo function_call_type
 			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), return_});
 		if (can_unify(function_call_type, callable_id)) {
-			if (found_functions.empty()) {
-				call_id = register_type(std::move(function_call_type), span, file_id);
-				unify(call_id.value(), callable_id, file_id);
-			}
 			found_functions.push_back(callable_id);
+			function_call_types.push_back(function_call_type);
 		} else {
+			// TODO: specify how it is incompatible?
 			std::stringstream text {};
 			text
 				<< "function signature ("
@@ -959,7 +955,8 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		}
 	}
 
-	if (found_functions.empty() || !call_id.has_value()) {
+	// now, we only have unifiable functions left. if none are unifiable, it's unresolved.
+	if (found_functions.empty()) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"could not resolve function overload",
@@ -970,12 +967,17 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
-	// FIXME: this is not being triggered for sum_numbers right now
+	// if too many are unifiable, we unify with none and throw a diagnostic.
 	if (found_functions.size() > 1) {
 		// TODO: too many functions diagnostic
 		std::cout << "too many functions match" << std::endl;
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
+
+	// if only one is unifiable, we've finally found the one and only function
+	assert(found_functions.size() == 1 && function_call_types.size() == 1);
+	TypeInfo::ID call_id = register_type(std::move(function_call_types.at(0)), span, file_id);
+	unify(call_id, found_functions.at(0), file_id);
 
 	// if we're calling an identifier, let's finish resolving it
 	if (function_call.callee->value.kind() == AST::Expression::Kind::Atom
@@ -991,11 +993,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		}
 	}
 
-	return register_type(
-		TypeInfo::make_same_as(type_pool_.at(call_id.value()).get_function().return_),
-		span,
-		file_id
-	);
+	return register_type(TypeInfo::make_same_as(type_pool_.at(call_id).get_function().return_), span, file_id);
 }
 
 Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, FileContext::ID file_id) {
