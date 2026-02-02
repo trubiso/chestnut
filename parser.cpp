@@ -566,6 +566,7 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	Token token = maybe_token.value();
 	if (!token.is_identifier()) return false;
 	switch (keyword) {
+	case Keyword::Def:    return token.get_identifier() == "def";
 	case Keyword::Import: return token.get_identifier() == "import";
 	case Keyword::Module: return token.get_identifier() == "module";
 	case Keyword::Export: return token.get_identifier() == "export";
@@ -761,7 +762,8 @@ std::optional<Function> Parser::parse_function() {
 			}
 		}
 		// we don't want to confuse later stages
-		if (!duplicate) arguments.emplace_back(argument_name.value(), argument_type.value(), anonymous, mutable_);
+		if (!duplicate)
+			arguments.emplace_back(argument_name.value(), argument_type.value(), anonymous, mutable_);
 		if (!consume_single_comma_or_more()) break;
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};
@@ -798,21 +800,22 @@ std::optional<Function> Parser::parse_function() {
 	return Function {name.value(), arguments, return_type, std::move(body)};
 }
 
-std::optional<Import> Parser::parse_import() {
-	if (!consume_keyword(Keyword::Import)) return {};
-	std::optional<Spanned<Identifier>> name
-		= SPANNED_REASON(expect_identifier, "expected name of the module to import");
+std::optional<Alias> Parser::parse_alias() {
+	if (!consume_keyword(Keyword::Def)) return {};
+	std::optional<Spanned<Identifier>> name = SPANNED_REASON(expect_unqualified_identifier, "expected alias name");
 	if (!name.has_value()) return {};
-	if (!name.value().value.absolute)
+	std::optional<Spanned<Identifier>> value = SPANNED_REASON(expect_identifier, "expected alias value");
+	if (!value.has_value()) return {};
+	if (!value.value().value.absolute)
 		diagnostics_.push_back(
 			Diagnostic::error(
-				"unsupported relative import",
-				"imports must be absolute (for now)",
-				{Diagnostic::Sample(context_, name.value().span)}
+				"unsupported relative alias",
+				"aliases must be absolute (for now)",
+				{Diagnostic::Sample(context_, value.value().span)}
 			)
 		);
-	expect_semicolon("expected semicolon after import");
-	return Import {std::move(name.value())};
+	expect_semicolon("expected semicolon after alias");
+	return Alias {std::move(name.value()), std::move(value.value())};
 }
 
 std::optional<Module> Parser::parse_module() {
@@ -841,8 +844,8 @@ std::optional<Module::Item> Parser::parse_module_item() {
 		item = parse_function().transform([tags = std::move(tags), exported](auto&& value) {
 			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
-	} else if (peek_keyword(Keyword::Import)) {
-		item = parse_import().transform([tags = std::move(tags), exported](auto&& value) {
+	} else if (peek_keyword(Keyword::Def)) {
+		item = parse_alias().transform([tags = std::move(tags), exported](auto&& value) {
 			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
 	}

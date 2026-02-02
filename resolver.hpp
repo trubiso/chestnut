@@ -263,11 +263,11 @@ private:
 
 	/// Produces a single ID for the identifier and sets it; the caller must register this ID in the symbol pool.
 	void identify(AST::Identifier&);
-	/// Identifies the module with an ID and its non-import items.
+	/// Identifies the module with an ID and its non-alias items.
 	void identify(AST::Module&, FileContext::ID);
 	/// Identifies the function with an ID.
 	void identify(AST::Function&, FileContext::ID);
-	/// Identifies all module items with an ID, but does not resolve imports.
+	/// Identifies all module items with an ID, but does not resolve aliases.
 	void identify_module_items();
 
 	void add_unknown_symbol_diagnostic(
@@ -370,7 +370,7 @@ private:
 	std::tuple<Spanned<IR::Identifier>, IR::Type> lower(Spanned<AST::Identifier> const&);
 	/// Lowers any identifier into its IR equivalent and type.
 	std::tuple<IR::Identifier, IR::Type> lower(AST::Identifier const&);
-	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-import module items).
+	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-alias module items).
 	Spanned<IR::Identifier> lower_identifier(Spanned<AST::Identifier> const&);
 
 	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, IR::Scope&, FileContext::ID);

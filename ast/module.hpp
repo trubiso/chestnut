@@ -9,9 +9,9 @@
 
 namespace AST {
 
-// TODO: more complex imports
-struct Import {
-	Spanned<Identifier> name;
+struct Alias {
+	Spanned<Identifier> name;  // unqualified
+	Spanned<Identifier> value;
 };
 
 // TODO: add an item for constants
@@ -22,9 +22,12 @@ struct Module {
 	// know this will be on the heap anyways).
 	// the vector of tags stores all tags that modify this module item.
 	// the boolean is whether this item is exported or not.
-	typedef std::variant<Function, Module, Import> InnerItem;
+	typedef std::variant<Function, Module, Alias> InnerItem;
+
 	static std::string const& get_name(InnerItem const& inner_item);
+
 	using Item = std::tuple<std::vector<Tag>, bool, InnerItem>;
+
 	static inline std::string const& get_name(Item const& item) { return get_name(std::get<InnerItem>(item)); }
 
 	struct Body {
@@ -32,7 +35,7 @@ struct Module {
 	} body;
 };
 
-std::ostream& operator<<(std::ostream&, Import const&);
+std::ostream& operator<<(std::ostream&, Alias const&);
 std::ostream& operator<<(std::ostream&, Module::InnerItem const&);
 std::ostream& operator<<(std::ostream&, Module::Item const&);
 std::ostream& operator<<(std::ostream&, Module const&);

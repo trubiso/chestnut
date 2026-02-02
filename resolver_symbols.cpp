@@ -147,14 +147,14 @@ void Resolver::resolve(AST::Identifier& identifier, Span span, Scope const& scop
 					pointed_items.push_back(
 						&get_single_symbol(std::get<AST::Module>(value).name.value)
 					);
-				} else if (std::holds_alternative<AST::Import>(value)) {
-					auto const& import = std::get<AST::Import>(value);
-					// TODO: do something else about this & handle imports that import other imports
-					if (!import.name.value.id.has_value()) {
-						std::cout << "unresolved import !" << std::endl;
+				} else if (std::holds_alternative<AST::Alias>(value)) {
+					auto const& alias = std::get<AST::Alias>(value);
+					// TODO: do something else about this & handle aliases that alias other aliases
+					if (!alias.value.value.id.has_value()) {
+						std::cout << "unresolved alias !" << std::endl;
 						break;
 					}
-					for (AST::SymbolID id : import.name.value.id.value()) {
+					for (AST::SymbolID id : alias.value.value.id.value()) {
 						pointed_items.push_back(&get_single_symbol(id));
 						added_items++;
 
@@ -315,15 +315,11 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			auto& submodule = std::get<AST::Module>(value);
 			child_scope.symbols.emplace(submodule.name.value.name(), submodule.name.value.id.value());
-		} else if (std::holds_alternative<AST::Import>(value)) {
-			auto& import = std::get<AST::Import>(value);
-			if (!import.name.value.absolute) continue;
-			resolve(import.name, child_scope, file_id);
-			if (!import.name.value.id.has_value() || import.name.value.id.value().empty()) continue;
-			child_scope.symbols.emplace(
-				import.name.value.last_fragment().value,
-				import.name.value.id.value()
-			);
+		} else if (std::holds_alternative<AST::Alias>(value)) {
+			auto& alias = std::get<AST::Alias>(value);
+			resolve(alias.value, child_scope, file_id);
+			if (!alias.value.value.id.has_value() || alias.value.value.id.value().empty()) continue;
+			child_scope.symbols.emplace(alias.name.value.name(), alias.value.value.id.value());
 		}
 	}
 

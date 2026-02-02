@@ -1,19 +1,19 @@
-export import ::my_module::my_submodule::sum_numbers;
+export def sum_numbers ::my_module::my_submodule::sum_numbers;
 
 export module a {
-	import ::source::b::b;
+	def b ::source::b::b;
 	export func a() {}
 }
 
 export module b {
-	import ::source::a::a;
+	def a ::source::a::a;
 	export func b() {}
 }
 
 export module hello {
 	module world {}
 
-	@abc import ::source::sum_numbers;
+	@abc def sum_numbers ::source::sum_numbers;
 
 	@mingleton
 	export module whats {

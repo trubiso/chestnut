@@ -49,6 +49,7 @@ public:
 
 private:
 	enum class Keyword {
+		Def,
 		Import,
 		Module,
 		Export,
@@ -148,7 +149,7 @@ private:
 	void skip_semis();
 
 	std::optional<Function>     parse_function();
-	std::optional<Import>       parse_import();
+	std::optional<Alias>        parse_alias();
 	std::optional<Module>       parse_module();
 	std::optional<Module::Item> parse_module_item();
 	std::optional<Module::Body> parse_module_body(bool bare = false);

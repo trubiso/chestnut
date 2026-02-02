@@ -502,7 +502,7 @@ IR::Function Resolver::lower(AST::Function const& function, FileContext::ID file
 
 IR::Module Resolver::lower(AST::Module const& original_module, FileContext::ID file_id) {
 	IR::Module module {lower_identifier(original_module.name), {}};
-	// we don't need imports anymore, those are purely for name resolution
+	// we don't need aliases anymore, those are purely for name resolution
 	for (Spanned<AST::Module::Item> const& item : original_module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
