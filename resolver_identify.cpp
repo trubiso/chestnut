@@ -7,7 +7,7 @@ void Resolver::identify(AST::Identifier& identifier) {
 	identifier.id = {next()};
 }
 
-void Resolver::identify(AST::Module& module, FileContext::ID file_id) {
+void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file_id) {
 	// TODO: ensure there are no duplicated item names (including aliases)
 	identify(module.name.value);
 	symbol_pool_.push_back(
@@ -23,16 +23,19 @@ void Resolver::identify(AST::Module& module, FileContext::ID file_id) {
 				module.name.value.id.value()[0]
 			),
 	                false,
+	                exported,
 	                {}}
 	);
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
-		if (std::holds_alternative<AST::Function>(value)) identify(std::get<AST::Function>(value), file_id);
-		else if (std::holds_alternative<AST::Module>(value)) identify(std::get<AST::Module>(value), file_id);
+		if (std::holds_alternative<AST::Function>(value))
+			identify(std::get<AST::Function>(value), std::get<bool>(item.value), file_id);
+		else if (std::holds_alternative<AST::Module>(value))
+			identify(std::get<AST::Module>(value), std::get<bool>(item.value), file_id);
 	}
 }
 
-void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
+void Resolver::identify(AST::Function& function, bool exported, FileContext::ID file_id) {
 	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> arguments {};
 	arguments.reserve(function.arguments.size());
 
@@ -52,6 +55,7 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 		                {},
 		                type_id,
 		                argument.mutable_,
+		                false,
 		                {}}
 		);
 		arguments.push_back(
@@ -76,10 +80,11 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 				function.name.value.id.value()[0]
 			),
 	                false,
+	                exported,
 	                {}}
 	);
 }
 
 void Resolver::identify_module_items() {
-	for (ParsedFile& file : parsed_files) { identify(file.module, file.file_id); }
+	for (ParsedFile& file : parsed_files) { identify(file.module, true, file.file_id); }
 }

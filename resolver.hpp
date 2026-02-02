@@ -230,6 +230,8 @@ private:
 		TypeInfo::ID type;
 
 		bool mutable_;
+		/// Whether this symbol can be imported (should be set to false in non-module items)
+		bool exported;
 
 		// TODO: in the future, we should make modules be able to be imported from modules in general, not just
 		// at a file-to-file level
@@ -270,9 +272,9 @@ private:
 	/// Produces a single ID for the identifier and sets it; the caller must register this ID in the symbol pool.
 	void identify(AST::Identifier&);
 	/// Identifies the module with an ID and its non-alias items.
-	void identify(AST::Module&, FileContext::ID);
+	void identify(AST::Module&, bool exported, FileContext::ID);
 	/// Identifies the function with an ID.
-	void identify(AST::Function&, FileContext::ID);
+	void identify(AST::Function&, bool exported, FileContext::ID);
 	/// Identifies all module items with an ID, but does not resolve aliases.
 	void identify_module_items();
 

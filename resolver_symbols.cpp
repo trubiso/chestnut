@@ -321,6 +321,7 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileConte
 				declare.name.value.id.value()[0]
 			),
 	                declare.mutable_.value,
+	                false,
 	                {}}
 	);
 	// intentionally replace (shadowing)
@@ -384,6 +385,26 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			auto& import = std::get<AST::Import>(value);
 			resolve(import.name, scope, file_id, true);
 			if (!import.name.value.id.has_value()) continue;
+			// we need to make sure we only import exported symbols
+			std::vector<AST::SymbolID> actual_ids {};
+			for (AST::SymbolID id : import.name.value.id.value()) {
+				if (symbol_pool_.at(id).exported) actual_ids.push_back(id);
+			}
+			import.name.value.id = actual_ids;
+			if (actual_ids.empty()) {
+				// TODO: show candidates
+				parsed_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"import does not import any exported items",
+						"none of the possible candidates for this import are exported",
+						{Diagnostic::Sample(
+							get_context(file_id),
+							item.span,
+							OutFmt::Color::Red
+						)}
+					)
+				);
+			}
 			bool pushed_diagnostic = false;
 			for (AST::SymbolID id : import.name.value.id.value()) {
 				auto& imported_from = symbol_pool_.at(id).imported_from;
