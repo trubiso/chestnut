@@ -8,7 +8,7 @@
 uint32_t const                     DEFAULT_INTEGER_WIDTH = 32;
 IR::Type::Atom::Float::Width const DEFAULT_FLOAT_WIDTH   = IR::Type::Atom::Float::Width::F32;
 
-IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
+IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_origin) {
 	TypeInfo const& type = type_pool_.at(type_id);
 	switch (type.kind()) {
 	// bottoms directly correspond to overconstrained types
@@ -30,7 +30,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
 	}
 
 	// FIXME: we throw a million diagnostics when there are resolved type cycles
-	auto [span, file_id] = type_span_pool_.at(type_id);
+	auto [span, file_id] = type_span_pool_.at(type_origin);
 	if (type.kind() == TypeInfo::Kind::Unknown) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
@@ -50,6 +50,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
 	} else if (type.kind() == TypeInfo::Kind::Function) {
+		// FIXME: this still does not have the correct span
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"invalid type",
@@ -62,12 +63,12 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
 		TypeInfo::SameAs const& same_as = type.get_same_as();
 		// we should never reach this case
 		assert(!same_as.ids.empty());
-		if (same_as.ids.size() == 1) return reconstruct_type(same_as.ids.at(0));
+		if (same_as.ids.size() == 1) return reconstruct_type(same_as.ids.at(0), type_origin);
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"unknown type",
 				"this type cannot be decided from its possibilities",
-				{get_type_sample(type_id, OutFmt::Color::Red)}
+				{get_type_sample(type_origin, OutFmt::Color::Red)}
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
@@ -120,6 +121,10 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
 			);
 		}
 	}
+}
+
+IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
+	return reconstruct_type(type_id, type_id);
 }
 
 Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type> spanned_type, FileContext::ID file_id) {

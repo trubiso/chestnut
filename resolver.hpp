@@ -357,6 +357,10 @@ private:
 	void         infer_types();
 
 	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
+	/// values and expressions, as it does not allow functions or modules to be values directly. It also takes in a
+	/// type origin, which overrides the type ID for diagnostics.
+	IR::Type reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_origin);
+	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
 	/// values and expressions, as it does not allow functions or modules to be values directly.
 	IR::Type reconstruct_type(TypeInfo::ID);
 	/// Lowers a type known since parsing, turning non-specific types specific.
