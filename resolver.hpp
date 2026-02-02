@@ -230,6 +230,10 @@ private:
 		TypeInfo::ID type;
 
 		bool mutable_;
+
+		// TODO: in the future, we should make modules be able to be imported from modules in general, not just
+		// at a file-to-file level
+		std::vector<FileContext::ID> imported_from;
 	};
 
 	std::vector<Symbol> symbol_pool_;
@@ -278,8 +282,8 @@ private:
 		FileContext::ID
 	);
 
-	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID);
-	void resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID);
+	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
+	void resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
 	void resolve(AST::Expression::UnaryOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::BinaryOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::FunctionCall&, Scope const&, FileContext::ID);

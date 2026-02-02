@@ -22,7 +22,8 @@ void Resolver::identify(AST::Module& module, FileContext::ID file_id) {
 				file_id,
 				module.name.value.id.value()[0]
 			),
-	                false}
+	                false,
+	                {}}
 	);
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
@@ -50,7 +51,8 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 		                argument.name.value.name(),
 		                {},
 		                type_id,
-		                argument.mutable_}
+		                argument.mutable_,
+		                {}}
 		);
 		arguments.push_back(
 			{argument.anonymous ? std::nullopt : std::optional {argument.name.value.name()}, type_id}
@@ -73,7 +75,8 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 				file_id,
 				function.name.value.id.value()[0]
 			),
-	                false}
+	                false,
+	                {}}
 	);
 }
 

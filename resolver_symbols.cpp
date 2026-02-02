@@ -50,7 +50,13 @@ void Resolver::add_unknown_symbol_diagnostic(
 	);
 }
 
-void Resolver::resolve(AST::Identifier& identifier, Span span, Scope const& scope, FileContext::ID file_id) {
+void Resolver::resolve(
+	AST::Identifier& identifier,
+	Span             span,
+	Scope const&     scope,
+	FileContext::ID  file_id,
+	bool             include_unimported
+) {
 	// do not try to resolve already resolved identifiers (just in case, i don't think we will ever hit this)
 	if (identifier.id.has_value()) return;
 
@@ -130,7 +136,8 @@ void Resolver::resolve(AST::Identifier& identifier, Span span, Scope const& scop
 		pointed_ids   = {};
 		for (auto const& item : root_module->body.items) {
 			auto const& value = std::get<AST::Module::InnerItem>(item.value);
-			std::string name  = AST::Module::get_name(item.value);
+			if (std::holds_alternative<AST::Import>(value)) continue;
+			std::string name = AST::Module::get_name(item.value);
 
 			if (name == fragment.value) {
 				// found!
@@ -168,16 +175,31 @@ void Resolver::resolve(AST::Identifier& identifier, Span span, Scope const& scop
 					}
 				}
 
-				for (size_t j = 1; j <= added_items; ++j)
-					pointed_ids.push_back(pointed_items.at(pointed_items.size() - j)->id);
+				// only include imported items
+				for (size_t j = 1; j <= added_items; ++j) {
+					auto const& imported_from
+						= pointed_items.at(pointed_items.size() - j)->imported_from;
+					// conditions to validate the import
+					bool same_file = pointed_items.at(pointed_items.size() - j)->file_id == file_id;
+					bool imported = std::find(imported_from.cbegin(), imported_from.cend(), file_id)
+					             != imported_from.cend();
+					bool should_import = include_unimported || same_file || imported;
+					// only apply these conditions to the tip of the identifier
+					if (i + 1 < identifier.path.size() || should_import)
+						pointed_ids.push_back(pointed_items.at(pointed_items.size() - j)->id);
+				}
 			}
 		}
 
+		// FIXME: this is inaccurate
+		// TODO: this needs to suggest imports
 		if (pointed_items.empty()) {
 			std::vector<std::string> possibilities {};
 			possibilities.reserve(root_module->body.items.size());
+			// TODO: remove unimported items from this list
 			for (auto const& item : root_module->body.items)
-				possibilities.push_back(AST::Module::get_name(item.value));
+				if (!std::holds_alternative<AST::Import>(std::get<AST::Module::InnerItem>(item.value)))
+					possibilities.push_back(AST::Module::get_name(item.value));
 
 			add_unknown_symbol_diagnostic(
 				identifier.path[i].value,
@@ -195,8 +217,13 @@ void Resolver::resolve(AST::Identifier& identifier, Span span, Scope const& scop
 	identifier.id = pointed_ids;
 }
 
-void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope, FileContext::ID file_id) {
-	return resolve(identifier.value, identifier.span, scope, file_id);
+void Resolver::resolve(
+	Spanned<AST::Identifier>& identifier,
+	Scope const&              scope,
+	FileContext::ID           file_id,
+	bool                      include_unimported
+) {
+	return resolve(identifier.value, identifier.span, scope, file_id, include_unimported);
 }
 
 void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope const& scope, FileContext::ID file_id) {
@@ -261,7 +288,8 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileConte
 				file_id,
 				declare.name.value.id.value()[0]
 			),
-	                declare.mutable_.value}
+	                declare.mutable_.value,
+	                {}}
 	);
 	// intentionally replace (shadowing)
 	scope.symbols.insert_or_assign(declare.name.value.name(), declare.name.value.id.value());
@@ -320,6 +348,48 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			resolve(alias.value, child_scope, file_id);
 			if (!alias.value.value.id.has_value() || alias.value.value.id.value().empty()) continue;
 			child_scope.symbols.emplace(alias.name.value.name(), alias.value.value.id.value());
+		} else if (std::holds_alternative<AST::Import>(value)) {
+			auto& import = std::get<AST::Import>(value);
+			resolve(import.name, scope, file_id, true);
+			if (!import.name.value.id.has_value()) continue;
+			bool pushed_diagnostic = false;
+			for (AST::SymbolID id : import.name.value.id.value()) {
+				auto& imported_from = symbol_pool_.at(id).imported_from;
+				if (symbol_pool_.at(id).file_id != file_id
+				    && std::find(imported_from.cbegin(), imported_from.cend(), file_id)
+				               == imported_from.cend()) {
+					imported_from.push_back(file_id);
+				} else if (!pushed_diagnostic) {
+					// i don't think we should ever push this diagnostic more than once, because i
+					// don't think there will be several ways to import the same name with different
+					// IDs associated unless someone breaks aliases
+					if (symbol_pool_.at(id).file_id == file_id)
+						parsed_files.at(file_id).diagnostics.push_back(
+							Diagnostic::warning(
+								"redundant import",
+								"this symbol was defined in this file",
+								{Diagnostic::Sample(
+									get_context(file_id),
+									item.span,
+									OutFmt::Color::Yellow
+								)}
+							)
+						);
+					else
+						parsed_files.at(file_id).diagnostics.push_back(
+							Diagnostic::warning(
+								"redundant import",
+								"this symbol has already been imported",
+								{Diagnostic::Sample(
+									get_context(file_id),
+									item.span,
+									OutFmt::Color::Yellow
+								)}
+							)
+						);
+					pushed_diagnostic = true;
+				}
+			}
 		}
 	}
 

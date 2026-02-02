@@ -818,6 +818,27 @@ std::optional<Alias> Parser::parse_alias() {
 	return Alias {std::move(name.value()), std::move(value.value())};
 }
 
+std::optional<Import> Parser::parse_import() {
+	if (!consume_keyword(Keyword::Import)) return {};
+	std::optional<Spanned<Identifier>> name
+		= SPANNED_REASON(expect_identifier, "expected name of the item to import");
+	if (!name.has_value()) return {};
+	if (name.value().value.absolute)
+		diagnostics_.push_back(
+			Diagnostic::warning(
+				"redundant absolute qualified identifier marker",
+				"imports are always absolute",
+				{Diagnostic::Sample(
+					context_,
+					Span(name.value().span.start, name.value().span.start + 2)
+				)}
+			)
+		);
+	name.value().value.absolute = true;
+	expect_semicolon("expected semicolon after alias");
+	return Import {std::move(name.value())};
+}
+
 std::optional<Module> Parser::parse_module() {
 	if (!consume_keyword(Keyword::Module)) return {};
 	std::optional<Spanned<Identifier>> name = SPANNED_REASON(expect_identifier, "expected module name");
@@ -833,7 +854,9 @@ std::optional<Module::Item> Parser::parse_module_item() {
 	while ((tag = consume_tag()).has_value()) tags.push_back(std::move(tag.value()));
 
 	// if we find export, we consume it
-	bool exported = consume_keyword(Keyword::Export);
+	bool                exported = consume_keyword(Keyword::Export);
+	std::optional<Span> exported_span
+		= exported ? std::optional {tokens_.at(tokens_.index() - 1).value().span()} : std::nullopt;
 
 	std::optional<Module::Item> item;
 	if (peek_keyword(Keyword::Module)) {
@@ -846,6 +869,18 @@ std::optional<Module::Item> Parser::parse_module_item() {
 		});
 	} else if (peek_keyword(Keyword::Def)) {
 		item = parse_alias().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
+		});
+	} else if (peek_keyword(Keyword::Import)) {
+		item = parse_import().transform([tags = std::move(tags), exported, this, exported_span](auto&& value) {
+			if (exported)
+				diagnostics_.push_back(
+					Diagnostic::error(
+						"imports cannot be exported",
+						"imports merely mark names as available, so you might have meant to export an alias instead",
+						{Diagnostic::Sample(context_, exported_span.value())}
+					)
+				);
 			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
 	}

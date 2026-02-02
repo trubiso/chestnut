@@ -14,6 +14,11 @@ struct Alias {
 	Spanned<Identifier> value;
 };
 
+/// Imports mark items external to a module as available from within them.
+struct Import {
+	Spanned<Identifier> name;
+};
+
 // TODO: add an item for constants
 struct Module {
 	Spanned<Identifier> name;  // unqualified
@@ -22,7 +27,7 @@ struct Module {
 	// know this will be on the heap anyways).
 	// the vector of tags stores all tags that modify this module item.
 	// the boolean is whether this item is exported or not.
-	typedef std::variant<Function, Module, Alias> InnerItem;
+	typedef std::variant<Function, Module, Alias, Import> InnerItem;
 
 	static std::string const& get_name(InnerItem const& inner_item);
 
@@ -36,6 +41,7 @@ struct Module {
 };
 
 std::ostream& operator<<(std::ostream&, Alias const&);
+std::ostream& operator<<(std::ostream&, Import const&);
 std::ostream& operator<<(std::ostream&, Module::InnerItem const&);
 std::ostream& operator<<(std::ostream&, Module::Item const&);
 std::ostream& operator<<(std::ostream&, Module const&);

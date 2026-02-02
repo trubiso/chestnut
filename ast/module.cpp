@@ -6,10 +6,15 @@ std::ostream& operator<<(std::ostream& os, Alias const& alias) {
 	return os << "def " << alias.name.value.name() << ' ' << alias.value.value;
 }
 
+std::ostream& operator<<(std::ostream& os, Import const& import) {
+	return os << "import " << import.name.value;
+}
+
 std::ostream& operator<<(std::ostream& os, Module::InnerItem const& item) {
 	if (std::holds_alternative<Function>(item)) return os << std::get<Function>(item);
 	else if (std::holds_alternative<Module>(item)) return os << std::get<Module>(item);
 	else if (std::holds_alternative<Alias>(item)) return os << std::get<Alias>(item);
+	else if (std::holds_alternative<Import>(item)) return os << std::get<Import>(item);
 	[[assume(false)]];
 }
 
@@ -37,7 +42,9 @@ std::string const& Module::get_name(InnerItem const& inner_item) {
 	else if (std::holds_alternative<AST::Module>(inner_item))
 		return std::get<AST::Module>(inner_item).name.value.name();
 	else if (std::holds_alternative<AST::Alias>(inner_item))
-		return std::get<AST::Alias>(inner_item).value.value.last_fragment().value;
+		return std::get<AST::Alias>(inner_item).name.value.name();
+	// this segfaults on purpose because i don't want anyone to call this for imports
+	else if (std::holds_alternative<AST::Import>(inner_item)) return "";
 	[[assume(false)]];
 }
 

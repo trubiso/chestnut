@@ -1,3 +1,4 @@
+export import ::my_module::my_submodule::sum_numbers;
 export def sum_numbers ::my_module::my_submodule::sum_numbers;
 
 export module a {
