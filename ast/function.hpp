@@ -13,6 +13,7 @@ struct Function {
 		Spanned<Identifier> name;  // unqualified
 		Spanned<Type>       type;
 		bool                anonymous;
+		bool                mutable_;
 	};
 
 	Spanned<Identifier>   name;  // unqualified

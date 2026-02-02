@@ -36,7 +36,6 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 	arguments.reserve(function.arguments.size());
 
 	for (auto& argument : function.arguments) {
-		// TODO: mutable arguments
 		identify(argument.name.value);
 		TypeInfo::ID type_id = register_type(
 			TypeInfo::from_type(argument.type.value),
@@ -51,7 +50,7 @@ void Resolver::identify(AST::Function& function, FileContext::ID file_id) {
 		                argument.name.value.name(),
 		                {},
 		                type_id,
-		                false}
+		                argument.mutable_}
 		);
 		arguments.push_back(
 			{argument.anonymous ? std::nullopt : std::optional {argument.name.value.name()}, type_id}

@@ -54,6 +54,7 @@ private:
 		Export,
 		Const,
 		Mut,
+		Anon,
 		Func,
 		Return,
 	};
@@ -71,6 +72,7 @@ private:
 		std::optional<T> value = function();
 		if (!value.has_value()) return {};
 
+		// FIXME: this is wrong
 		size_t end = tokens_.peek().value_or(tokens_.last()).begin;
 
 		return Spanned<T> {Span(begin, end), std::move(value.value())};

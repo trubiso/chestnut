@@ -571,6 +571,7 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	case Keyword::Export: return token.get_identifier() == "export";
 	case Keyword::Const:  return token.get_identifier() == "const";
 	case Keyword::Mut:    return token.get_identifier() == "mut";
+	case Keyword::Anon:   return token.get_identifier() == "anon";
 	case Keyword::Func:   return token.get_identifier() == "func";
 	case Keyword::Return: return token.get_identifier() == "return";
 	}
@@ -675,13 +676,60 @@ std::optional<Function> Parser::parse_function() {
 	// TODO: do not allow any type in function signatures to be non-specific uint/int.
 	std::vector<Function::Argument> arguments {};
 	while (true) {
-		// TODO: mutable arguments
 		auto argument_name = SPANNED(consume_unqualified_identifier);
 		if (!argument_name.has_value()) break;
-		bool anonymous = false;
-		// if we got 'anon', it might be qualifying an argument as anonymous
-		if (argument_name.value().value.name() == "anon" && peek_unqualified_identifier()) {
-			anonymous     = true;
+		// we know arguments may be anonymous or mutable
+		bool anonymous = false, mutable_ = false;
+		// store the span for diagnostics
+		std::optional<Span> anon_span, mut_span;
+		// if we get 'anon' or 'mut', they might be qualifying the argument
+		while ((argument_name.value().value.name() == "anon" || argument_name.value().value.name() == "mut")
+		       && peek_unqualified_identifier()) {
+			if (argument_name.value().value.name() == "anon") {
+				if (anonymous)
+					diagnostics_.push_back(
+						Diagnostic::warning(
+							"redundant 'anon'",
+							"argument was already marked as anonymous",
+							{Diagnostic::Sample(
+								context_,
+								{Diagnostic::Sample::Label(
+									 argument_name.value().span,
+									 OutFmt::Color::Yellow
+								 ),
+					                         Diagnostic::Sample::Label(
+									 anon_span.value(),
+									 "first marked here",
+									 OutFmt::Color::Cyan
+								 )}
+							)}
+						)
+					);
+				anon_span = argument_name.value().span;
+				anonymous = true;
+			} else {
+				if (mutable_)
+					diagnostics_.push_back(
+						Diagnostic::warning(
+							"redundant 'mut'",
+							"argument was already marked as mutable",
+							{Diagnostic::Sample(
+								context_,
+								{Diagnostic::Sample::Label(
+									 argument_name.value().span,
+									 OutFmt::Color::Yellow
+								 ),
+					                         Diagnostic::Sample::Label(
+									 mut_span.value(),
+									 "first marked here",
+									 OutFmt::Color::Cyan
+								 )}
+							)}
+						)
+					);
+				mut_span = argument_name.value().span;
+				mutable_ = true;
+			}
 			argument_name = SPANNED(consume_unqualified_identifier);
 		}
 		if (!expect_symbol("expected ':' to specify argument type", Token::Symbol::Colon)) return {};
@@ -713,7 +761,7 @@ std::optional<Function> Parser::parse_function() {
 			}
 		}
 		// we don't want to confuse later stages
-		if (!duplicate) arguments.emplace_back(argument_name.value(), argument_type.value(), anonymous);
+		if (!duplicate) arguments.emplace_back(argument_name.value(), argument_type.value(), anonymous, mutable_);
 		if (!consume_single_comma_or_more()) break;
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};

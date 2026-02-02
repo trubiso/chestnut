@@ -23,7 +23,7 @@ export module hello {
 
 		func try_anon(anon argument: uint32) void;
 
-		func try_shadowing(putc: char, sum_numbers: uint) {
+		func try_shadowing(putc: char, anon mut mut anon sum_numbers: uint) {
 			const my_var = 5;
 			{
 				const my_var = 'h';
@@ -31,6 +31,8 @@ export module hello {
 			}
 			const q = my_var;
 			q = 'h';
+			sum_numbers = my_var;
+			putc = 'r';
 			return my_var;
 		}
 
