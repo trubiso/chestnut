@@ -30,7 +30,7 @@ Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type const& type) {
 	[[assume(false)]];
 }
 
-bool Resolver::TypeInfo::is_callable(std::vector<Resolver::TypeInfo> const& pool) const {
+bool Resolver::TypeInfo::is_callable(std::vector<TypeInfo> const& pool) const {
 	switch (kind()) {
 	case Kind::Function: return true;
 	case Kind::SameAs:
@@ -41,10 +41,8 @@ bool Resolver::TypeInfo::is_callable(std::vector<Resolver::TypeInfo> const& pool
 	}
 }
 
-std::vector<Resolver::TypeInfo::ID> Resolver::TypeInfo::get_callable_subitems(
-	Resolver::TypeInfo::ID                 self_id,
-	std::vector<Resolver::TypeInfo> const& pool
-) const {
+std::vector<Resolver::TypeInfo::ID>
+Resolver::TypeInfo::get_callable_subitems(TypeInfo::ID self_id, std::vector<TypeInfo> const& pool) const {
 	switch (kind()) {
 	case Kind::Function: return {self_id};
 	case Kind::SameAs:   break;
@@ -61,12 +59,12 @@ std::vector<Resolver::TypeInfo::ID> Resolver::TypeInfo::get_callable_subitems(
 	return ids;
 }
 
-void Resolver::debug_print_type(Resolver::TypeInfo::ID id) const {
+void Resolver::debug_print_type(TypeInfo::ID id) const {
 	std::cout << "$" << id << " ";
 	debug_print_type(type_pool_.at(id));
 }
 
-void Resolver::debug_print_type(Resolver::TypeInfo type) const {
+void Resolver::debug_print_type(TypeInfo type) const {
 	switch (type.kind()) {
 	case TypeInfo::Kind::Unknown:        std::cout << "(unknown type)"; return;
 	case TypeInfo::Kind::Bottom:         std::cout << "(bottom)"; return;
@@ -97,7 +95,7 @@ void Resolver::debug_print_type(Resolver::TypeInfo type) const {
 	} else if (type.kind() == TypeInfo::Kind::SameAs) {
 		std::cout << "=(";
 		size_t count = 0;
-		for (Resolver::TypeInfo::ID subid : type.get_same_as().ids) {
+		for (TypeInfo::ID subid : type.get_same_as().ids) {
 			debug_print_type(subid);
 			if (++count < type.get_same_as().ids.size()) std::cout << " | ";
 		}
@@ -122,7 +120,7 @@ void Resolver::debug_print_type(Resolver::TypeInfo type) const {
 	}
 }
 
-std::string Resolver::get_type_name(Resolver::TypeInfo const& type) const {
+std::string Resolver::get_type_name(TypeInfo const& type) const {
 	switch (type.kind()) {
 	case TypeInfo::Kind::Unknown:        return "unknown";
 	case TypeInfo::Kind::Bottom:         return "bottom";
@@ -152,7 +150,7 @@ std::string Resolver::get_type_name(Resolver::TypeInfo const& type) const {
 	} else if (type.kind() == TypeInfo::Kind::SameAs) {
 		if (type.get_same_as().ids.size() > 1) output << '(';
 		size_t count = 0;
-		for (Resolver::TypeInfo::ID subid : type.get_same_as().ids) {
+		for (TypeInfo::ID subid : type.get_same_as().ids) {
 			output << get_type_name(subid);
 			if (++count < type.get_same_as().ids.size()) output << " | ";
 		}
@@ -179,11 +177,11 @@ std::string Resolver::get_type_name(Resolver::TypeInfo const& type) const {
 	return output.str();
 }
 
-std::string Resolver::get_type_name(Resolver::TypeInfo::ID id) const {
+std::string Resolver::get_type_name(TypeInfo::ID id) const {
 	return get_type_name(type_pool_.at(id));
 }
 
-Diagnostic::Sample Resolver::get_type_sample(Resolver::TypeInfo::ID id, OutFmt::Color color) const {
+Diagnostic::Sample Resolver::get_type_sample(TypeInfo::ID id, OutFmt::Color color) const {
 	return Diagnostic::Sample(
 		get_context(get_type_file_id(id)),
 		{Diagnostic::Sample::Label(get_type_span(id), get_type_name(id), color)}
@@ -194,13 +192,9 @@ Resolver::TypeInfo::ID Resolver::type_next() {
 	return type_counter_++;
 }
 
-Resolver::TypeInfo::ID Resolver::register_type(
-	Resolver::TypeInfo&&         type,
-	Span                         span,
-	FileContext::ID              file_id,
-	std::optional<AST::SymbolID> symbol_id
-) {
-	Resolver::TypeInfo::ID id = type_next();
+Resolver::TypeInfo::ID
+Resolver::register_type(TypeInfo&& type, Span span, FileContext::ID file_id, std::optional<AST::SymbolID> symbol_id) {
+	TypeInfo::ID id = type_next();
 	assert(type_pool_.size() == id);
 	assert(type_span_pool_.size() == id);
 	assert(type_symbol_mapping_.size() == id);
@@ -210,7 +204,7 @@ Resolver::TypeInfo::ID Resolver::register_type(
 	return id;
 }
 
-void Resolver::set_same_as(Resolver::TypeInfo::ID to, Resolver::TypeInfo::ID from) {
+void Resolver::set_same_as(TypeInfo::ID to, TypeInfo::ID from) {
 	// set_same_as(a, a) is a noop
 	if (to == from) return;
 	// the normal case works as always
@@ -598,7 +592,7 @@ void Resolver::unify(TypeInfo::ID a_id, TypeInfo::ID b_id, FileContext::ID file_
 	return unify(a_id, b_id, a_id, b_id, file_id);
 }
 
-bool Resolver::can_unify_follow_references(Resolver::TypeInfo const& same_as, Resolver::TypeInfo const& other) const {
+bool Resolver::can_unify_follow_references(TypeInfo const& same_as, TypeInfo const& other) const {
 	assert(same_as.kind() == TypeInfo::Kind::SameAs);
 	std::vector<TypeInfo::ID> const& ids = same_as.get_same_as().ids;
 	for (TypeInfo::ID id : ids)
@@ -606,18 +600,14 @@ bool Resolver::can_unify_follow_references(Resolver::TypeInfo const& same_as, Re
 	return false;
 }
 
-std::optional<bool> Resolver::can_unify_basic_known(
-	Resolver::TypeInfo::Kind  kind,
-	Resolver::TypeInfo const& a,
-	Resolver::TypeInfo const& b
-) const {
+std::optional<bool> Resolver::can_unify_basic_known(TypeInfo::Kind kind, TypeInfo const& a, TypeInfo const& b) const {
 	bool a_matches = a.kind() == kind, b_matches = b.kind() == kind;
 	if (!a_matches && !b_matches) return std::nullopt;  // if neither match, this case is not for us
 	if (a_matches && b_matches) return true;            // if both match, this is a freebie
 	return false;                                       // if neither match, it won't work
 }
 
-bool Resolver::can_unify_functions(Resolver::TypeInfo const& function, Resolver::TypeInfo const& other) const {
+bool Resolver::can_unify_functions(TypeInfo const& function, TypeInfo const& other) const {
 	// ensure they're both functions
 	assert(function.kind() == TypeInfo::Kind::Function);
 	if (other.kind() != TypeInfo::Kind::Function) { return false; }
@@ -639,19 +629,19 @@ bool Resolver::can_unify_functions(Resolver::TypeInfo const& function, Resolver:
 	return can_unify(a_function.return_, b_function.return_);
 }
 
-bool Resolver::can_unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo::ID b) const {
+bool Resolver::can_unify(TypeInfo::ID a, TypeInfo::ID b) const {
 	return can_unify(type_pool_.at(a), type_pool_.at(b));
 }
 
-bool Resolver::can_unify(Resolver::TypeInfo const& a, Resolver::TypeInfo::ID b) const {
+bool Resolver::can_unify(TypeInfo const& a, TypeInfo::ID b) const {
 	return can_unify(a, type_pool_.at(b));
 }
 
-bool Resolver::can_unify(Resolver::TypeInfo::ID a, Resolver::TypeInfo const& b) const {
+bool Resolver::can_unify(TypeInfo::ID a, TypeInfo const& b) const {
 	return can_unify(type_pool_.at(a), b);
 }
 
-bool Resolver::can_unify(Resolver::TypeInfo const& a, Resolver::TypeInfo const& b) const {
+bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	// follow references
 	if (a.kind() == TypeInfo::Kind::SameAs) return can_unify_follow_references(a, b);
 	if (b.kind() == TypeInfo::Kind::SameAs) return can_unify_follow_references(b, a);
