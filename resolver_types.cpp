@@ -229,16 +229,18 @@ void Resolver::set_same_as(Resolver::TypeInfo::ID to, Resolver::TypeInfo::ID fro
 }
 
 Resolver::TypeInfo Resolver::unify_follow_references(
-	Resolver::TypeInfo::ID same_as,
-	Resolver::TypeInfo::ID other,
-	FileContext::ID        file_id
+	TypeInfo::ID    same_as,
+	TypeInfo::ID    other,
+	TypeInfo::ID    same_as_origin,
+	TypeInfo::ID    other_origin,
+	FileContext::ID file_id
 ) {
 	assert(type_pool_.at(same_as).kind() == TypeInfo::Kind::SameAs);
 	std::vector<TypeInfo::ID> const& ids = type_pool_.at(same_as).get_same_as().ids;
 
 	// if we have a single id, unify it as normal
 	if (ids.size() == 1) {
-		unify(ids[0], other, file_id);
+		unify(ids[0], other, same_as_origin, other_origin, file_id);
 		return TypeInfo::make_same_as(ids[0]);
 	}
 
@@ -259,23 +261,25 @@ Resolver::TypeInfo Resolver::unify_follow_references(
 			Diagnostic::error(
 				"type mismatch",
 				subtitle_stream.str(),
-				{get_type_sample(same_as, OutFmt::Color::Cyan),
-		                 get_type_sample(other, OutFmt::Color::Yellow)}
+				{get_type_sample(same_as_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
 			)
 		);
 		return TypeInfo::make_bottom();
 	}
 
 	// unify all remaining ids and create a new SameAs
-	for (TypeInfo::ID new_id : new_ids) unify(new_id, other, file_id);
+	for (TypeInfo::ID new_id : new_ids) unify(new_id, other, same_as_origin, other_origin, file_id);
 	return TypeInfo::make_same_as(std::move(new_ids));
 }
 
 bool Resolver::unify_basic_known(
-	Resolver::TypeInfo::Kind kind,
-	Resolver::TypeInfo::ID   a_id,
-	Resolver::TypeInfo::ID   b_id,
-	FileContext::ID          file_id
+	TypeInfo::Kind  kind,
+	TypeInfo::ID    a_id,
+	TypeInfo::ID    b_id,
+	TypeInfo::ID    a_origin,
+	TypeInfo::ID    b_origin,
+	FileContext::ID file_id
 ) {
 	TypeInfo &a = type_pool_.at(a_id), &b = type_pool_.at(b_id);
 
@@ -293,8 +297,8 @@ bool Resolver::unify_basic_known(
 		Diagnostic::error(
 			"type mismatch",
 			subtitle_stream.str(),
-			{get_type_sample(a_matches ? a_id : b_id, OutFmt::Color::Cyan),
-	                 get_type_sample(a_matches ? b_id : a_id, OutFmt::Color::Yellow)}
+			{get_type_sample(a_matches ? a_origin : b_origin, OutFmt::Color::Cyan),
+	                 get_type_sample(a_matches ? b_origin : a_origin, OutFmt::Color::Yellow)}
 		)
 	);
 	// whichever didn't match becomes a bottom
@@ -303,7 +307,13 @@ bool Resolver::unify_basic_known(
 	return true;
 }
 
-void Resolver::unify_functions(Resolver::TypeInfo::ID function, Resolver::TypeInfo::ID other, FileContext::ID file_id) {
+void Resolver::unify_functions(
+	TypeInfo::ID    function,
+	TypeInfo::ID    other,
+	TypeInfo::ID    function_origin,
+	TypeInfo::ID    other_origin,
+	FileContext::ID file_id
+) {
 	// ensure they're both functions
 	assert(type_pool_.at(function).kind() == TypeInfo::Kind::Function);
 	if (type_pool_.at(other).kind() != TypeInfo::Kind::Function) {
@@ -313,8 +323,8 @@ void Resolver::unify_functions(Resolver::TypeInfo::ID function, Resolver::TypeIn
 			Diagnostic::error(
 				"type mismatch",
 				subtitle_stream.str(),
-				{get_type_sample(function, OutFmt::Color::Cyan),
-		                 get_type_sample(other, OutFmt::Color::Yellow)}
+				{get_type_sample(function_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
 			)
 		);
 		return;
@@ -329,8 +339,8 @@ void Resolver::unify_functions(Resolver::TypeInfo::ID function, Resolver::TypeIn
 			Diagnostic::error(
 				"type mismatch",
 				"expected both functions to have the same amount of arguments",
-				{get_type_sample(function, OutFmt::Color::Cyan),
-		                 get_type_sample(other, OutFmt::Color::Yellow)}
+				{get_type_sample(function_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
 			)
 		);
 		return;
@@ -369,16 +379,22 @@ void Resolver::unify_functions(Resolver::TypeInfo::ID function, Resolver::TypeIn
 	return;
 }
 
-void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, FileContext::ID file_id) {
+void Resolver::unify(
+	TypeInfo::ID    a_id,
+	TypeInfo::ID    b_id,
+	TypeInfo::ID    a_origin,
+	TypeInfo::ID    b_origin,
+	FileContext::ID file_id
+) {
 	TypeInfo &a = type_pool_.at(a_id), &b = type_pool_.at(b_id);
 
 	// follow references
 	if (a.kind() == TypeInfo::Kind::SameAs) {
-		a = unify_follow_references(a_id, b_id, file_id);
+		a = unify_follow_references(a_id, b_id, a_origin, b_origin, file_id);
 		return;
 	}
 	if (b.kind() == TypeInfo::Kind::SameAs) {
-		b = unify_follow_references(b_id, a_id, file_id);
+		b = unify_follow_references(b_id, a_id, b_origin, a_origin, file_id);
 		return;
 	}
 
@@ -396,17 +412,17 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 	}
 
 	// if any of them is a basic Known type, the other must be exactly the same
-	if (unify_basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, file_id)) return;
-	if (unify_basic_known(TypeInfo::Kind::KnownChar, a_id, b_id, file_id)) return;
-	if (unify_basic_known(TypeInfo::Kind::KnownBool, a_id, b_id, file_id)) return;
+	if (unify_basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, a_origin, b_origin, file_id)) return;
+	if (unify_basic_known(TypeInfo::Kind::KnownChar, a_id, b_id, a_origin, b_origin, file_id)) return;
+	if (unify_basic_known(TypeInfo::Kind::KnownBool, a_id, b_id, a_origin, b_origin, file_id)) return;
 
 	// modules act like basic Known types right now, but this is silly.
 	// TODO: do something better
-	if (unify_basic_known(TypeInfo::Kind::Module, a_id, b_id, file_id)) return;
+	if (unify_basic_known(TypeInfo::Kind::Module, a_id, b_id, a_origin, b_origin, file_id)) return;
 
 	// functions
-	if (a.kind() == TypeInfo::Kind::Function) return unify_functions(a_id, b_id, file_id);
-	if (b.kind() == TypeInfo::Kind::Function) return unify_functions(b_id, a_id, file_id);
+	if (a.kind() == TypeInfo::Kind::Function) return unify_functions(a_id, b_id, a_origin, b_origin, file_id);
+	if (b.kind() == TypeInfo::Kind::Function) return unify_functions(b_id, a_id, b_origin, a_origin, file_id);
 
 	// now only numeric types are left ([Known/Partial][Integer/Float])
 	bool a_known = a.kind() == TypeInfo::Kind::KnownInteger || a.kind() == TypeInfo::Kind::KnownFloat,
@@ -420,8 +436,8 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 			Diagnostic::error(
 				"type mismatch",
 				"incompatible numeric types: either the float must be truncated to an integer or the integer must be cast to a float",
-				{get_type_sample(a_id, OutFmt::Color::Cyan),
-		                 get_type_sample(b_id, OutFmt::Color::Yellow)}
+				{get_type_sample(a_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(b_origin, OutFmt::Color::Yellow)}
 			)
 		);
 		return;
@@ -440,8 +456,8 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 					Diagnostic::error(
 						"type mismatch",
 						"incompatible numeric types: floats of incompatible size",
-						{get_type_sample(a_id, OutFmt::Color::Cyan),
-				                 get_type_sample(b_id, OutFmt::Color::Yellow)}
+						{get_type_sample(a_origin, OutFmt::Color::Cyan),
+				                 get_type_sample(b_origin, OutFmt::Color::Yellow)}
 					)
 				);
 				return;
@@ -563,8 +579,8 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 			Diagnostic::error(
 				"type mismatch",
 				"incompatible numeric types: integers of incompatible sign",
-				{get_type_sample(a_id, OutFmt::Color::Cyan),
-		                 get_type_sample(b_id, OutFmt::Color::Yellow)}
+				{get_type_sample(a_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(b_origin, OutFmt::Color::Yellow)}
 			)
 		);
 	if (size_clash)
@@ -572,10 +588,14 @@ void Resolver::unify(Resolver::TypeInfo::ID a_id, Resolver::TypeInfo::ID b_id, F
 			Diagnostic::error(
 				"type mismatch",
 				"incompatible numeric types: integers of incompatible size",
-				{get_type_sample(a_id, OutFmt::Color::Cyan),
-		                 get_type_sample(b_id, OutFmt::Color::Yellow)}
+				{get_type_sample(a_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(b_origin, OutFmt::Color::Yellow)}
 			)
 		);
+}
+
+void Resolver::unify(TypeInfo::ID a_id, TypeInfo::ID b_id, FileContext::ID file_id) {
+	return unify(a_id, b_id, a_id, b_id, file_id);
 }
 
 bool Resolver::can_unify_follow_references(Resolver::TypeInfo const& same_as, Resolver::TypeInfo const& other) const {
