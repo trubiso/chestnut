@@ -10,6 +10,15 @@
 #define CLOSEST_THRESHOLD 3
 #define CLOSEST_MAX       5
 
+bool Resolver::Symbol::is_visible(FileContext::ID other_id) const {
+	// if we're in the same file, it is trivially visible
+	if (file_id == other_id) return true;
+	// if it has been imported from the other file, it is visible
+	if (std::find(imported_from.cbegin(), imported_from.cend(), other_id) != imported_from.cend()) return true;
+	// otherwise, it is never visible
+	return false;
+}
+
 AST::SymbolID Resolver::next() {
 	assert(symbol_pool_.size() == counter_);
 	return counter_++;
@@ -20,7 +29,8 @@ void Resolver::add_unknown_symbol_diagnostic(
 	Span                            span,
 	std::vector<std::string> const& possible_symbols,
 	std::string_view                scope_type,
-	FileContext::ID                 file_id
+	FileContext::ID                 file_id,
+	bool                            add_import_suggestion
 ) {
 	std::string       title = std::format("unknown symbol '{}'", symbol);
 	std::stringstream subtitle_stream {};
@@ -39,6 +49,10 @@ void Resolver::add_unknown_symbol_diagnostic(
 		}
 		subtitle_stream << "?)";
 	}
+
+	if (add_import_suggestion)
+		subtitle_stream
+			<< ". an unimported symbol with that name does exist, you might have forgotten to import it!";
 
 	std::string subtitle = subtitle_stream.str();
 	parsed_files.at(file_id).diagnostics.push_back(
@@ -132,81 +146,99 @@ void Resolver::resolve(
 		}
 
 		// we reset each cycle so that we don't end up racking up all of the pointed items
-		pointed_items = {};
-		pointed_ids   = {};
+		pointed_items           = {};
+		pointed_ids             = {};
+		size_t actual_additions = 0;
 		for (auto const& item : root_module->body.items) {
 			auto const& value = std::get<AST::Module::InnerItem>(item.value);
 			if (std::holds_alternative<AST::Import>(value)) continue;
 			std::string name = AST::Module::get_name(item.value);
 
-			if (name == fragment.value) {
-				// found!
-				size_t added_items = 0;
-				if (std::holds_alternative<AST::Function>(value)) {
-					assert(std::get<AST::Function>(value).name.value.id.has_value());
-					for (AST::SymbolID id : std::get<AST::Function>(value).name.value.id.value()) {
-						pointed_items.push_back(&get_single_symbol(id));
-						added_items++;
-					}
-					cannot_traverse_further = true;
-				} else if (std::holds_alternative<AST::Module>(value)) {
-					root_module = &std::get<AST::Module>(value);
-					pointed_items.push_back(
-						&get_single_symbol(std::get<AST::Module>(value).name.value)
-					);
-				} else if (std::holds_alternative<AST::Alias>(value)) {
-					auto const& alias = std::get<AST::Alias>(value);
-					// TODO: do something else about this & handle aliases that alias other aliases
-					if (!alias.value.value.id.has_value()) {
-						std::cout << "unresolved alias !" << std::endl;
-						break;
-					}
-					for (AST::SymbolID id : alias.value.value.id.value()) {
-						pointed_items.push_back(&get_single_symbol(id));
-						added_items++;
+			if (name != fragment.value) continue;
 
-						// change the root module if we are definitely pointing towards a module
-						if (std::holds_alternative<AST::Module*>(
-							    pointed_items.at(pointed_items.size() - 1)->item
-						    ))
-							root_module = &*std::get<AST::Module*>(
-								pointed_items.at(pointed_items.size() - 1)->item
-							);
-					}
+			// found!
+			size_t added_items = 0;
+			if (std::holds_alternative<AST::Function>(value)) {
+				assert(std::get<AST::Function>(value).name.value.id.has_value());
+				for (AST::SymbolID id : std::get<AST::Function>(value).name.value.id.value()) {
+					pointed_items.push_back(&get_single_symbol(id));
+					added_items++;
 				}
+				cannot_traverse_further = true;
+			} else if (std::holds_alternative<AST::Module>(value)) {
+				root_module = &std::get<AST::Module>(value);
+				pointed_items.push_back(&get_single_symbol(std::get<AST::Module>(value).name.value));
+				actual_additions++;
+			} else if (std::holds_alternative<AST::Alias>(value)) {
+				auto const& alias = std::get<AST::Alias>(value);
+				// TODO: do something else about this & handle aliases that alias other aliases
+				if (!alias.value.value.id.has_value()) {
+					std::cout << "unresolved alias !" << std::endl;
+					break;
+				}
+				for (AST::SymbolID id : alias.value.value.id.value()) {
+					pointed_items.push_back(&get_single_symbol(id));
+					added_items++;
 
-				// only include imported items
-				for (size_t j = 1; j <= added_items; ++j) {
-					auto const& imported_from
-						= pointed_items.at(pointed_items.size() - j)->imported_from;
-					// conditions to validate the import
-					bool same_file = pointed_items.at(pointed_items.size() - j)->file_id == file_id;
-					bool imported = std::find(imported_from.cbegin(), imported_from.cend(), file_id)
-					             != imported_from.cend();
-					bool should_import = include_unimported || same_file || imported;
-					// only apply these conditions to the tip of the identifier
-					if (i + 1 < identifier.path.size() || should_import)
-						pointed_ids.push_back(pointed_items.at(pointed_items.size() - j)->id);
+					// change the root module if we are definitely pointing towards a module
+					if (std::holds_alternative<AST::Module*>(
+						    pointed_items.at(pointed_items.size() - 1)->item
+					    ))
+						root_module = &*std::get<AST::Module*>(
+							pointed_items.at(pointed_items.size() - 1)->item
+						);
+				}
+			}
+
+			// only include imported items
+			for (size_t j = 1; j <= added_items; ++j) {
+				Symbol* symbol        = pointed_items.at(pointed_items.size() - j);
+				bool    should_import = include_unimported || symbol->is_visible(file_id);
+				// only apply these conditions to the tip of the identifier
+				if (i + 1 < identifier.path.size() || should_import) {
+					pointed_ids.push_back(symbol->id);
+					actual_additions++;
 				}
 			}
 		}
 
-		// FIXME: this is inaccurate
-		// TODO: this needs to suggest imports
-		if (pointed_items.empty()) {
+		if (!actual_additions) {
 			std::vector<std::string> possibilities {};
 			possibilities.reserve(root_module->body.items.size());
-			// TODO: remove unimported items from this list
-			for (auto const& item : root_module->body.items)
-				if (!std::holds_alternative<AST::Import>(std::get<AST::Module::InnerItem>(item.value)))
-					possibilities.push_back(AST::Module::get_name(item.value));
+			bool unimported_same_name_item_exists = false;
+			for (auto const& item : root_module->body.items) {
+				auto const& value = std::get<AST::Module::InnerItem>(item.value);
+				if (std::holds_alternative<AST::Import>(value)) continue;
+				std::optional<std::vector<AST::SymbolID>> const* symbol_id;
+				if (std::holds_alternative<AST::Function>(value)) {
+					symbol_id = &std::get<AST::Function>(value).name.value.id;
+				} else if (std::holds_alternative<AST::Module>(value)) {
+					symbol_id = &std::get<AST::Module>(value).name.value.id;
+				} else if (std::holds_alternative<AST::Alias>(value)) {
+					symbol_id = &std::get<AST::Alias>(value).value.value.id;
+				} else [[assume(false)]];
+
+				if (!symbol_id->has_value()) continue;
+				bool any_are_visible = false;
+				for (AST::SymbolID id : symbol_id->value()) {
+					if (symbol_pool_.at(id).is_visible(file_id)) {
+						any_are_visible = true;
+						break;
+					} else if (symbol_pool_.at(id).name == fragment.value)
+						unimported_same_name_item_exists = true;
+				}
+				if (!any_are_visible) continue;
+
+				possibilities.push_back(AST::Module::get_name(item.value));
+			}
 
 			add_unknown_symbol_diagnostic(
 				identifier.path[i].value,
 				identifier.path[i].span,
 				possibilities,
 				"specified",
-				file_id
+				file_id,
+				unimported_same_name_item_exists
 			);
 
 			break;

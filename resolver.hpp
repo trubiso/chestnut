@@ -234,6 +234,8 @@ private:
 		// TODO: in the future, we should make modules be able to be imported from modules in general, not just
 		// at a file-to-file level
 		std::vector<FileContext::ID> imported_from;
+
+		bool is_visible(FileContext::ID) const;
 	};
 
 	std::vector<Symbol> symbol_pool_;
@@ -279,7 +281,8 @@ private:
 		Span                            span,
 		std::vector<std::string> const& possible_symbols,
 		std::string_view                scope_type,
-		FileContext::ID
+		FileContext::ID,
+		bool add_import_suggestion = false
 	);
 
 	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
