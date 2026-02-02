@@ -72,8 +72,8 @@ private:
 		std::optional<T> value = function();
 		if (!value.has_value()) return {};
 
-		// FIXME: this is wrong
-		size_t end = tokens_.peek().value_or(tokens_.last()).begin;
+		assert(tokens_.index() > 0 && tokens_.index() - 1 < tokens_.size());
+		size_t end = tokens_.at(tokens_.index() - 1).value().end();
 
 		return Spanned<T> {Span(begin, end), std::move(value.value())};
 	}
