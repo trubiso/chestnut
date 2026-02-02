@@ -2,12 +2,12 @@ export import ::my_module::my_submodule::sum_numbers;
 
 export module a {
 	import ::source::b::b;
-	export func a() void {}
+	export func a() {}
 }
 
 export module b {
 	import ::source::a::a;
-	export func b() void {}
+	export func b() {}
 }
 
 export module hello {
@@ -23,7 +23,7 @@ export module hello {
 
 		func try_anon(anon argument: uint32) void;
 
-		func try_shadowing(putc: char, sum_numbers: uint) void {
+		func try_shadowing(putc: char, sum_numbers: uint) {
 			const my_var = 5;
 			{
 				const my_var = 'h';
@@ -31,12 +31,13 @@ export module hello {
 			}
 			const q = my_var;
 			q = 'h';
+			return my_var;
 		}
 
-		func sample1(name: bool, age: int) void;
+		func sample1(name: bool, age: int);
 		func sample2(jones: void, rage: uint) uint;
 
-		export func main() void {
+		export func main() {
 			try_anon(argument: 95, argument: 64);
 			try_shadowing = 'h';
 			sum_numbers(2, 3, 4);
@@ -59,7 +60,7 @@ export module hello {
 			return ::u::b::q;
 		}
 
-		func test_numeric_inference() void {
+		func test_numeric_inference() {
 			const a: float16 = 3.0;
 			const b: float32 = 9.0;
 			const c = a + b;
@@ -69,7 +70,7 @@ export module hello {
 			const g: float128 = e - f;
 		}
 		
-		func whatever() void {
+		func whatever() {
 			const q = 3();
 			const few_args = sum_numbers();
 			const many_args = sum_numbers(2, 3, 4);
@@ -78,7 +79,7 @@ export module hello {
 			const a = sum_numbers(2, 3);
 		}
 
-		func cycle() void {
+		func cycle() {
 			const cycle_a;
 			const cycle_b;
 			const cycle_c;
@@ -108,7 +109,7 @@ export module hello {
 */
 	}
 
-	func greet() void
+	func greet();
 }
 
 module yo {

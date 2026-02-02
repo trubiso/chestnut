@@ -718,16 +718,9 @@ std::optional<Function> Parser::parse_function() {
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};
 
-	auto return_type = SPANNED(consume_type);
-	// TODO: make return types optional again
-	if (!return_type.has_value()) {
-		std::cout
-			<< "return types must have values as of right now ('"
-			<< name.value().value.name()
-			<< "')"
-			<< std::endl;
-		std::exit(0);
-	}
+	// default to void
+	auto return_type
+		= SPANNED(consume_type).value_or(Spanned {name.value().span, Type::make_atom(Type::Atom::make_void())});
 
 	std::optional<Scope> body {};
 	if (consume_symbol(Token::Symbol::FatArrow)) {
@@ -754,7 +747,7 @@ std::optional<Function> Parser::parse_function() {
 		if (!body.has_value()) expect_semicolon("expected semicolon after function declaration without body");
 	}
 
-	return Function {name.value(), arguments, return_type.value(), std::move(body)};
+	return Function {name.value(), arguments, return_type, std::move(body)};
 }
 
 std::optional<Import> Parser::parse_import() {
