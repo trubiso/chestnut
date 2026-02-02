@@ -36,6 +36,12 @@ export module hello {
 			return my_var;
 		}
 
+		func try_mut(mut a: char, b: char) {
+			a = b;
+			b = a;
+			return b;
+		}
+
 		func sample1(name: bool, age: int);
 		func sample2(jones: void, rage: uint) uint;
 

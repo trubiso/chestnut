@@ -11,6 +11,7 @@
 #define CLOSEST_MAX       5
 
 AST::SymbolID Resolver::next() {
+	assert(symbol_pool_.size() == counter_);
 	return counter_++;
 }
 
@@ -49,22 +50,16 @@ void Resolver::add_unknown_symbol_diagnostic(
 	);
 }
 
-// FIXME: once more, we don't need this span, since the diagnostics that did need it are gone, maybe we should remove it
-void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope, FileContext::ID file_id) {
+void Resolver::resolve(AST::Identifier& identifier, Span span, Scope const& scope, FileContext::ID file_id) {
 	// do not try to resolve already resolved identifiers (just in case, i don't think we will ever hit this)
-	if (identifier.value.id.has_value()) return;
+	if (identifier.id.has_value()) return;
 
 	// unqualified identifiers get resolved differently
-	if (identifier.value.is_unqualified()) {
-		// Spanned<AST::Identifier> unqualified = qualified_identifier.value.extract_unqualified_with_span();
-
+	if (identifier.is_unqualified()) {
 		Scope const* traversing_scope = &scope;
 		while (traversing_scope != nullptr) {
-			if (traversing_scope->symbols.contains(identifier.value.name())) {
-				std::vector<Symbol*> const& symbols
-					= traversing_scope->symbols.at(identifier.value.name());
-				identifier.value.id = std::vector<AST::SymbolID> {};
-				for (Symbol* symbol : symbols) identifier.value.id.value().push_back(symbol->id);
+			if (traversing_scope->symbols.contains(identifier.name())) {
+				identifier.id = traversing_scope->symbols.at(identifier.name());
 				return;
 			}
 			traversing_scope = traversing_scope->parent;
@@ -84,18 +79,12 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 			symbol_vector.push_back(std::move(symbol_set.extract(it++).value()));
 		}
 
-		add_unknown_symbol_diagnostic(
-			identifier.value.name(),
-			identifier.span,
-			symbol_vector,
-			"current",
-			file_id
-		);
+		add_unknown_symbol_diagnostic(identifier.name(), span, symbol_vector, "current", file_id);
 
 		return;
 	}
 
-	if (!identifier.value.absolute) {
+	if (!identifier.absolute) {
 		// TODO: resolve non-absolute qualified identifiers
 		std::cout << "unsupported non-absolute qualified identifier detected!" << std::endl;
 		return;
@@ -103,14 +92,14 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 
 	// since this is an absolutely qualified identifier, we must find it in the global scope
 	// we do an initial check to ensure that it is in the global scope
-	if (!module_table_.contains(identifier.value.path[0].value)) {
+	if (!module_table_.contains(identifier.path[0].value)) {
 		std::vector<std::string> modules {};
 		modules.reserve(module_table_.size());
 		for (auto const& v : module_table_) modules.push_back(v.first);
 
 		add_unknown_symbol_diagnostic(
-			identifier.value.path[0].value,
-			identifier.value.path[0].span,
+			identifier.path[0].value,
+			identifier.path[0].span,
 			modules,
 			"global",
 			file_id
@@ -120,7 +109,7 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 	}
 
 	// the module to check within
-	AST::Module const* root_module = module_table_.at(identifier.value.path[0].value);
+	AST::Module const* root_module = module_table_.at(identifier.path[0].value);
 	// the item(s) found after traversal
 	std::vector<Symbol*> pointed_items {};
 	// the id for each of the pointed items
@@ -128,8 +117,8 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 	// set this once we reach a function or something decidedly without subitems
 	bool cannot_traverse_further = false;
 
-	for (size_t i = 1; i < identifier.value.path.size(); ++i) {
-		Spanned<std::string> const& fragment = identifier.value.path[i];
+	for (size_t i = 1; i < identifier.path.size(); ++i) {
+		Spanned<std::string> const& fragment = identifier.path[i];
 		if (cannot_traverse_further) {
 			// for now, this can only mean it is a function, which does not have subitems
 			std::cout << "tried to access a function's subitems !" << std::endl;
@@ -191,8 +180,8 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 				possibilities.push_back(AST::Module::get_name(item.value));
 
 			add_unknown_symbol_diagnostic(
-				identifier.value.path[i].value,
-				identifier.value.path[i].span,
+				identifier.path[i].value,
+				identifier.path[i].span,
 				possibilities,
 				"specified",
 				file_id
@@ -203,7 +192,11 @@ void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope,
 	}
 
 	// if we didn't find anything, we intentionally pass on the empty vector to the identifier
-	identifier.value.id = pointed_ids;
+	identifier.id = pointed_ids;
+}
+
+void Resolver::resolve(Spanned<AST::Identifier>& identifier, Scope const& scope, FileContext::ID file_id) {
+	return resolve(identifier.value, identifier.span, scope, file_id);
 }
 
 void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope const& scope, FileContext::ID file_id) {
@@ -237,16 +230,14 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	// atom resolution (better to do it here directly)
 	AST::Expression::Atom& atom = expression.get_atom();
 	if (atom.kind() == AST::Expression::Atom::Kind::Identifier) {
-		// for identifiers, we create a faux spanned qualified identifier, resolve it and apply that information
-		// here
-		Spanned<AST::Identifier> qualified_identifier {span, atom.get_identifier()};
-		resolve(qualified_identifier, scope, file_id);
-		atom.get_identifier().id = qualified_identifier.value.id;
+		// identifiers need to be resolved
+		resolve(atom.get_identifier(), span, scope, file_id);
 	} else if (atom.kind() == AST::Expression::Atom::Kind::Expression) {
 		// for subexpressions, we just recurse
 		resolve(*atom.get_expression(), span, scope, file_id);
-		return;
 	}
+	// the rest of them do not need any kind of resolution yet
+	return;
 }
 
 void Resolver::resolve(Spanned<AST::Expression>& expression, Scope const& scope, FileContext::ID file_id) {
@@ -273,10 +264,7 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileConte
 	                declare.mutable_.value}
 	);
 	// intentionally replace (shadowing)
-	scope.symbols.insert_or_assign(
-		declare.name.value.name(),
-		std::vector<Symbol*> {&get_single_symbol(declare.name.value)}
-	);
+	scope.symbols.insert_or_assign(declare.name.value.name(), declare.name.value.id.value());
 }
 
 void Resolver::resolve(AST::Statement::Set& set, Scope& scope, FileContext::ID file_id) {
@@ -309,10 +297,7 @@ void Resolver::resolve(AST::Function& function, Scope scope, FileContext::ID fil
 	Scope child_scope {&scope, {}};
 	for (auto& argument : function.arguments) {
 		// intentionally replace (shadowing)
-		child_scope.symbols.insert_or_assign(
-			argument.name.value.name(),
-			std::vector<Symbol*> {&get_single_symbol(argument.name.value)}
-		);
+		child_scope.symbols.insert_or_assign(argument.name.value.name(), argument.name.value.id.value());
 	}
 	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
 }
@@ -325,28 +310,20 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			auto& function = std::get<AST::Function>(value);
 			if (child_scope.symbols.contains(function.name.value.name()))
 				child_scope.symbols.at(function.name.value.name())
-					.push_back(&get_single_symbol(function.name.value));
-			else
-				child_scope.symbols.emplace(
-					function.name.value.name(),
-					std::vector<Symbol*> {&get_single_symbol(function.name.value)}
-				);
+					.push_back(function.name.value.id.value()[0]);
+			else child_scope.symbols.emplace(function.name.value.name(), function.name.value.id.value());
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			auto& submodule = std::get<AST::Module>(value);
-			child_scope.symbols.emplace(
-				submodule.name.value.name(),
-				std::vector<Symbol*> {&get_single_symbol(submodule.name.value)}
-			);
+			child_scope.symbols.emplace(submodule.name.value.name(), submodule.name.value.id.value());
 		} else if (std::holds_alternative<AST::Import>(value)) {
 			auto& import = std::get<AST::Import>(value);
 			if (!import.name.value.absolute) continue;
 			resolve(import.name, child_scope, file_id);
 			if (!import.name.value.id.has_value() || import.name.value.id.value().empty()) continue;
-			child_scope.symbols.emplace(import.name.value.last_fragment().value, std::vector<Symbol*> {});
-			for (AST::SymbolID id : import.name.value.id.value()) {
-				child_scope.symbols.at(import.name.value.last_fragment().value)
-					.push_back(&symbol_pool_.at(id));
-			}
+			child_scope.symbols.emplace(
+				import.name.value.last_fragment().value,
+				import.name.value.id.value()
+			);
 		}
 	}
 

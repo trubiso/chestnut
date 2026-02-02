@@ -244,7 +244,7 @@ private:
 	struct Scope {
 		Scope const* parent = nullptr;
 
-		std::unordered_map<std::string, std::vector<Symbol*>> symbols;
+		std::unordered_map<std::string, std::vector<AST::SymbolID>> symbols;
 	};
 
 	std::unordered_map<std::string, AST::Module*> module_table_;
@@ -253,7 +253,6 @@ private:
 	AST::SymbolID counter_;
 
 	/// Returns a new ID produced by the counter.
-	// TODO: assert that the produced ID corresponds to symbol_pool_.size()
 	AST::SymbolID next();
 
 	/// Returns the file context for the requested file ID.
@@ -279,7 +278,7 @@ private:
 		FileContext::ID
 	);
 
-	// TODO: return the ID for ergonomics in some of these
+	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID);
 	void resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::UnaryOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::BinaryOperation&, Scope const&, FileContext::ID);
