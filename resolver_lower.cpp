@@ -51,6 +51,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
 	} else if (type.kind() == TypeInfo::Kind::Function) {
 		// FIXME: this still does not have the correct span
+		// FIXME: we're throwing this randomly for the my_module case
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"invalid type",
