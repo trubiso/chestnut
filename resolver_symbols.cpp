@@ -19,9 +19,9 @@ bool Resolver::Symbol::is_visible(FileContext::ID other_id) const {
 	return false;
 }
 
-AST::SymbolID Resolver::next() {
-	assert(symbol_pool_.size() == counter_);
-	return counter_++;
+AST::SymbolID Resolver::symbol_next() {
+	assert(symbol_pool_.size() == symbol_counter_);
+	return symbol_counter_++;
 }
 
 void Resolver::add_unknown_symbol_diagnostic(
@@ -329,7 +329,6 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileConte
 }
 
 void Resolver::resolve(AST::Statement::Set& set, Scope& scope, FileContext::ID file_id) {
-	// TODO: maybe check here for mutability?
 	resolve(set.lhs, scope, file_id);
 	resolve(set.rhs, scope, file_id);
 }

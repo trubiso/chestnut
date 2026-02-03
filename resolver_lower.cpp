@@ -214,7 +214,7 @@ Spanned<IR::Identifier> Resolver::lower_identifier(Spanned<AST::Identifier> cons
 
 Spanned<IR::Expression::Atom>
 Resolver::extract_expression(AST::Expression const& expression, Span span, IR::Scope& scope, FileContext::ID file_id) {
-	AST::SymbolID id = next();
+	AST::SymbolID id = symbol_next();
 	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, expression.type.value(), false, false, {}});
 	Spanned<IR::Identifier> name {span, id};
 	scope.push_back(

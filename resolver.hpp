@@ -25,14 +25,17 @@ public:
 
 	explicit Resolver(std::vector<ParsedFile>&& parsed_files)
 		: parsed_files(std::move(parsed_files))
-		, module_table_ {}
-		, counter_ {0} {}
+		, module_table_ {} {}
 
+	/// Resolves all names and types and lowers to IR.
 	std::vector<IR::Module> resolve();
-
+	/// Prints a dump of all symbols and their corresponding types.
 	void dump() const;
 
 private:
+	// === STRUCTS ===
+
+	/// Holds information for a type during type inference.
 	struct TypeInfo {
 		typedef uint32_t ID;
 
@@ -47,7 +50,7 @@ private:
 		};
 
 		struct KnownInteger {
-			// this may not be Any
+			/// This may not be of width type Any!
 			AST::Type::Atom::Integer integer;
 		};
 
@@ -56,9 +59,11 @@ private:
 		};
 
 		struct PartialInteger {
-			// this may be Any
+			/// This may be any kind of integer. If the signedness is not known (signed_is_known), it will
+			/// be ignored.
 			AST::Type::Atom::Integer integer;
-			bool                     signed_is_known;
+			/// Whether the signedness for this integer is known.
+			bool signed_is_known;
 		};
 
 		enum class Kind {
@@ -193,81 +198,50 @@ private:
 		std::vector<ID> get_callable_subitems(ID self_id, std::vector<TypeInfo> const&) const;
 	};
 
-	std::vector<TypeInfo>                          type_pool_;
-	std::vector<std::tuple<Span, FileContext::ID>> type_span_pool_;
-	std::vector<std::optional<AST::SymbolID>>      type_symbol_mapping_;
-
-	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }
-
-	inline FileContext::ID get_type_file_id(TypeInfo::ID id) const { return std::get<1>(type_span_pool_.at(id)); }
-
-	TypeInfo::ID type_counter_ = 0;
-
-	void debug_print_type(TypeInfo::ID) const;
-	void debug_print_type(TypeInfo) const;
-
-	/// Returns a name for a type suitable for a diagnostic.
-	std::string get_type_name(TypeInfo::ID) const;
-	/// Returns a name for a type suitable for a diagnostic.
-	std::string get_type_name(TypeInfo const&) const;
-	/// Returns a type sample for the provided type ID.
-	Diagnostic::Sample get_type_sample(TypeInfo::ID, OutFmt::Color) const;
-
-	/// Returns a new ID produced by the type counter.
-	TypeInfo::ID type_next();
-
-	/// Registers a type in the type pool and returns its ID.
-	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
-
 	struct Symbol {
 		AST::SymbolID   id;
 		FileContext::ID file_id;
 		Span            span;
 		std::string     name;
 
+		/// Holds the module item that this points to, if any.
 		std::variant<AST::Module*, AST::Function*, std::monostate> item;
 
 		TypeInfo::ID type;
 
+		/// Whether this symbol can be mutated (should be true only for mutable declarations and arguments).
 		bool mutable_;
 		/// Whether this symbol can be imported (should be set to false in non-module items)
 		bool exported;
 
-		// TODO: in the future, we should make modules be able to be imported from modules in general, not just
-		// at a file-to-file level
+		/// Which files this symbol is imported from.
 		std::vector<FileContext::ID> imported_from;
 
 		bool is_visible(FileContext::ID) const;
 	};
 
-	std::vector<Symbol> symbol_pool_;
+	// TODO: store scopes so we can import symbols from scopes
 
-	inline Symbol& get_single_symbol(AST::SymbolID id) { return symbol_pool_.at(id); }
-
-	inline Symbol& get_single_symbol(AST::Identifier const& identifier) {
-		assert(identifier.id.has_value() && identifier.id.value().size() == 1);
-		return get_single_symbol(identifier.id.value().at(0));
-	}
-
+	/// Holds a scope's symbols for unqualified identifier resolution.
 	struct Scope {
+		/// We store the parent to traverse up scopes until we find the symbol.
 		Scope const* parent = nullptr;
-
+		/// A name may point to more than one ID (e.g. for overloaded functions).
 		std::unordered_map<std::string, std::vector<AST::SymbolID>> symbols;
 	};
-
-	std::unordered_map<std::string, AST::Module*> module_table_;
-
-	// TODO: rename symbol stuff to have 'symbol' in its name
-	AST::SymbolID counter_;
-
-	/// Returns a new ID produced by the counter.
-	AST::SymbolID next();
 
 	/// Returns the file context for the requested file ID.
 	FileContext get_context(FileContext::ID) const;
 
+	// === POPULATION ===
+
+	/// Holds all the top-level modules (that is, files) in an unordered map.
+	std::unordered_map<std::string, AST::Module*> module_table_;
+
 	/// Populates the module table according to the parsed files.
 	void populate_module_table();
+
+	// === IDENTIFICATION ===
 
 	/// Produces a single ID for the identifier and sets it; the caller must register this ID in the symbol pool.
 	void identify(AST::Identifier&);
@@ -278,12 +252,35 @@ private:
 	/// Identifies all module items with an ID, but does not resolve aliases.
 	void identify_module_items();
 
+	/// === SYMBOLS ===
+
+	/// Holds all symbols. All valid AST::SymbolIDs are valid indices to this array.
+	std::vector<Symbol> symbol_pool_;
+	/// Holds the symbol ID one above the last valid symbol ID.
+	AST::SymbolID symbol_counter_ = 0;
+
+	/// Returns a new ID produced by the counter.
+	AST::SymbolID symbol_next();
+
+	/// Gets a symbol from the symbol pool.
+	inline Symbol& get_single_symbol(AST::SymbolID id) { return symbol_pool_.at(id); }
+
+	/// Gets a symbol from the symbol pool, assuming the identifier is fully resolved.
+	inline Symbol& get_single_symbol(AST::Identifier const& identifier) {
+		assert(identifier.id.has_value() && identifier.id.value().size() == 1);
+		return get_single_symbol(identifier.id.value().at(0));
+	}
+
+	/// Adds a diagnostic indicating a symbol is unknown.
 	void add_unknown_symbol_diagnostic(
-		std::string_view                symbol,
-		Span                            span,
+		std::string_view symbol,
+		Span             span,
+		/// A list of the names of all candidates (the closest are determined by Levenshtein distance).
 		std::vector<std::string> const& possible_symbols,
-		std::string_view                scope_type,
+		/// Which kind of scope the symbol was not found in (should be just an adjective).
+		std::string_view scope_type,
 		FileContext::ID,
+		/// Whether a suggestion to import a symbol with the same name should be added to the diagnostic.
 		bool add_import_suggestion = false
 	);
 
@@ -303,6 +300,41 @@ private:
 	void resolve(AST::Module&, Scope, FileContext::ID);
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
+
+	/// === TYPES ===
+
+	/// Holds all types. All valid TypeInfo::IDs are valid indices to this array.
+	std::vector<TypeInfo> type_pool_;
+	/// Holds the span and file ID for all types. All valid TypeInfo::IDs are valid indices to this array.
+	std::vector<std::tuple<Span, FileContext::ID>> type_span_pool_;
+	/// Holds the corresponding symbol for some types. All valid TypeInfo::IDs are valid indices to this array.
+	std::vector<std::optional<AST::SymbolID>> type_symbol_mapping_;
+	/// Holds the type ID one above the last valid type ID.
+	TypeInfo::ID type_counter_ = 0;
+
+	/// Returns the span for a given type ID.
+	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }
+
+	/// Returns the file ID for a given type ID.
+	inline FileContext::ID get_type_file_id(TypeInfo::ID id) const { return std::get<1>(type_span_pool_.at(id)); }
+
+	/// Prints debug info for a type given its ID, without a newline.
+	void debug_print_type(TypeInfo::ID) const;
+	/// Prints debug info for a type, without a newline.
+	void debug_print_type(TypeInfo) const;
+
+	/// Returns a name for a type suitable for a diagnostic.
+	std::string get_type_name(TypeInfo::ID) const;
+	/// Returns a name for a type suitable for a diagnostic.
+	std::string get_type_name(TypeInfo const&) const;
+	/// Returns a type sample for the provided type ID.
+	Diagnostic::Sample get_type_sample(TypeInfo::ID, OutFmt::Color) const;
+
+	/// Returns a new ID produced by the type counter.
+	TypeInfo::ID type_next();
+
+	/// Registers a type in the type pool and returns its ID.
+	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
 
 	/// Sets two types to be the same, avoiding any SameAs cycles. Never fails!
 	void set_same_as(TypeInfo::ID to, TypeInfo::ID from);
@@ -363,7 +395,10 @@ private:
 	void         infer(AST::Scope&, AST::SymbolID function, FileContext::ID);
 	void         infer(AST::Function&, FileContext::ID);
 	void         infer(AST::Module&, FileContext::ID);
-	void         infer_types();
+	/// Infers all types within the program.
+	void infer_types();
+
+	// === LOWERING ===
 
 	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
 	/// values and expressions, as it does not allow functions or modules to be values directly. It also takes in a
@@ -397,5 +432,6 @@ private:
 	IR::Scope                             lower(AST::Scope const&, FileContext::ID);
 	IR::Function                          lower(AST::Function const&, FileContext::ID);
 	IR::Module                            lower(AST::Module const&, FileContext::ID);
-	std::vector<IR::Module>               lower();
+	/// Lowers all files into IR modules.
+	std::vector<IR::Module> lower();
 };

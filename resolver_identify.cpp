@@ -4,7 +4,7 @@
 
 void Resolver::identify(AST::Identifier& identifier) {
 	assert(!identifier.id.has_value());
-	identifier.id = {next()};
+	identifier.id = {symbol_next()};
 }
 
 void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file_id) {
