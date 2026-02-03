@@ -798,15 +798,15 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	TypeInfo::ID callee_id = infer(function_call.callee->value, function_call.callee->span, file_id);
 
 	// first, we ensure that there is at least one callable item
-	// TODO: skip instead of throwing diagnostic if this is a bottom
 	if (!type_pool_.at(callee_id).is_callable(type_pool_)) {
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"type mismatch",
-				"attempted to call a non-function",
-				{get_type_sample(callee_id, OutFmt::Color::Red)}
-			)
-		);
+		if (type_pool_.at(callee_id).kind() != TypeInfo::Kind::Bottom)
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"type mismatch",
+					"attempted to call a non-function",
+					{get_type_sample(callee_id, OutFmt::Color::Red)}
+				)
+			);
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
