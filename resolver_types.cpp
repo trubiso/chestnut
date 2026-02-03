@@ -1092,16 +1092,26 @@ void Resolver::infer(AST::Statement::Return& return_, Span span, AST::SymbolID f
 
 void Resolver::infer(Spanned<AST::Statement>& statement, AST::SymbolID function, FileContext::ID file_id) {
 	switch (statement.value.kind()) {
-	case AST::Statement::Kind::Declare: infer(statement.value.get_declare(), file_id); return;
-	case AST::Statement::Kind::Set:     infer(statement.value.get_set(), file_id); return;
-	case AST::Statement::Kind::Expression:
-		// TODO: should we unify this with void?
-		infer(statement.value.get_expression(), statement.span, file_id);
-		return;
+	case AST::Statement::Kind::Declare:    infer(statement.value.get_declare(), file_id); return;
+	case AST::Statement::Kind::Set:        infer(statement.value.get_set(), file_id); return;
+	case AST::Statement::Kind::Expression: break;
 	case AST::Statement::Kind::Return:
 		infer(statement.value.get_return(), statement.span, function, file_id);
 		return;
 	case AST::Statement::Kind::Scope: infer(statement.value.get_scope(), function, file_id); return;
+	}
+
+	// for expression statements, we want to throw a warning if it results in a non-void result
+	TypeInfo::ID type_id = infer(statement.value.get_expression(), statement.span, file_id);
+	if (type_pool_.at(type_id).kind() == TypeInfo::Kind::Bottom) return;  // skip bottoms
+	if (!can_unify(type_id, TypeInfo::make_known_void())) {
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::warning(
+				"discarded expression result",
+				"this expression's result is non-void",
+				{get_type_sample(type_id, OutFmt::Color::Yellow)}
+			)
+		);
 	}
 }
 
