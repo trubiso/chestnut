@@ -1,3 +1,4 @@
+#pragma once
 #include "out_fmt.hpp"
 #include "span.hpp"
 

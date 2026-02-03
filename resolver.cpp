@@ -8,7 +8,33 @@ std::vector<IR::Module> Resolver::resolve() {
 	resolve_identifiers();
 	infer_types();
 
-	return lower();
+	auto lowered = lower();
+	for (IR::Module const& module : lowered) {
+		print(module);
+		std::cout << std::endl;
+	}
+	return lowered;
+}
+
+void Resolver::print(IR::Module const& module) const {
+	std::cout << "declare module @" << module.name.value << ": ";
+	if (module.items.empty()) {
+		std::cout << "(empty module)";
+		return;
+	}
+	std::cout << "{\n";
+	std::cout.iword(0)++;
+	for (auto item : module.items) {
+		for (long i = 0; i < std::cout.iword(0); ++i) std::cout << "    ";
+		if (std::holds_alternative<IR::Module>(symbol_pool_.at(item).item))
+			print(std::get<IR::Module>(symbol_pool_.at(item).item));
+		else if (std::holds_alternative<IR::Function>(symbol_pool_.at(item).item))
+			std::cout << std::get<IR::Function>(symbol_pool_.at(item).item);
+		std::cout << '\n';
+	}
+	std::cout.iword(0)--;
+	for (long i = 0; i < std::cout.iword(0); ++i) std::cout << "    ";
+	std::cout << "}";
 }
 
 void Resolver::dump() const {

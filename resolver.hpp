@@ -28,6 +28,7 @@ public:
 		, module_table_ {} {}
 
 	/// Resolves all names and types and lowers to IR.
+	// TODO: we need to export the symbol table so the IR can do anything useful
 	std::vector<IR::Module> resolve();
 	/// Prints a dump of all symbols and their corresponding types.
 	void dump() const;
@@ -205,7 +206,7 @@ private:
 		std::string     name;
 
 		/// Holds the module item that this points to, if any.
-		std::variant<AST::Module*, AST::Function*, std::monostate> item;
+		std::variant<AST::Module*, AST::Function*, IR::Module, IR::Function, std::monostate> item;
 
 		TypeInfo::ID type;
 
@@ -434,4 +435,6 @@ private:
 	IR::Module                            lower(AST::Module const&, FileContext::ID);
 	/// Lowers all files into IR modules.
 	std::vector<IR::Module> lower();
+
+	void print(IR::Module const&) const;
 };

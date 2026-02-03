@@ -306,6 +306,4 @@ struct Module {
 	std::vector<Identifier> items;
 };
 
-std::ostream& operator<<(std::ostream&, Module const&);
-
 }  // namespace IR

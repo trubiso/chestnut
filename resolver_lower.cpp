@@ -507,12 +507,12 @@ IR::Module Resolver::lower(AST::Module const& original_module, FileContext::ID f
 	for (Spanned<AST::Module::Item> const& item : original_module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
-			AST::Function const& function = std::get<AST::Function>(value);
-			lower(function, file_id);
+			AST::Function const& function               = std::get<AST::Function>(value);
+			get_single_symbol(function.name.value).item = lower(function, file_id);
 			module.items.push_back(function.name.value.id.value()[0]);
 		} else if (std::holds_alternative<AST::Module>(value)) {
-			AST::Module const& submodule = std::get<AST::Module>(value);
-			lower(submodule, file_id);
+			AST::Module const& submodule                 = std::get<AST::Module>(value);
+			get_single_symbol(submodule.name.value).item = lower(submodule, file_id);
 			module.items.push_back(submodule.name.value.id.value()[0]);
 		}
 	}
