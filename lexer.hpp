@@ -29,6 +29,8 @@ public:
 
 	FileContext& context;
 
+	static std::optional<char> lookup_escaped(char x);
+
 private:
 	static inline bool is_whitespace(char x) { return x == ' ' || x == '\t' || x == '\r'; }
 
@@ -80,8 +82,6 @@ private:
 	}
 
 	static inline bool is_symbol_start(char x) { return get_symbol_start(x).has_value(); }
-
-	static std::optional<char> lookup_escaped(char x);
 
 	inline void consume_whitespace() { stream_.consume_while(is_whitespace); }
 
