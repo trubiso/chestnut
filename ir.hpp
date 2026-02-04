@@ -143,25 +143,26 @@ struct Expression {
 		struct Literal {
 			enum class Kind { Number, String, Char } kind;
 			std::string literal;
-			IR::Type    type;
 		};
 
 		typedef std::variant<Identifier, Literal> value_t;
 
-		value_t value;
+		value_t  value;
+		IR::Type type;
 
 		inline constexpr Kind kind() const { return (Kind) value.index(); }
 
-		inline static Atom make_identifier(Identifier identifier) {
-			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
+		inline static Atom make_identifier(Identifier identifier, IR::Type type) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier}, type);
 		}
 
 		inline static Atom make_literal(Literal::Kind kind, std::string literal, IR::Type type) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::Literal>,
-					Literal {kind, literal, type}
-                        }
+					Literal {kind, literal}
+                        },
+				type
 			);
 		}
 

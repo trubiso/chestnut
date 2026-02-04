@@ -52,10 +52,7 @@ llvm::Type* CodeGenerator::generate_type(IR::Type const& type) {
 llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom) {
 	switch (atom.kind()) {
 	case IR::Expression::Atom::Kind::Identifier:
-		return builder_.CreateLoad(
-			variables_[atom.get_identifier()]->getType(),
-			variables_[atom.get_identifier()]
-		);
+		return builder_.CreateLoad(generate_type(atom.type), variables_[atom.get_identifier()]);
 	case IR::Expression::Atom::Kind::Literal: break;
 	}
 
@@ -65,14 +62,14 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 	switch (literal.kind) {
 	case IR::Expression::Atom::Literal::Kind::Number:
 		// this is a bit verbose :P
-		switch (literal.type.get_atom().kind()) {
+		switch (atom.type.get_atom().kind()) {
 		case IR::Type::Atom::Kind::Integer:
-			switch (literal.type.get_atom().get_integer().width_type()) {
+			switch (atom.type.get_atom().get_integer().width_type()) {
 			case IR::Type::Atom::Integer::WidthType::Fixed:
 				return llvm::ConstantInt::get(
 					context_,
 					llvm::APInt(
-						literal.type.get_atom().get_integer().bit_width().value(),
+						atom.type.get_atom().get_integer().bit_width().value(),
 						literal.literal,
 						10
 					)
@@ -97,7 +94,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 				);
 			}
 		case IR::Type::Atom::Kind::Float:
-			switch (literal.type.get_atom().get_float().width_value()) {
+			switch (atom.type.get_atom().get_float().width_value()) {
 			case 16:
 				return llvm::ConstantFP::get(
 					context_,

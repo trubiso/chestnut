@@ -217,19 +217,21 @@ Resolver::extract_expression(AST::Expression const& expression, Span span, IR::S
 	AST::SymbolID id = symbol_next();
 	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, expression.type.value(), false, false, {}});
 	Spanned<IR::Identifier> name {span, id};
+
+	IR::Type type = reconstruct_type(expression.type.value());
 	scope.push_back(
 		Spanned<IR::Statement> {
 			span,
 			IR::Statement::make_declare(
 				IR::Statement::Declare {
-							name, reconstruct_type(expression.type.value()),
+							name, type,
 							lower(expression, span, scope, file_id),
 							Spanned<bool> {span, false}
 				}
 			)
         }
 	);
-	return {name.span, IR::Expression::Atom::make_identifier(std::move(name.value))};
+	return {name.span, IR::Expression::Atom::make_identifier(std::move(name.value), type)};
 }
 
 Spanned<IR::Expression::Atom>
@@ -277,12 +279,11 @@ Spanned<IR::Expression> Resolver::lower(
 		        IR::Expression::make_atom(
 				extract_expression(*atom.get_expression(), span, scope, file_id).value
 			)};
-	case AST::Expression::Atom::Kind::Identifier:
-		return {span,
-		        IR::Expression::make_atom(
-				IR::Expression::Atom::make_identifier(std::get<0>(lower(atom.get_identifier())))
-			)};
+	case AST::Expression::Atom::Kind::Identifier: break;
 	}
+	// for identifiers, we need to extract the type as well
+	auto [identifier, type] = lower(atom.get_identifier());
+	return {span, IR::Expression::make_atom(IR::Expression::Atom::make_identifier(identifier, type))};
 }
 
 Spanned<IR::Expression> Resolver::lower(
@@ -319,8 +320,12 @@ Spanned<IR::Expression> Resolver::lower(
 	FileContext::ID                      file_id
 ) {
 	// FIXME: better solution for fail expressions
-	auto error_expression
-		= Spanned<IR::Expression> {span, IR::Expression::make_atom(IR::Expression::Atom::make_identifier(0))};
+	auto error_expression = Spanned<IR::Expression> {
+		span,
+		IR::Expression::make_atom(
+			IR::Expression::Atom::make_identifier(0, IR::Type::make_atom(IR::Type::Atom::make_error()))
+		)
+	};
 	auto callee = lower(*function_call.callee, scope, file_id);
 	// if the callee is not valid, we've already thrown diagnostics about it
 	if (callee.value.kind() != IR::Expression::Kind::Atom
@@ -517,7 +522,7 @@ IR::Module Resolver::lower(AST::Module const& original_module, FileContext::ID f
 	for (Spanned<AST::Module::Item> const& item : original_module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
-			AST::Function const& function               = std::get<AST::Function>(value);
+			AST::Function const& function = std::get<AST::Function>(value);
 			// TODO: make a more sophisticated system for these kinds of things
 			IR::Function lowered_function = lower(function, file_id);
 			for (AST::Tag const& tag : std::get<std::vector<AST::Tag>>(item.value)) {
