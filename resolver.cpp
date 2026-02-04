@@ -37,6 +37,26 @@ void Resolver::print(IR::Module const& module) const {
 	std::cout << "}";
 }
 
+std::vector<IR::Symbol> Resolver::export_symbols() const {
+	std::vector<IR::Symbol> symbols {};
+	symbols.reserve(symbol_pool_.size());
+	for (Symbol const& symbol : symbol_pool_)
+		symbols.push_back(
+			IR::Symbol {
+				symbol.id,
+				symbol.file_id,
+				symbol.span,
+				symbol.name,
+				std::holds_alternative<IR::Module>(symbol.item)
+					? decltype(IR::Symbol::item) {std::get<IR::Module>(symbol.item)}
+				: std::holds_alternative<IR::Function>(symbol.item)
+					? decltype(IR::Symbol::item) {std::get<IR::Function>(symbol.item)}
+					: std::monostate {},
+				symbol.mutable_
+			}
+		);
+}
+
 void Resolver::dump() const {
 	std::cout << symbol_pool_.size() << " symbols, " << type_pool_.size() << " types\n";
 	for (Symbol const& symbol : symbol_pool_) {

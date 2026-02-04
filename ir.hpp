@@ -1,12 +1,11 @@
 #pragma once
 #include "ast/identifier.hpp"
+#include "diagnostic.hpp"
 
 #include <variant>
 #include <vector>
 
 namespace IR {
-
-// TODO: we don't need all of these spans, because most of them are contained within the symbol table already
 
 // all identifiers are now symbols
 using Identifier = AST::SymbolID;
@@ -304,6 +303,20 @@ std::ostream& operator<<(std::ostream&, Function const&);
 struct Module {
 	Spanned<Identifier>     name;
 	std::vector<Identifier> items;
+};
+
+// TODO: we don't need all of these spans, because most of them are contained within the symbol table already
+struct Symbol {
+	AST::SymbolID   id;
+	FileContext::ID file_id;
+	Span            span;
+	std::string     name;
+
+	/// Holds the module item that this points to, if any.
+	std::variant<Module, Function, std::monostate> item;
+
+	/// Whether this symbol can be mutated (should be true only for mutable declarations and arguments).
+	bool mutable_;
 };
 
 }  // namespace IR
