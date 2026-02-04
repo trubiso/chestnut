@@ -228,13 +228,17 @@ void CodeGenerator::create_function(IR::Function const& function) {
 			get_name(function.name.value),
 			&program_
 		);
+		// we need to make sure that if we're exporting a definition, the definition is on the correct one
+		// though! that is, if we have a body, the exported one becomes the stub
+		llvm::Function* defined = function.body.has_value() ? stub_function : actual_function;
+		llvm::Function* alias   = function.body.has_value() ? actual_function : stub_function;
 		// this stub just calls the function and returns whatever it returns
-		llvm::BasicBlock* block = llvm::BasicBlock::Create(context_, "entry", stub_function);
+		llvm::BasicBlock* block = llvm::BasicBlock::Create(context_, "entry", alias);
 		builder_.SetInsertPoint(block);
 		std::vector<llvm::Value*> arguments {};
-		arguments.reserve(stub_function->arg_size());
-		for (auto& arg : stub_function->args()) arguments.push_back(&arg);
-		llvm::Value* value = builder_.CreateCall(actual_function, arguments);
+		arguments.reserve(alias->arg_size());
+		for (auto& arg : alias->args()) arguments.push_back(&arg);
+		llvm::Value* value = builder_.CreateCall(defined, arguments);
 		if (value->getType()->isVoidTy()) builder_.CreateRetVoid();
 		else builder_.CreateRet(value);
 		return;
