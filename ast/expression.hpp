@@ -10,8 +10,6 @@
 namespace AST {
 
 struct Expression {
-	// TODO: potentially store an optional TypeID for lowering
-
 	struct Atom {
 		enum class Kind { Identifier, NumberLiteral, StringLiteral, CharLiteral, Expression };
 

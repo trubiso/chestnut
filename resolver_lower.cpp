@@ -237,15 +237,21 @@ Resolver::extract_expression(Spanned<AST::Expression> const& expression, IR::Sco
 	return extract_expression(expression.value, expression.span, scope, file_id);
 }
 
-Spanned<IR::Expression>
-Resolver::lower(AST::Expression::Atom const& atom, Span span, IR::Scope& scope, FileContext::ID file_id) {
+Spanned<IR::Expression> Resolver::lower(
+	AST::Expression::Atom const& atom,
+	TypeInfo::ID                 type_id,
+	Span                         span,
+	IR::Scope&                   scope,
+	FileContext::ID              file_id
+) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
 		return {span,
 		        IR::Expression::make_atom(
 				IR::Expression::Atom::make_literal(
 					IR::Expression::Atom::Literal::Kind::Number,
-					atom.get_number_literal().literal
+					atom.get_number_literal().literal,
+					reconstruct_type(type_id)
 				)
 			)};
 	case AST::Expression::Atom::Kind::StringLiteral:
@@ -253,7 +259,8 @@ Resolver::lower(AST::Expression::Atom const& atom, Span span, IR::Scope& scope, 
 		        IR::Expression::make_atom(
 				IR::Expression::Atom::make_literal(
 					IR::Expression::Atom::Literal::Kind::String,
-					atom.get_string_literal().literal
+					atom.get_string_literal().literal,
+					reconstruct_type(type_id)
 				)
 			)};
 	case AST::Expression::Atom::Kind::CharLiteral:
@@ -261,7 +268,8 @@ Resolver::lower(AST::Expression::Atom const& atom, Span span, IR::Scope& scope, 
 		        IR::Expression::make_atom(
 				IR::Expression::Atom::make_literal(
 					IR::Expression::Atom::Literal::Kind::Char,
-					atom.get_char_literal().literal
+					atom.get_char_literal().literal,
+					reconstruct_type(type_id)
 				)
 			)};
 	case AST::Expression::Atom::Kind::Expression:
@@ -355,7 +363,8 @@ Spanned<IR::Expression> Resolver::lower(
 Spanned<IR::Expression>
 Resolver::lower(AST::Expression const& expression, Span span, IR::Scope& scope, FileContext::ID file_id) {
 	switch (expression.kind()) {
-	case AST::Expression::Kind::Atom: return lower(expression.get_atom(), span, scope, file_id);
+	case AST::Expression::Kind::Atom:
+		return lower(expression.get_atom(), expression.type.value(), span, scope, file_id);
 	case AST::Expression::Kind::UnaryOperation:
 		return lower(expression.get_unary_operation(), span, scope, file_id);
 	case AST::Expression::Kind::BinaryOperation:
