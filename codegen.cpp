@@ -221,15 +221,22 @@ void CodeGenerator::create_function(IR::Function const& function) {
 			symbols_.at(function.name.value).name,
 			&program_
 		);
-		// then, for the rest of it to work, we create an alias to this function
-		llvm::GlobalAlias::create(
+		// however, we want the internal function to still exist, so we create a small stub
+		llvm::Function* stub_function = llvm::Function::Create(
 			function_type,
-			0,
 			llvm::Function::ExternalLinkage,
 			get_name(function.name.value),
-			actual_function,
 			&program_
 		);
+		// this stub just calls the function and returns whatever it returns
+		llvm::BasicBlock* block = llvm::BasicBlock::Create(context_, "entry", stub_function);
+		builder_.SetInsertPoint(block);
+		std::vector<llvm::Value*> arguments {};
+		arguments.reserve(stub_function->arg_size());
+		for (auto& arg : stub_function->args()) arguments.push_back(&arg);
+		llvm::Value* value = builder_.CreateCall(actual_function, arguments);
+		if (value->getType()->isVoidTy()) builder_.CreateRetVoid();
+		else builder_.CreateRet(value);
 		return;
 	}
 
