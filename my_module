@@ -3,9 +3,11 @@
 export module my_submodule {
 	func sum_numbers(a: uint64, b: uint64) uint64 => a;
 	func sum_numbers(x: uint64) uint64 => sum_numbers(x, x);
+	func sum_numbers(a: float64, b: float32) float32 => b;
 }
 
 export func putc(c: char) void {
 	const a: uint64 = 2;
 	::my_module::my_submodule::sum_numbers(a, 3);
+	::my_module::my_submodule::sum_numbers(20.34134, 30.2185);
 }
