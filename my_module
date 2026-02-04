@@ -1,9 +1,11 @@
-def source ::source;
+// def source ::source;
 
 export module my_submodule {
-	func sum_numbers(a: uint32, b: uint32) uint32 => a + b;
-	export func sum_numbers(a: uint16, b: uint16) uint16 => a + b;
-	func sum_numbers(x: uint64) uint64 => x + x;
+	func sum_numbers(a: uint64, b: uint64) uint64 => a;
+	func sum_numbers(x: uint64) uint64 => sum_numbers(x, x);
 }
 
-export func putc(c: char) void;
+export func putc(c: char) void {
+	const a: uint64 = 2;
+	::my_module::my_submodule::sum_numbers(a, 3);
+}

@@ -1,3 +1,4 @@
+#include "codegen.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "resolver.hpp"
@@ -64,7 +65,7 @@ std::vector<Resolver::ParsedFile> parse_files(std::vector<std::tuple<Stream<Toke
 int main(void) {
 	// TODO: at some point, we have to solve folders and how they create submodules
 
-	std::vector<std::string> files_to_parse {"source", "my_module"};
+	std::vector<std::string> files_to_parse {"my_module"};
 
 	std::optional<std::vector<std::string>> maybe_sources = get_sources(files_to_parse);
 	if (!maybe_sources.has_value()) return errno;
@@ -83,4 +84,7 @@ int main(void) {
 		for (auto const& diagnostic : file.diagnostics) diagnostic.print();
 
 	// resolver.dump();
+	
+	CodeGenerator generator(resolver.export_symbols());
+	generator.process(modules);
 }
