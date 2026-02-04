@@ -55,6 +55,7 @@ std::vector<IR::Symbol> Resolver::export_symbols() const {
 				symbol.mutable_
 			}
 		);
+	return symbols;
 }
 
 void Resolver::dump() const {
