@@ -213,6 +213,27 @@ void CodeGenerator::create_function(IR::Function const& function) {
 	llvm::Type*         return_type   = generate_type(function.return_type.value);
 	llvm::FunctionType* function_type = llvm::FunctionType::get(return_type, argument_types, false);
 
+	if (function.extern_) {
+		// if it's extern, we want to be able to link against this function, so we keep the name
+		llvm::Function* actual_function = llvm::Function::Create(
+			function_type,
+			llvm::Function::ExternalLinkage,
+			symbols_.at(function.name.value).name,
+			&program_
+		);
+		// then, for the rest of it to work, we create an alias to this function
+		llvm::GlobalAlias::create(
+			function_type,
+			0,
+			llvm::Function::ExternalLinkage,
+			get_name(function.name.value),
+			actual_function,
+			&program_
+		);
+		return;
+	}
+
+	// under normal circumstances, we just create the function and that's it
 	llvm::Function::Create(
 		function_type,
 		llvm::Function::ExternalLinkage,

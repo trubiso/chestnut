@@ -506,7 +506,8 @@ IR::Function Resolver::lower(AST::Function const& function, FileContext::ID file
 		{function.name.span, function.name.value.id.value()[0]},
 		std::move(arguments),
 		lower_type(function.return_type, file_id),
-		body
+		body,
+		false
 	};
 }
 
@@ -517,7 +518,12 @@ IR::Module Resolver::lower(AST::Module const& original_module, FileContext::ID f
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
 			AST::Function const& function               = std::get<AST::Function>(value);
-			get_single_symbol(function.name.value).item = lower(function, file_id);
+			// TODO: make a more sophisticated system for these kinds of things
+			IR::Function lowered_function = lower(function, file_id);
+			for (AST::Tag const& tag : std::get<std::vector<AST::Tag>>(item.value)) {
+				if (tag.identifier == "extern") lowered_function.extern_ = true;
+			}
+			get_single_symbol(function.name.value).item = lowered_function;
 			module.items.push_back(function.name.value.id.value()[0]);
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			AST::Module const& submodule                 = std::get<AST::Module>(value);

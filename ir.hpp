@@ -297,6 +297,8 @@ struct Function {
 	Spanned<Type>         return_type;
 
 	std::optional<Scope> body;
+
+	bool extern_;
 };
 
 std::ostream& operator<<(std::ostream&, Function const&);
