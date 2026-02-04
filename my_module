@@ -13,4 +13,22 @@ export func do_stuff(c: char) void {
 	return;
 }
 
-@extern export func putc(c: char) void;
+@extern export func putchar(c: char) void;
+
+@extern export func main() void {
+	putchar('H');
+	putchar('e');
+	putchar('l');
+	putchar('l');
+	putchar('o');
+	putchar(',');
+	putchar(' ');
+	putchar('w');
+	putchar('o');
+	putchar('r');
+	putchar('l');
+	putchar('d');
+	putchar('!');
+	putchar('\n');
+	return;
+}

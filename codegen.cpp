@@ -5,13 +5,67 @@
 #include <format>
 #include <iostream>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
+#include <llvm/TargetParser/Host.h>
 
 void CodeGenerator::process(std::vector<IR::Module> const& modules) {
 	create_all_functions(modules);
 	emit_all_functions(modules);
 
+	// TODO: move all of this to main and make this more sophisticated
 	program_.print(llvm::outs(), nullptr);
+
+	auto target_triple = llvm::sys::getDefaultTargetTriple();
+	llvm::InitializeAllTargetInfos();
+	llvm::InitializeAllTargets();
+	llvm::InitializeAllTargetMCs();
+	llvm::InitializeAllAsmParsers();
+	llvm::InitializeAllAsmPrinters();
+
+	std::string error;
+
+	llvm::Target const* target = llvm::TargetRegistry::lookupTarget(target_triple, error);
+
+	if (!target) {
+		llvm::errs() << error;
+		std::exit(1);
+	}
+
+	auto cpu      = "generic";
+	auto features = "";
+
+	llvm::TargetOptions opt;
+	auto target_machine = target->createTargetMachine(target_triple, cpu, features, opt, llvm::Reloc::PIC_);
+
+	program_.setDataLayout(target_machine->createDataLayout());
+
+	auto filename = "output.o";
+
+	std::error_code      ec;
+	llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+
+	if (ec) {
+		llvm::errs() << "Could not open file: " << ec.message();
+		std::exit(1);
+	}
+
+	llvm::legacy::PassManager pass;
+
+	auto file_type = llvm::CodeGenFileType::ObjectFile;
+
+	if (target_machine->addPassesToEmitFile(pass, dest, nullptr, file_type)) {
+		llvm::errs() << "TargetMachine can't emit a file of this type";
+		std::exit(1);
+	}
+
+	pass.run(program_);
+	dest.flush();
 }
 
 std::string CodeGenerator::get_name(IR::Identifier identifier) const {
