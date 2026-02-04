@@ -5,6 +5,7 @@
 #include <format>
 #include <iostream>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/Verifier.h>
 
 void CodeGenerator::process(std::vector<IR::Module> const& modules) {
 	create_all_functions(modules);
@@ -202,6 +203,8 @@ void CodeGenerator::emit_function(IR::Function const& ir_function) {
 	}
 
 	for (Spanned<IR::Statement> const& statement : ir_function.body.value()) emit_statement(statement.value);
+
+	llvm::verifyFunction(*function, &llvm::errs());
 }
 
 void CodeGenerator::create_function(IR::Function const& function) {
@@ -263,4 +266,5 @@ void CodeGenerator::emit_all_functions(IR::Module const& module) {
 
 void CodeGenerator::emit_all_functions(std::vector<IR::Module> const& modules) {
 	for (IR::Module const& module : modules) { emit_all_functions(module); }
+	llvm::verifyModule(program_, &llvm::errs());
 }

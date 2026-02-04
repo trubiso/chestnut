@@ -506,6 +506,7 @@ IR::Function Resolver::lower(AST::Function const& function, FileContext::ID file
 		// we don't need to push arguments as anonymous or mutable, we only cared during resolution and stuff
 		arguments.push_back(IR::Function::Argument {lower_identifier(name), lower_type(type, file_id)});
 	}
+	// TODO: ensure that we have a return statement at the end, since basic blocks need to always jump
 	auto body = function.body.transform([file_id, this](auto&& body) { return lower(body, file_id); });
 	return IR::Function {
 		{function.name.span, function.name.value.id.value()[0]},
