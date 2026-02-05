@@ -204,77 +204,6 @@ Resolver::register_type(TypeInfo&& type, Span span, FileContext::ID file_id, std
 	return id;
 }
 
-// TODO: change these built in unary and binary operations to work within the function overload system (maybe add the
-// built in functions as candidates to the function call and resolve it). we need the type signature for each built-in
-// function for this.
-// TODO: separate unsigned and signed integer operations
-
-bool Resolver::exists_built_in_binary_operation(
-	Token::Symbol   operation,
-	TypeInfo const& lhs,
-	TypeInfo const& rhs
-) const {
-	if (lhs.kind() == TypeInfo::Kind::Bottom || rhs.kind() == TypeInfo::Kind::Bottom) return true;
-
-	if (lhs.kind() == TypeInfo::Kind::SameAs) {
-		if (lhs.get_same_as().ids.size() != 1) return false;
-		return exists_built_in_binary_operation(operation, type_pool_.at(lhs.get_same_as().ids[0]), rhs);
-	}
-
-	if (rhs.kind() == TypeInfo::Kind::SameAs) {
-		if (rhs.get_same_as().ids.size() != 1) return false;
-		return exists_built_in_binary_operation(operation, lhs, type_pool_.at(rhs.get_same_as().ids[0]));
-	}
-
-	// we don't have any built-in mixed-type binary operators
-	if (lhs.kind() != rhs.kind()) return false;
-
-	// we only support these 4 operations
-	switch (operation) {
-	case Token::Symbol::Plus:
-	case Token::Symbol::Minus:
-	case Token::Symbol::Star:
-	case Token::Symbol::Div:   break;
-	default:                   return false;
-	}
-
-	// all of our binary operations are supported for integers and floats
-	switch (lhs.kind()) {
-	case TypeInfo::Kind::KnownInteger:
-	case TypeInfo::Kind::KnownFloat:
-	case TypeInfo::Kind::PartialInteger:
-	case TypeInfo::Kind::PartialFloat:   return true;
-	default:                             return false;
-	}
-}
-
-bool Resolver::exists_built_in_unary_operation(Token::Symbol operation, TypeInfo const& operand) const {
-	if (operand.kind() == TypeInfo::Kind::Bottom) return true;
-
-	if (operand.kind() == TypeInfo::Kind::SameAs) {
-		if (operand.get_same_as().ids.size() != 1) return false;
-		return exists_built_in_unary_operation(operation, type_pool_.at(operand.get_same_as().ids[0]));
-	}
-
-	// we only support this 1 operation
-	switch (operation) {
-	case Token::Symbol::Minus: break;
-	default:                   return false;
-	}
-
-	// our unary operation is supported for signed integers and floats
-	switch (operand.kind()) {
-	case TypeInfo::Kind::KnownInteger: return operand.get_known_integer().integer.is_signed();
-	case TypeInfo::Kind::KnownFloat:
-	case TypeInfo::Kind::PartialFloat: return true;
-	case TypeInfo::Kind::PartialInteger:
-		// TODO: unify this with a signed integer at some point
-		return operand.get_partial_integer().signed_is_known
-		    && operand.get_partial_integer().integer.is_signed();
-	default: return false;
-	}
-}
-
 void Resolver::set_same_as(TypeInfo::ID to, TypeInfo::ID from) {
 	// set_same_as(a, a) is a noop
 	if (to == from) return;
@@ -848,40 +777,6 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom const& atom, Span s
 }
 
 Resolver::TypeInfo::ID
-Resolver::infer(AST::Expression::UnaryOperation const& unary_operation, Span span, FileContext::ID file_id) {
-	// TODO: user-defined operators between different types
-	TypeInfo::ID operand = infer(unary_operation.operand->value, unary_operation.operand->span, file_id);
-	if (!exists_built_in_unary_operation(unary_operation.operation, type_pool_.at(operand)))
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"invalid unary operation",
-				"there is no unary operation defined with this operator and this type",
-				{get_type_sample(operand, OutFmt::Color::Red)}
-			)
-		);
-	return register_type(TypeInfo::make_same_as(operand), span, file_id);
-}
-
-Resolver::TypeInfo::ID
-Resolver::infer(AST::Expression::BinaryOperation const& binary_operation, Span span, FileContext::ID file_id) {
-	// TODO: user-defined operators between different types
-	TypeInfo::ID lhs_id = infer(binary_operation.lhs->value, binary_operation.lhs->span, file_id);
-	TypeInfo::ID rhs_id = infer(binary_operation.rhs->value, binary_operation.rhs->span, file_id);
-	unify(lhs_id, rhs_id, file_id);
-	if (!exists_built_in_binary_operation(binary_operation.operation, type_pool_.at(lhs_id), type_pool_.at(rhs_id)))
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"invalid binary operation",
-				"there is no binary operation defined with this operator and these types",
-				{get_type_sample(lhs_id, OutFmt::Color::Red),
-				// TODO: get a dual type sample
-		                 get_type_sample(rhs_id, OutFmt::Color::Red)}
-			)
-		);
-	return register_type(TypeInfo::make_same_as(lhs_id), span, file_id);
-}
-
-Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileContext::ID file_id) {
 	// for function calls, we need to resolve or partially resolve the overload
 	TypeInfo::ID callee_id = infer(function_call.callee->value, function_call.callee->span, file_id);
@@ -1126,16 +1021,48 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, FileContext::ID file_id) {
 	switch (expression.kind()) {
-	case AST::Expression::Kind::Atom: expression.type = infer(expression.get_atom(), span, file_id); break;
+	case AST::Expression::Kind::Atom:            expression.type = infer(expression.get_atom(), span, file_id); break;
 	case AST::Expression::Kind::UnaryOperation:
-		expression.type = infer(expression.get_unary_operation(), span, file_id);
-		break;
-	case AST::Expression::Kind::BinaryOperation:
-		expression.type = infer(expression.get_binary_operation(), span, file_id);
-		break;
+	case AST::Expression::Kind::BinaryOperation: break;
 	case AST::Expression::Kind::FunctionCall:
 		expression.type = infer(expression.get_function_call(), span, file_id);
 		break;
+	}
+
+	// for operations, we turn them into function calls and then resolve them
+	if (expression.kind() == AST::Expression::Kind::UnaryOperation
+	    || expression.kind() == AST::Expression::Kind::BinaryOperation) {
+		// TODO: get the operator span
+		Span operator_span = span;
+
+		bool is_unary = expression.kind() == AST::Expression::Kind::UnaryOperation;
+
+		Token::Symbol operator_ = is_unary ? expression.get_unary_operation().operation
+		                                   : expression.get_binary_operation().operation;
+
+		AST::Identifier callee_identifier {
+			{operator_span, get_variant_name(operator_)}
+		};
+		callee_identifier.id   = get_operator_candidates(operator_, !is_unary);
+		AST::Expression callee = AST::Expression::make_atom(
+			AST::Expression::Atom::make_identifier(std::move(callee_identifier))
+		);
+
+		AST::Expression::FunctionCall::Arguments arguments {{}, {}};
+		if (is_unary) arguments.ordered.push_back(std::move(*expression.get_unary_operation().operand));
+		else {
+			arguments.ordered.push_back(std::move(*expression.get_binary_operation().lhs));
+			arguments.ordered.push_back(std::move(*expression.get_binary_operation().rhs));
+		}
+
+		expression = AST::Expression::make_function_call(
+			std::make_unique<Spanned<AST::Expression>>(
+				Spanned<AST::Expression> {operator_span, std::move(callee)}
+			),
+			std::move(arguments)
+		);
+		// TODO: change the diagnostics here to refer to operators and not functions
+		expression.type = infer(expression.get_function_call(), span, file_id);
 	}
 	return expression.type.value();
 }
