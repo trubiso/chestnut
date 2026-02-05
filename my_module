@@ -1,9 +1,9 @@
 // def source ::source;
 
 export module my_submodule {
-	func sum_numbers(a: uint64, b: uint64) uint64 => a;
+	func sum_numbers(a: uint64, b: uint64) uint64 => a + b;
 	func sum_numbers(x: uint64) uint64 => sum_numbers(x, x);
-	func sum_numbers(a: float64, b: float32) float32 => b;
+	func sum_numbers(a: float32, b: float32) float32 => b + a;
 }
 
 export func do_stuff(c: char) void {

@@ -305,12 +305,29 @@ Spanned<IR::Expression> Resolver::lower(
 	FileContext::ID                        file_id,
 	bool                                   allow_functions
 ) {
-	// TODO: operators
-	Spanned<IR::Identifier> operator_ {span, 0};
+	// FIXME: better solution for fail expressions
+	auto error_expression = Spanned<IR::Expression> {
+		span,
+		IR::Expression::make_atom(
+			IR::Expression::Atom::make_identifier(0, IR::Type::make_atom(IR::Type::Atom::make_error()))
+		)
+	};
+	// TODO: user-defined operators
+	// once we have user-defined operators, we must check that the RESULT isn't a function
 
 	auto operand = extract_expression(*unary_operation.operand, scope, file_id);
-	// once we have operators, we must check that the RESULT isn't a function
-	return Spanned<IR::Expression> {span, IR::Expression::make_function_call(std::move(operator_), {operand})};
+
+	IR::BuiltInFunction operator_;
+	switch (unary_operation.operation) {
+	case Token::Symbol::Minus:
+		operator_ = operand.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
+		                  ? IR::BuiltInFunction::NegateInteger
+		                  : IR::BuiltInFunction::NegateFloat;
+		break;
+	default: return error_expression;
+	}
+
+	return Spanned<IR::Expression> {span, IR::Expression::make_function_call(operator_, {operand})};
 }
 
 Spanned<IR::Expression> Resolver::lower(
@@ -320,12 +337,44 @@ Spanned<IR::Expression> Resolver::lower(
 	FileContext::ID                         file_id,
 	bool                                    allow_functions
 ) {
+	// FIXME: better solution for fail expressions
+	auto error_expression = Spanned<IR::Expression> {
+		span,
+		IR::Expression::make_atom(
+			IR::Expression::Atom::make_identifier(0, IR::Type::make_atom(IR::Type::Atom::make_error()))
+		)
+	};
 	// TODO: operators
-	Spanned<IR::Identifier> operator_ {span, 0};
+	// once we have user-defined operators, we must check that the RESULT isn't a function
 
 	auto lhs = extract_expression(*binary_operation.lhs, scope, file_id),
 	     rhs = extract_expression(*binary_operation.rhs, scope, file_id);
-	// once we have operators, we must check that the RESULT isn't a function
+
+	IR::BuiltInFunction operator_;
+	switch (binary_operation.operation) {
+	case Token::Symbol::Plus:
+		operator_ = lhs.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
+		                  ? IR::BuiltInFunction::AddIntegers
+		                  : IR::BuiltInFunction::AddFloats;
+		break;
+	case Token::Symbol::Minus:
+		operator_ = lhs.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
+		                  ? IR::BuiltInFunction::SubtractIntegers
+		                  : IR::BuiltInFunction::SubtractFloats;
+		break;
+	case Token::Symbol::Star:
+		operator_ = lhs.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
+		                  ? IR::BuiltInFunction::MultiplyIntegers
+		                  : IR::BuiltInFunction::MultiplyFloats;
+		break;
+	case Token::Symbol::Div:
+		operator_ = lhs.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
+		                  ? IR::BuiltInFunction::DivideIntegers
+		                  : IR::BuiltInFunction::DivideFloats;
+		break;
+	default: return error_expression;
+	}
+
 	return Spanned<IR::Expression> {span, IR::Expression::make_function_call(std::move(operator_), {lhs, rhs})};
 }
 
@@ -380,7 +429,7 @@ Spanned<IR::Expression> Resolver::lower(
 
 	// finally, we have the callee and the arguments
 	// TODO: check if the result is a function for allow_functions
-	return {span, IR::Expression::make_function_call(std::move(callee_identifier), std::move(arguments))};
+	return {span, IR::Expression::make_function_call(callee_identifier.value, std::move(arguments))};
 }
 
 Spanned<IR::Expression> Resolver::lower(

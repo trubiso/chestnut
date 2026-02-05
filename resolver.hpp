@@ -339,6 +339,11 @@ private:
 	/// Registers a type in the type pool and returns its ID.
 	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
 
+	/// Returns whether a built-in binary operation exists for the given types.
+	bool exists_built_in_binary_operation(Token::Symbol, TypeInfo const&, TypeInfo const&) const;
+	/// Returns whether a built-in unary operation exists for the given types.
+	bool exists_built_in_unary_operation(Token::Symbol, TypeInfo const&) const;
+
 	/// Sets two types to be the same, avoiding any SameAs cycles. Never fails!
 	void set_same_as(TypeInfo::ID to, TypeInfo::ID from);
 	/// Follows references and returns TypeInfo::SameAs with the new roster or TypeInfo::Bottom if none can be

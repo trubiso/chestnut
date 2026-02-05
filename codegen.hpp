@@ -31,6 +31,8 @@ private:
 
 	llvm::Type* generate_type(IR::Type const&);
 
+	llvm::Value* call_built_in(IR::BuiltInFunction, std::vector<Spanned<IR::Expression::Atom>> const& arguments);
+
 	llvm::Value* generate_expression(IR::Expression::Atom const&);
 	llvm::Value* generate_expression(IR::Expression::FunctionCall const&);
 	llvm::Value* generate_expression(IR::Expression const&);

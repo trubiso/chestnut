@@ -64,7 +64,7 @@ void CodeGenerator::process(std::vector<IR::Module> const& modules) {
 	mpm.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::PromotePass()));
 
 	mpm.run(program_, mam);
-	
+
 	program_.print(llvm::outs(), nullptr);
 
 	auto filename = "output.o";
@@ -123,6 +123,57 @@ llvm::Type* CodeGenerator::generate_type(IR::Type const& type) {
 			return program_.getDataLayout().getIndexType(context_, 0);
 		}
 		[[assume(false)]];
+	}
+}
+
+llvm::Value* CodeGenerator::call_built_in(
+	IR::BuiltInFunction                               function,
+	std::vector<Spanned<IR::Expression::Atom>> const& function_arguments
+) {
+	std::vector<llvm::Value*> arguments {};
+	for (auto const& argument : function_arguments) arguments.push_back(generate_expression(argument.value));
+	bool is_signed = true;
+	if (function_arguments[0].value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer)
+		is_signed = function_arguments[0].value.type.get_atom().get_integer().is_signed();
+	switch (function) {
+	case IR::BuiltInFunction::AddIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateAdd(arguments[0], arguments[1], "", is_signed, !is_signed);
+	case IR::BuiltInFunction::AddFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFAdd(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::SubtractIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateSub(arguments[0], arguments[1], "", is_signed, !is_signed);
+	case IR::BuiltInFunction::SubtractFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFSub(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::MultiplyIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateMul(arguments[0], arguments[1], "", is_signed, !is_signed);
+	case IR::BuiltInFunction::MultiplyFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFMul(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::DivideIntegers:
+		assert(arguments.size() == 2);
+		return is_signed ? builder_.CreateSDiv(arguments[0], arguments[1])
+		                 : builder_.CreateUDiv(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::DivideFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFDiv(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::NegateInteger:
+		assert(arguments.size() == 1);
+		return builder_.CreateSub(
+			builder_.getIntN(
+				function_arguments[0].value.type.get_atom().get_integer().bit_width().value(),
+				0
+			),
+			arguments[0],
+			"",
+			true,
+			false
+		);
+	case IR::BuiltInFunction::NegateFloat: assert(arguments.size() == 1); return builder_.CreateFNeg(arguments[0]);
 	}
 }
 
@@ -217,7 +268,9 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 }
 
 llvm::Value* CodeGenerator::generate_expression(IR::Expression::FunctionCall const& function_call) {
-	llvm::Function*           callee = program_.getFunction(get_name(function_call.callee.value));
+	if (std::holds_alternative<IR::BuiltInFunction>(function_call.callee))
+		return call_built_in(std::get<IR::BuiltInFunction>(function_call.callee), function_call.arguments);
+	llvm::Function* callee = program_.getFunction(get_name(std::get<AST::SymbolID>(function_call.callee)));
 	std::vector<llvm::Value*> arguments {};
 	for (auto const& argument : function_call.arguments) arguments.push_back(generate_expression(argument.value));
 	return builder_.CreateCall(callee, arguments);

@@ -132,6 +132,21 @@ struct Type {
 std::ostream& operator<<(std::ostream&, Type::Atom const&);
 std::ostream& operator<<(std::ostream&, Type const&);
 
+enum class BuiltInFunction {
+	AddIntegers,
+	AddFloats,
+	SubtractIntegers,
+	SubtractFloats,
+	MultiplyIntegers,
+	MultiplyFloats,
+	DivideIntegers,
+	DivideFloats,
+	NegateInteger,
+	NegateFloat,
+};
+
+std::ostream& operator<<(std::ostream&, BuiltInFunction const&);
+
 struct Expression {
 	// atoms must now be either variables or literals
 	struct Atom {
@@ -175,7 +190,7 @@ struct Expression {
 
 	struct FunctionCall {
 		// we need to know what we're calling directly
-		Spanned<Identifier> callee;
+		std::variant<Identifier, BuiltInFunction> callee;
 		// labeled arguments are mere syntactic sugar
 		std::vector<Spanned<Atom>> arguments;
 	};
@@ -194,7 +209,7 @@ struct Expression {
 	}
 
 	inline static Expression
-	make_function_call(Spanned<Identifier>&& callee, std::vector<Spanned<Atom>>&& arguments) {
+	make_function_call(std::variant<Identifier, BuiltInFunction>&& callee, std::vector<Spanned<Atom>>&& arguments) {
 		return Expression(
 			value_t {
 				std::in_place_index<(size_t) Kind::FunctionCall>,

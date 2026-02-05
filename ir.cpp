@@ -34,6 +34,22 @@ std::ostream& operator<<(std::ostream& os, Type const& type) {
 	[[assume(false)]];
 }
 
+std::ostream& operator<<(std::ostream& os, BuiltInFunction const& built_in_function) {
+	os << '%';
+	switch (built_in_function) {
+	case BuiltInFunction::AddIntegers:      return os << "AddIntegers";
+	case BuiltInFunction::AddFloats:        return os << "AddFloats";
+	case BuiltInFunction::SubtractIntegers: return os << "SubtractIntegers";
+	case BuiltInFunction::SubtractFloats:   return os << "SubtractFloats";
+	case BuiltInFunction::MultiplyIntegers: return os << "MultiplyIntegers";
+	case BuiltInFunction::MultiplyFloats:   return os << "MultiplyFloats";
+	case BuiltInFunction::DivideIntegers:   return os << "DivideIntegers";
+	case BuiltInFunction::DivideFloats:     return os << "DivideFloats";
+	case BuiltInFunction::NegateInteger:    return os << "NegateInteger";
+	case BuiltInFunction::NegateFloat:      return os << "NegateFloat";
+	}
+}
+
 std::ostream& operator<<(std::ostream& os, Expression::Atom::Literal const& literal) {
 	switch (literal.kind) {
 	case Expression::Atom::Literal::Kind::Number: os << "(number) "; break;
@@ -52,7 +68,9 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 }
 
 std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call) {
-	os << "(call " << call.callee.value;
+	os << "(call ";
+	if (std::holds_alternative<AST::SymbolID>(call.callee)) os << '@' << std::get<AST::SymbolID>(call.callee);
+	else os << std::get<BuiltInFunction>(call.callee);
 	if (!call.arguments.empty()) {
 		os << " w/ args: (";
 		for (size_t i = 0; i < call.arguments.size(); ++i) {
