@@ -13,10 +13,12 @@ export func do_stuff(c: char) void {
 	return;
 }
 
+func choose_char(a: char, b: char) char => a;
+
 @extern export func putchar(c: char) void;
 
 @extern export func main() void {
-	putchar('H');
+	putchar(choose_char('H', 'h'));
 	putchar('e');
 	putchar('l');
 	putchar('l');

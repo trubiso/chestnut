@@ -6,21 +6,22 @@
 #include <iostream>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/PassManager.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/MC/TargetRegistry.h>
+#include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
 #include <llvm/TargetParser/Host.h>
+#include <llvm/Transforms/Utils/Mem2Reg.h>
 
 void CodeGenerator::process(std::vector<IR::Module> const& modules) {
 	create_all_functions(modules);
 	emit_all_functions(modules);
 
 	// TODO: move all of this to main and make this more sophisticated
-	program_.print(llvm::outs(), nullptr);
-
 	auto target_triple = llvm::sys::getDefaultTargetTriple();
 	llvm::InitializeAllTargetInfos();
 	llvm::InitializeAllTargets();
@@ -44,6 +45,27 @@ void CodeGenerator::process(std::vector<IR::Module> const& modules) {
 	auto target_machine = target->createTargetMachine(target_triple, cpu, features, opt, llvm::Reloc::PIC_);
 
 	program_.setDataLayout(target_machine->createDataLayout());
+
+	llvm::LoopAnalysisManager     lam;
+	llvm::FunctionAnalysisManager fam;
+	llvm::CGSCCAnalysisManager    cgam;
+	llvm::ModuleAnalysisManager   mam;
+
+	llvm::PassBuilder pb(target_machine);
+
+	pb.registerModuleAnalyses(mam);
+	pb.registerCGSCCAnalyses(cgam);
+	pb.registerFunctionAnalyses(fam);
+	pb.registerLoopAnalyses(lam);
+	pb.crossRegisterProxies(lam, fam, cgam, mam);
+
+	llvm::ModulePassManager mpm = pb.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+	// ensure we always run the alloca pass!
+	mpm.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::PromotePass()));
+
+	mpm.run(program_, mam);
+	
+	program_.print(llvm::outs(), nullptr);
 
 	auto filename = "output.o";
 
