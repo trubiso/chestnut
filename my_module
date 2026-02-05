@@ -13,9 +13,14 @@ export func do_stuff(c: char) void {
 	return;
 }
 
+@extern func print_integer(anon x: uint64);
+@extern func print_float(anon x: float32);
+
 func choose_char(a: char, b: char) char => a;
 
 @extern export func putchar(c: char) void;
+
+def sum_numbers ::my_module::my_submodule::sum_numbers;
 
 @extern export func main() void {
 	putchar(choose_char('H', 'h'));
@@ -31,6 +36,12 @@ func choose_char(a: char, b: char) char => a;
 	putchar('l');
 	putchar('d');
 	putchar('!');
+	putchar(' ');
+	const a: uint64 = 42;
+	const b = 69;
+	print_integer(sum_numbers(a, b));
+	const f = 2.3298412390;
+	print_float(f);
 	putchar('\n');
 	return;
 }

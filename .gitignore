@@ -1,4 +1,5 @@
 compile_commands.json
 *.o
 out
+main
 .cache
