@@ -8,7 +8,7 @@
 uint32_t const                     DEFAULT_INTEGER_WIDTH = 32;
 IR::Type::Atom::Float::Width const DEFAULT_FLOAT_WIDTH   = IR::Type::Atom::Float::Width::F32;
 
-IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_origin) {
+IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_origin, bool allow_functions) {
 	TypeInfo const& type = type_pool_.at(type_id);
 	switch (type.kind()) {
 	// bottoms directly correspond to overconstrained types
@@ -50,15 +50,15 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
 	} else if (type.kind() == TypeInfo::Kind::Function) {
-		// FIXME: this still does not have the correct span
-		// FIXME: we're throwing this randomly for the my_module case
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"invalid type",
-				"functions cannot be used as values",
-				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
-			)
-		);
+		if (!allow_functions)
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"invalid type",
+					"functions cannot be used as values",
+					{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+				)
+			);
+		// even if we allow functions, we don't have a type for them :P
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
 	} else if (type.kind() == TypeInfo::Kind::SameAs) {
 		TypeInfo::SameAs const& same_as = type.get_same_as();
@@ -124,8 +124,8 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 	}
 }
 
-IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id) {
-	return reconstruct_type(type_id, type_id);
+IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, bool allow_functions) {
+	return reconstruct_type(type_id, type_id, allow_functions);
 }
 
 Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type> spanned_type, FileContext::ID file_id) {
@@ -189,15 +189,16 @@ Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type> spanned_type, FileCont
 	}
 }
 
-std::tuple<Spanned<IR::Identifier>, IR::Type> Resolver::lower(Spanned<AST::Identifier> const& identifier) {
-	auto [id, type] = lower(identifier.value);
+std::tuple<Spanned<IR::Identifier>, IR::Type>
+Resolver::lower(Spanned<AST::Identifier> const& identifier, bool allow_functions) {
+	auto [id, type] = lower(identifier.value, allow_functions);
 	return {
 		{identifier.span, id},
 		type
 	};
 }
 
-std::tuple<IR::Identifier, IR::Type> Resolver::lower(AST::Identifier const& identifier) {
+std::tuple<IR::Identifier, IR::Type> Resolver::lower(AST::Identifier const& identifier, bool allow_functions) {
 	// for identifiers, we need to ensure that they are fully resolved
 	if (!identifier.id.has_value() || identifier.id.value().size() != 1) {
 		// we have no real way of skipping as of right now unfortunately
@@ -205,20 +206,25 @@ std::tuple<IR::Identifier, IR::Type> Resolver::lower(AST::Identifier const& iden
 		return {0, IR::Type::make_atom(IR::Type::Atom::make_error())};
 	}
 	AST::SymbolID id = identifier.id.value()[0];
-	return {id, reconstruct_type(symbol_pool_.at(id).type)};
+	return {id, reconstruct_type(symbol_pool_.at(id).type, allow_functions)};
 }
 
 Spanned<IR::Identifier> Resolver::lower_identifier(Spanned<AST::Identifier> const& identifier) {
 	return {identifier.span, identifier.value.id.value()[0]};
 }
 
-Spanned<IR::Expression::Atom>
-Resolver::extract_expression(AST::Expression const& expression, Span span, IR::Scope& scope, FileContext::ID file_id) {
+Spanned<IR::Expression::Atom> Resolver::extract_expression(
+	AST::Expression const& expression,
+	Span                   span,
+	IR::Scope&             scope,
+	FileContext::ID        file_id,
+	bool                   allow_functions
+) {
 	AST::SymbolID id = symbol_next();
 	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, expression.type.value(), false, false, {}});
 	Spanned<IR::Identifier> name {span, id};
 
-	IR::Type type = reconstruct_type(expression.type.value());
+	IR::Type type = reconstruct_type(expression.type.value(), allow_functions);
 	scope.push_back(
 		Spanned<IR::Statement> {
 			span,
@@ -234,9 +240,13 @@ Resolver::extract_expression(AST::Expression const& expression, Span span, IR::S
 	return {name.span, IR::Expression::Atom::make_identifier(std::move(name.value), type)};
 }
 
-Spanned<IR::Expression::Atom>
-Resolver::extract_expression(Spanned<AST::Expression> const& expression, IR::Scope& scope, FileContext::ID file_id) {
-	return extract_expression(expression.value, expression.span, scope, file_id);
+Spanned<IR::Expression::Atom> Resolver::extract_expression(
+	Spanned<AST::Expression> const& expression,
+	IR::Scope&                      scope,
+	FileContext::ID                 file_id,
+	bool                            allow_functions
+) {
+	return extract_expression(expression.value, expression.span, scope, file_id, allow_functions);
 }
 
 Spanned<IR::Expression> Resolver::lower(
@@ -244,7 +254,8 @@ Spanned<IR::Expression> Resolver::lower(
 	TypeInfo::ID                 type_id,
 	Span                         span,
 	IR::Scope&                   scope,
-	FileContext::ID              file_id
+	FileContext::ID              file_id,
+	bool                         allow_functions
 ) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
@@ -281,8 +292,9 @@ Spanned<IR::Expression> Resolver::lower(
 			)};
 	case AST::Expression::Atom::Kind::Identifier: break;
 	}
-	// for identifiers, we need to extract the type as well
-	auto [identifier, type] = lower(atom.get_identifier());
+	// for identifiers, we need to extract the type as well.
+	// only identifiers can be functions!
+	auto [identifier, type] = lower(atom.get_identifier(), allow_functions);
 	return {span, IR::Expression::make_atom(IR::Expression::Atom::make_identifier(identifier, type))};
 }
 
@@ -290,12 +302,14 @@ Spanned<IR::Expression> Resolver::lower(
 	AST::Expression::UnaryOperation const& unary_operation,
 	Span                                   span,
 	IR::Scope&                             scope,
-	FileContext::ID                        file_id
+	FileContext::ID                        file_id,
+	bool                                   allow_functions
 ) {
 	// TODO: operators
 	Spanned<IR::Identifier> operator_ {span, 0};
 
 	auto operand = extract_expression(*unary_operation.operand, scope, file_id);
+	// once we have operators, we must check that the RESULT isn't a function
 	return Spanned<IR::Expression> {span, IR::Expression::make_function_call(std::move(operator_), {operand})};
 }
 
@@ -303,13 +317,15 @@ Spanned<IR::Expression> Resolver::lower(
 	AST::Expression::BinaryOperation const& binary_operation,
 	Span                                    span,
 	IR::Scope&                              scope,
-	FileContext::ID                         file_id
+	FileContext::ID                         file_id,
+	bool                                    allow_functions
 ) {
 	// TODO: operators
 	Spanned<IR::Identifier> operator_ {span, 0};
 
 	auto lhs = extract_expression(*binary_operation.lhs, scope, file_id),
 	     rhs = extract_expression(*binary_operation.rhs, scope, file_id);
+	// once we have operators, we must check that the RESULT isn't a function
 	return Spanned<IR::Expression> {span, IR::Expression::make_function_call(std::move(operator_), {lhs, rhs})};
 }
 
@@ -317,7 +333,8 @@ Spanned<IR::Expression> Resolver::lower(
 	AST::Expression::FunctionCall const& function_call,
 	Span                                 span,
 	IR::Scope&                           scope,
-	FileContext::ID                      file_id
+	FileContext::ID                      file_id,
+	bool                                 allow_functions
 ) {
 	// FIXME: better solution for fail expressions
 	auto error_expression = Spanned<IR::Expression> {
@@ -326,7 +343,7 @@ Spanned<IR::Expression> Resolver::lower(
 			IR::Expression::Atom::make_identifier(0, IR::Type::make_atom(IR::Type::Atom::make_error()))
 		)
 	};
-	auto callee = lower(*function_call.callee, scope, file_id);
+	auto callee = lower(*function_call.callee, scope, file_id, true);
 	// if the callee is not valid, we've already thrown diagnostics about it
 	if (callee.value.kind() != IR::Expression::Kind::Atom
 	    || callee.value.get_atom().kind() != IR::Expression::Atom::Kind::Identifier)
@@ -362,25 +379,36 @@ Spanned<IR::Expression> Resolver::lower(
 	assert(arguments.size() == argument_count);
 
 	// finally, we have the callee and the arguments
+	// TODO: check if the result is a function for allow_functions
 	return {span, IR::Expression::make_function_call(std::move(callee_identifier), std::move(arguments))};
 }
 
-Spanned<IR::Expression>
-Resolver::lower(AST::Expression const& expression, Span span, IR::Scope& scope, FileContext::ID file_id) {
+Spanned<IR::Expression> Resolver::lower(
+	AST::Expression const& expression,
+	Span                   span,
+	IR::Scope&             scope,
+	FileContext::ID        file_id,
+	bool                   allow_functions
+) {
 	switch (expression.kind()) {
 	case AST::Expression::Kind::Atom:
-		return lower(expression.get_atom(), expression.type.value(), span, scope, file_id);
+		return lower(expression.get_atom(), expression.type.value(), span, scope, file_id, allow_functions);
 	case AST::Expression::Kind::UnaryOperation:
-		return lower(expression.get_unary_operation(), span, scope, file_id);
+		return lower(expression.get_unary_operation(), span, scope, file_id, allow_functions);
 	case AST::Expression::Kind::BinaryOperation:
-		return lower(expression.get_binary_operation(), span, scope, file_id);
-	case AST::Expression::Kind::FunctionCall: return lower(expression.get_function_call(), span, scope, file_id);
+		return lower(expression.get_binary_operation(), span, scope, file_id, allow_functions);
+	case AST::Expression::Kind::FunctionCall:
+		return lower(expression.get_function_call(), span, scope, file_id, allow_functions);
 	}
 }
 
-Spanned<IR::Expression>
-Resolver::lower(Spanned<AST::Expression> const& expression, IR::Scope& scope, FileContext::ID file_id) {
-	return lower(expression.value, expression.span, scope, file_id);
+Spanned<IR::Expression> Resolver::lower(
+	Spanned<AST::Expression> const& expression,
+	IR::Scope&                      scope,
+	FileContext::ID                 file_id,
+	bool                            allow_functions
+) {
+	return lower(expression.value, expression.span, scope, file_id, allow_functions);
 }
 
 std::optional<Spanned<IR::Statement>>

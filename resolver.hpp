@@ -406,29 +406,29 @@ private:
 	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
 	/// values and expressions, as it does not allow functions or modules to be values directly. It also takes in a
 	/// type origin, which overrides the type ID for diagnostics.
-	IR::Type reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_origin);
+	IR::Type reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_origin, bool allow_functions = false);
 	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
 	/// values and expressions, as it does not allow functions or modules to be values directly.
-	IR::Type reconstruct_type(TypeInfo::ID);
+	IR::Type reconstruct_type(TypeInfo::ID, bool allow_functions = false);
 	/// Lowers a type known since parsing, turning non-specific types specific.
 	Spanned<IR::Type> lower_type(Spanned<AST::Type>, FileContext::ID);
 
 	/// Lowers any identifier into its IR equivalent and type.
-	std::tuple<Spanned<IR::Identifier>, IR::Type> lower(Spanned<AST::Identifier> const&);
+	std::tuple<Spanned<IR::Identifier>, IR::Type> lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
 	/// Lowers any identifier into its IR equivalent and type.
-	std::tuple<IR::Identifier, IR::Type> lower(AST::Identifier const&);
+	std::tuple<IR::Identifier, IR::Type> lower(AST::Identifier const&, bool allow_functions = false);
 	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-alias module items).
 	Spanned<IR::Identifier> lower_identifier(Spanned<AST::Identifier> const&);
 
-	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, IR::Scope&, FileContext::ID);
-	Spanned<IR::Expression::Atom> extract_expression(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression::Atom> extract_expression(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
 
-	Spanned<IR::Expression> lower(AST::Expression::FunctionCall const&, Span, IR::Scope&, FileContext::ID);
-	Spanned<IR::Expression> lower(AST::Expression::Atom const&, TypeInfo::ID, Span, IR::Scope&, FileContext::ID);
-	Spanned<IR::Expression> lower(AST::Expression::UnaryOperation const&, Span, IR::Scope&, FileContext::ID);
-	Spanned<IR::Expression> lower(AST::Expression::BinaryOperation const&, Span, IR::Scope&, FileContext::ID);
-	Spanned<IR::Expression> lower(AST::Expression const&, Span, IR::Scope&, FileContext::ID);
-	Spanned<IR::Expression> lower(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID);
+	Spanned<IR::Expression> lower(AST::Expression::FunctionCall const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(AST::Expression::Atom const&, TypeInfo::ID, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(AST::Expression::UnaryOperation const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(AST::Expression::BinaryOperation const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
 	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Declare const&, Span, IR::Scope&, FileContext::ID);
 	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Set const&, Span, IR::Scope&, FileContext::ID);
 	std::optional<Spanned<IR::Statement>> lower(Spanned<AST::Statement> const&, IR::Scope&, FileContext::ID);
