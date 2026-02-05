@@ -434,8 +434,6 @@ private:
 
 	Spanned<IR::Expression> lower(AST::Expression::FunctionCall const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression> lower(AST::Expression::Atom const&, TypeInfo::ID, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression> lower(AST::Expression::UnaryOperation const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression> lower(AST::Expression::BinaryOperation const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression> lower(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression> lower(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
 	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Declare const&, Span, IR::Scope&, FileContext::ID);

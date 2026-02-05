@@ -299,86 +299,6 @@ Spanned<IR::Expression> Resolver::lower(
 }
 
 Spanned<IR::Expression> Resolver::lower(
-	AST::Expression::UnaryOperation const& unary_operation,
-	Span                                   span,
-	IR::Scope&                             scope,
-	FileContext::ID                        file_id,
-	bool                                   allow_functions
-) {
-	// FIXME: better solution for fail expressions
-	auto error_expression = Spanned<IR::Expression> {
-		span,
-		IR::Expression::make_atom(
-			IR::Expression::Atom::make_identifier(0, IR::Type::make_atom(IR::Type::Atom::make_error()))
-		)
-	};
-	// TODO: user-defined operators
-	// once we have user-defined operators, we must check that the RESULT isn't a function
-
-	auto operand = extract_expression(*unary_operation.operand, scope, file_id);
-
-	IR::BuiltInFunction operator_;
-	switch (unary_operation.operation) {
-	case Token::Symbol::Minus:
-		operator_ = operand.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
-		                  ? IR::BuiltInFunction::NegateInteger
-		                  : IR::BuiltInFunction::NegateFloat;
-		break;
-	default: return error_expression;
-	}
-
-	return Spanned<IR::Expression> {span, IR::Expression::make_function_call(operator_, {operand})};
-}
-
-Spanned<IR::Expression> Resolver::lower(
-	AST::Expression::BinaryOperation const& binary_operation,
-	Span                                    span,
-	IR::Scope&                              scope,
-	FileContext::ID                         file_id,
-	bool                                    allow_functions
-) {
-	// FIXME: better solution for fail expressions
-	auto error_expression = Spanned<IR::Expression> {
-		span,
-		IR::Expression::make_atom(
-			IR::Expression::Atom::make_identifier(0, IR::Type::make_atom(IR::Type::Atom::make_error()))
-		)
-	};
-	// TODO: operators
-	// once we have user-defined operators, we must check that the RESULT isn't a function
-
-	auto lhs = extract_expression(*binary_operation.lhs, scope, file_id),
-	     rhs = extract_expression(*binary_operation.rhs, scope, file_id);
-
-	IR::BuiltInFunction operator_;
-	switch (binary_operation.operation) {
-	case Token::Symbol::Plus:
-		operator_ = lhs.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
-		                  ? IR::BuiltInFunction::AddIntegers
-		                  : IR::BuiltInFunction::AddFloats;
-		break;
-	case Token::Symbol::Minus:
-		operator_ = lhs.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
-		                  ? IR::BuiltInFunction::SubtractIntegers
-		                  : IR::BuiltInFunction::SubtractFloats;
-		break;
-	case Token::Symbol::Star:
-		operator_ = lhs.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
-		                  ? IR::BuiltInFunction::MultiplyIntegers
-		                  : IR::BuiltInFunction::MultiplyFloats;
-		break;
-	case Token::Symbol::Div:
-		operator_ = lhs.value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer
-		                  ? IR::BuiltInFunction::DivideIntegers
-		                  : IR::BuiltInFunction::DivideFloats;
-		break;
-	default: return error_expression;
-	}
-
-	return Spanned<IR::Expression> {span, IR::Expression::make_function_call(std::move(operator_), {lhs, rhs})};
-}
-
-Spanned<IR::Expression> Resolver::lower(
 	AST::Expression::FunctionCall const& function_call,
 	Span                                 span,
 	IR::Scope&                           scope,
@@ -442,12 +362,11 @@ Spanned<IR::Expression> Resolver::lower(
 	switch (expression.kind()) {
 	case AST::Expression::Kind::Atom:
 		return lower(expression.get_atom(), expression.type.value(), span, scope, file_id, allow_functions);
-	case AST::Expression::Kind::UnaryOperation:
-		return lower(expression.get_unary_operation(), span, scope, file_id, allow_functions);
-	case AST::Expression::Kind::BinaryOperation:
-		return lower(expression.get_binary_operation(), span, scope, file_id, allow_functions);
 	case AST::Expression::Kind::FunctionCall:
 		return lower(expression.get_function_call(), span, scope, file_id, allow_functions);
+	case AST::Expression::Kind::UnaryOperation:
+	case AST::Expression::Kind::BinaryOperation:
+		[[assume(false)]];
 	}
 }
 
