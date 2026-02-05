@@ -348,7 +348,7 @@ private:
 	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
 
 	/// Gets all candidate functions for an operator.
-	std::vector<AST::SymbolID> get_operator_candidates(Token::Symbol operator_, bool binary);
+	std::vector<AST::SymbolID> get_operator_candidates(Token::Symbol operator_, bool binary) const;
 
 	/// Sets two types to be the same, avoiding any SameAs cycles. Never fails!
 	void set_same_as(TypeInfo::ID to, TypeInfo::ID from);

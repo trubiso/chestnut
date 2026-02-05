@@ -204,6 +204,19 @@ Resolver::register_type(TypeInfo&& type, Span span, FileContext::ID file_id, std
 	return id;
 }
 
+std::vector<AST::SymbolID> Resolver::get_operator_candidates(Token::Symbol operator_, bool binary) const {
+	std::vector<AST::SymbolID> symbols {};
+	for (Symbol const& symbol : symbol_pool_) {
+		// we store operators with the name of the symbol for now (this will most likely change)
+		if (symbol.name != get_variant_name(operator_)) continue;
+		// this should never fail
+		if (type_pool_.at(symbol.type).kind() != TypeInfo::Kind::Function) continue;
+		if (type_pool_.at(symbol.type).get_function().arguments.size() != (binary ? 2 : 1)) continue;
+		symbols.push_back(symbol.id);
+	}
+	return symbols;
+}
+
 void Resolver::set_same_as(TypeInfo::ID to, TypeInfo::ID from) {
 	// set_same_as(a, a) is a noop
 	if (to == from) return;
