@@ -208,11 +208,12 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression const& expression
 	}
 }
 
-void CodeGenerator::emit_statement(IR::Statement::Declare const& declare) {
+void CodeGenerator::emit_statement(IR::Statement::Declare const& declare, llvm::BasicBlock* entry) {
 	llvm::Type*  type  = generate_type(declare.type);
 	llvm::Value* value = declare.value.has_value() ? generate_expression(declare.value.value().value) : nullptr;
 	// TODO: move alloca to beginning of function
-	variables_[declare.name.value] = builder_.CreateAlloca(type, nullptr, get_name(declare.name.value));
+	variables_[declare.name.value]
+		= llvm::IRBuilder<>(entry, entry->begin()).CreateAlloca(type, nullptr, get_name(declare.name.value));
 	if (value) builder_.CreateStore(value, variables_[declare.name.value]);
 }
 
@@ -231,9 +232,9 @@ void CodeGenerator::emit_statement(IR::Statement::Return const& return_) {
 	builder_.CreateRet(value);
 }
 
-void CodeGenerator::emit_statement(IR::Statement const& statement) {
+void CodeGenerator::emit_statement(IR::Statement const& statement, llvm::BasicBlock* entry) {
 	switch (statement.kind()) {
-	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare());
+	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare(), entry);
 	case IR::Statement::Kind::Set:     return emit_statement(statement.get_set());
 	case IR::Statement::Kind::Call:    generate_expression(statement.get_call()); return;
 	case IR::Statement::Kind::Return:  return emit_statement(statement.get_return());
@@ -252,11 +253,12 @@ void CodeGenerator::emit_function(IR::Function const& ir_function) {
 	for (auto& arg : function->args()) {
 		AST::SymbolID argument_id   = ir_function.arguments[i++].name.value;
 		std::string   argument_name = get_name(argument_id);
-		variables_[argument_id]     = builder_.CreateAlloca(arg.getType(), nullptr, argument_name);
+		variables_[argument_id]
+			= llvm::IRBuilder<>(block, block->begin()).CreateAlloca(arg.getType(), nullptr, argument_name);
 		builder_.CreateStore(&arg, variables_[argument_id]);
 	}
 
-	for (Spanned<IR::Statement> const& statement : ir_function.body.value()) emit_statement(statement.value);
+	for (Spanned<IR::Statement> const& statement : ir_function.body.value()) emit_statement(statement.value, block);
 
 	llvm::verifyFunction(*function, &llvm::errs());
 }

@@ -35,10 +35,10 @@ private:
 	llvm::Value* generate_expression(IR::Expression::FunctionCall const&);
 	llvm::Value* generate_expression(IR::Expression const&);
 
-	void emit_statement(IR::Statement::Declare const&);
+	void emit_statement(IR::Statement::Declare const&, llvm::BasicBlock*);
 	void emit_statement(IR::Statement::Set const&);
 	void emit_statement(IR::Statement::Return const&);
-	void emit_statement(IR::Statement const&);
+	void emit_statement(IR::Statement const&, llvm::BasicBlock*);
 
 	/// Assumes the function has already been created.
 	void emit_function(IR::Function const&);
