@@ -208,7 +208,7 @@ private:
 		std::string     name;
 
 		/// Holds the module item that this points to, if any.
-		std::variant<AST::Module*, AST::Function*, IR::Module, IR::Function, std::monostate> item;
+		std::variant<AST::Module*, AST::Function*, IR::Module, IR::Function, IR::BuiltInFunction, std::monostate> item;
 
 		TypeInfo::ID type;
 
@@ -254,6 +254,14 @@ private:
 	void identify(AST::Function&, bool exported, FileContext::ID);
 	/// Identifies all module items with an ID, but does not resolve aliases.
 	void identify_module_items();
+	/// Identifies a built-in operator.
+	void identify_built_in_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	/// Identifies a built-in unary operator which returns the same type as it takes in.
+	void identify_built_in_unary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	/// Identifies a built-in binary operator which returns the same type as it takes in.
+	void identify_built_in_binary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	/// Identifies all built-in operators.
+	void identify_built_in_operators();
 
 	/// === SYMBOLS ===
 

@@ -3,6 +3,7 @@
 #include <iostream>
 
 std::vector<IR::Module> Resolver::resolve() {
+	identify_built_in_operators();
 	populate_module_table();
 	identify_module_items();
 	resolve_identifiers();
