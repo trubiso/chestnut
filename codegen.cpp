@@ -276,9 +276,18 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 }
 
 llvm::Value* CodeGenerator::generate_expression(IR::Expression::FunctionCall const& function_call) {
+	// we might be calling a built-in function
 	if (std::holds_alternative<IR::BuiltInFunction>(function_call.callee))
 		return call_built_in(std::get<IR::BuiltInFunction>(function_call.callee), function_call.arguments);
-	llvm::Function* callee = program_.getFunction(get_name(std::get<AST::SymbolID>(function_call.callee)));
+	AST::SymbolID callee_id = std::get<AST::SymbolID>(function_call.callee);
+	// or even a symbol that points to a built-in function!
+	if (std::holds_alternative<IR::BuiltInFunction>(symbols_.at(callee_id).item))
+		return call_built_in(
+			std::get<IR::BuiltInFunction>(symbols_.at(callee_id).item),
+			function_call.arguments
+		);
+	// this should be an actual function now hopefully
+	llvm::Function*           callee = program_.getFunction(get_name(callee_id));
 	std::vector<llvm::Value*> arguments {};
 	for (auto const& argument : function_call.arguments) arguments.push_back(generate_expression(argument.value));
 	return builder_.CreateCall(callee, arguments);

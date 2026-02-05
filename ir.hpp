@@ -336,7 +336,7 @@ struct Symbol {
 	std::string     name;
 
 	/// Holds the module item that this points to, if any.
-	std::variant<Module, Function, std::monostate> item;
+	std::variant<Module, Function, BuiltInFunction, std::monostate> item;
 
 	/// Whether this symbol can be mutated (should be true only for mutable declarations and arguments).
 	bool mutable_;

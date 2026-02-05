@@ -52,6 +52,8 @@ std::vector<IR::Symbol> Resolver::export_symbols() const {
 					? decltype(IR::Symbol::item) {std::get<IR::Module>(symbol.item)}
 				: std::holds_alternative<IR::Function>(symbol.item)
 					? decltype(IR::Symbol::item) {std::get<IR::Function>(symbol.item)}
+				: std::holds_alternative<IR::BuiltInFunction>(symbol.item)
+					? decltype(IR::Symbol::item) {std::get<IR::BuiltInFunction>(symbol.item)}
 					: std::monostate {},
 				symbol.mutable_
 			}
@@ -71,6 +73,8 @@ void Resolver::dump() const {
 }
 
 FileContext Resolver::get_context(FileContext::ID file_id) const {
+	// TODO: don't do this
+	if (file_id == 42) file_id = 0;
 	return FileContext {
 		parsed_files.at(file_id).name,
 		file_id,
