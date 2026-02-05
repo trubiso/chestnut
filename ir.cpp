@@ -37,16 +37,20 @@ std::ostream& operator<<(std::ostream& os, Type const& type) {
 std::ostream& operator<<(std::ostream& os, BuiltInFunction const& built_in_function) {
 	os << '%';
 	switch (built_in_function) {
-	case BuiltInFunction::AddIntegers:      return os << "AddIntegers";
-	case BuiltInFunction::AddFloats:        return os << "AddFloats";
-	case BuiltInFunction::SubtractIntegers: return os << "SubtractIntegers";
-	case BuiltInFunction::SubtractFloats:   return os << "SubtractFloats";
-	case BuiltInFunction::MultiplyIntegers: return os << "MultiplyIntegers";
-	case BuiltInFunction::MultiplyFloats:   return os << "MultiplyFloats";
-	case BuiltInFunction::DivideIntegers:   return os << "DivideIntegers";
-	case BuiltInFunction::DivideFloats:     return os << "DivideFloats";
-	case BuiltInFunction::NegateInteger:    return os << "NegateInteger";
-	case BuiltInFunction::NegateFloat:      return os << "NegateFloat";
+	case BuiltInFunction::AddUIntegers:      return os << "AddUIntegers";
+	case BuiltInFunction::AddSIntegers:      return os << "AddSIntegers";
+	case BuiltInFunction::AddFloats:         return os << "AddFloats";
+	case BuiltInFunction::SubtractUIntegers: return os << "SubtractUIntegers";
+	case BuiltInFunction::SubtractSIntegers: return os << "SubtractSIntegers";
+	case BuiltInFunction::SubtractFloats:    return os << "SubtractFloats";
+	case BuiltInFunction::MultiplyUIntegers: return os << "MultiplyUIntegers";
+	case BuiltInFunction::MultiplySIntegers: return os << "MultiplySIntegers";
+	case BuiltInFunction::MultiplyFloats:    return os << "MultiplyFloats";
+	case BuiltInFunction::DivideUIntegers:   return os << "DivideUIntegers";
+	case BuiltInFunction::DivideSIntegers:   return os << "DivideSIntegers";
+	case BuiltInFunction::DivideFloats:      return os << "DivideFloats";
+	case BuiltInFunction::NegateSInteger:    return os << "NegateSInteger";
+	case BuiltInFunction::NegateFloat:       return os << "NegateFloat";
 	}
 }
 

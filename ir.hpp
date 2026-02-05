@@ -133,15 +133,19 @@ std::ostream& operator<<(std::ostream&, Type::Atom const&);
 std::ostream& operator<<(std::ostream&, Type const&);
 
 enum class BuiltInFunction {
-	AddIntegers,
+	AddUIntegers,
+	AddSIntegers,
 	AddFloats,
-	SubtractIntegers,
+	SubtractUIntegers,
+	SubtractSIntegers,
 	SubtractFloats,
-	MultiplyIntegers,
+	MultiplyUIntegers,
+	MultiplySIntegers,
 	MultiplyFloats,
-	DivideIntegers,
+	DivideUIntegers,
+	DivideSIntegers,
 	DivideFloats,
-	NegateInteger,
+	NegateSInteger,
 	NegateFloat,
 };
 
