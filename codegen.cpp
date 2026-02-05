@@ -132,36 +132,44 @@ llvm::Value* CodeGenerator::call_built_in(
 ) {
 	std::vector<llvm::Value*> arguments {};
 	for (auto const& argument : function_arguments) arguments.push_back(generate_expression(argument.value));
-	bool is_signed = true;
-	if (function_arguments[0].value.type.get_atom().kind() == IR::Type::Atom::Kind::Integer)
-		is_signed = function_arguments[0].value.type.get_atom().get_integer().is_signed();
 	switch (function) {
-	case IR::BuiltInFunction::AddIntegers:
+	case IR::BuiltInFunction::AddUIntegers:
 		assert(arguments.size() == 2);
-		return builder_.CreateAdd(arguments[0], arguments[1], "", is_signed, !is_signed);
+		return builder_.CreateAdd(arguments[0], arguments[1], "", false, true);
+	case IR::BuiltInFunction::AddSIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateAdd(arguments[0], arguments[1], "", true, false);
 	case IR::BuiltInFunction::AddFloats:
 		assert(arguments.size() == 2);
 		return builder_.CreateFAdd(arguments[0], arguments[1]);
-	case IR::BuiltInFunction::SubtractIntegers:
+	case IR::BuiltInFunction::SubtractUIntegers:
 		assert(arguments.size() == 2);
-		return builder_.CreateSub(arguments[0], arguments[1], "", is_signed, !is_signed);
+		return builder_.CreateSub(arguments[0], arguments[1], "", false, true);
+	case IR::BuiltInFunction::SubtractSIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateSub(arguments[0], arguments[1], "", true, false);
 	case IR::BuiltInFunction::SubtractFloats:
 		assert(arguments.size() == 2);
 		return builder_.CreateFSub(arguments[0], arguments[1]);
-	case IR::BuiltInFunction::MultiplyIntegers:
+	case IR::BuiltInFunction::MultiplyUIntegers:
 		assert(arguments.size() == 2);
-		return builder_.CreateMul(arguments[0], arguments[1], "", is_signed, !is_signed);
+		return builder_.CreateMul(arguments[0], arguments[1], "", false, true);
+	case IR::BuiltInFunction::MultiplySIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateMul(arguments[0], arguments[1], "", true, false);
 	case IR::BuiltInFunction::MultiplyFloats:
 		assert(arguments.size() == 2);
 		return builder_.CreateFMul(arguments[0], arguments[1]);
-	case IR::BuiltInFunction::DivideIntegers:
+	case IR::BuiltInFunction::DivideUIntegers:
 		assert(arguments.size() == 2);
-		return is_signed ? builder_.CreateSDiv(arguments[0], arguments[1])
-		                 : builder_.CreateUDiv(arguments[0], arguments[1]);
+		return builder_.CreateUDiv(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::DivideSIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateSDiv(arguments[0], arguments[1]);
 	case IR::BuiltInFunction::DivideFloats:
 		assert(arguments.size() == 2);
 		return builder_.CreateFDiv(arguments[0], arguments[1]);
-	case IR::BuiltInFunction::NegateInteger:
+	case IR::BuiltInFunction::NegateSInteger:
 		assert(arguments.size() == 1);
 		return builder_.CreateSub(
 			builder_.getIntN(
