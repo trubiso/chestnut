@@ -161,7 +161,7 @@ void Resolver::identify_built_in_operators() {
 	                 {IR::BuiltInFunction::DivideSIntegers, IR::BuiltInFunction::DivideUIntegers}    }
         };
 	for (auto [operator_, functions] : binary_integer_operators) {
-		auto [unsigned_, signed_] = functions;
+		auto [signed_, unsigned_] = functions;
 		for (uint32_t size : integer_sizes) {
 			identify_built_in_binary_operator(
 				unsigned_,
