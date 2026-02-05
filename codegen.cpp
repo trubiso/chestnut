@@ -297,6 +297,9 @@ void CodeGenerator::create_function(IR::Function const& function) {
 		llvm::Value* value = builder_.CreateCall(defined, arguments);
 		if (value->getType()->isVoidTy()) builder_.CreateRetVoid();
 		else builder_.CreateRet(value);
+		// if we don't have a body, we want to actually replace all calls to the alias with calls to the
+		// function
+		if (!function.body.has_value()) alias->addFnAttr(llvm::Attribute::AlwaysInline);
 		return;
 	}
 
