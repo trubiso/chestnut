@@ -221,3 +221,129 @@ void Resolver::identify_built_in_operators() {
 			TypeInfo::make_known_float(TypeInfo::KnownFloat {width})
 		);
 }
+
+void Resolver::identify_populate_labels(
+	Spanned<AST::Statement>&                                             statement,
+	std::unordered_map<std::string, Spanned<AST::Statement::Label::ID>>& labels,
+	AST::Statement::Label::ID&                                           counter,
+	FileContext::ID                                                      file_id
+) {
+	switch (statement.value.kind()) {
+	case AST::Statement::Kind::Declare:
+	case AST::Statement::Kind::Set:
+	case AST::Statement::Kind::Expression:
+	case AST::Statement::Kind::Return:     return;
+	case AST::Statement::Kind::Scope:
+		for (Spanned<AST::Statement>& substatement : statement.value.get_scope())
+			identify_populate_labels(substatement, labels, counter, file_id);
+		return;
+	// we will deal with goto later!
+	case AST::Statement::Kind::Goto:  return;
+	case AST::Statement::Kind::Label: break;
+	}
+
+	if (statement.value.kind() == AST::Statement::Kind::Label) {
+		std::string const& name = statement.value.get_label().name;
+		if (labels.contains(name)) {
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"label redefinition",
+					"labels must have unique names",
+					{Diagnostic::Sample(
+						 get_context(file_id),
+						 {Diagnostic::Sample::Label(
+							 labels.at(name).span,
+							 "defined here",
+							 OutFmt::Color::Cyan
+						 )}
+					 ),
+			                 Diagnostic::Sample(
+						 get_context(file_id),
+						 {Diagnostic::Sample::Label(
+							 statement.span,
+							 "redefined here",
+							 OutFmt::Color::Red
+						 )}
+					 )}
+				)
+			);
+			return;
+		}
+		AST::Statement::Label::ID id = counter++;
+		labels.emplace(name, Spanned<AST::Statement::Label::ID> {statement.span, id});
+		statement.value.get_label().id = id;
+		return;
+	}
+}
+
+void Resolver::identify_labels(
+	Spanned<AST::Statement>&                                                   statement,
+	std::unordered_map<std::string, Spanned<AST::Statement::Label::ID>> const& labels,
+	FileContext::ID                                                            file_id
+) {
+	switch (statement.value.kind()) {
+	case AST::Statement::Kind::Declare:
+	case AST::Statement::Kind::Set:
+	case AST::Statement::Kind::Expression:
+	case AST::Statement::Kind::Return:     return;
+	case AST::Statement::Kind::Scope:
+		for (Spanned<AST::Statement>& substatement : statement.value.get_scope())
+			identify_labels(substatement, labels, file_id);
+		return;
+	// labels are already identified
+	case AST::Statement::Kind::Label: return;
+	case AST::Statement::Kind::Goto:  break;
+	}
+
+	if (statement.value.kind() == AST::Statement::Kind::Goto) {
+		std::string const& destination = statement.value.get_goto().destination;
+		if (!labels.contains(destination)) {
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"unknown label",
+					{
+						Diagnostic::Sample(
+							get_context(file_id),
+							statement.span,
+							OutFmt::Color::Red
+						),
+					}
+				)
+			);
+			return;
+		}
+		AST::Statement::Label::ID id = labels.at(destination).value;
+
+		statement.value.get_goto().destination_id = id;
+		return;
+	}
+}
+
+void Resolver::identify_labels(AST::Function& function, FileContext::ID file_id) {
+	if (!function.body.has_value()) return;
+	std::unordered_map<std::string, Spanned<AST::Statement::Label::ID>> labels {};
+
+	AST::Statement::Label::ID counter = 1;  // we save 0 for the entry
+	for (Spanned<AST::Statement>& statement : function.body.value()) {
+		identify_populate_labels(statement, labels, counter, file_id);
+	}
+
+	// now that we have the label table, we can identify labels
+	for (Spanned<AST::Statement>& statement : function.body.value()) {
+		identify_labels(statement, labels, file_id);
+	}
+}
+
+void Resolver::identify_labels(AST::Module& module, FileContext::ID file_id) {
+	for (Spanned<AST::Module::Item>& item : module.body.items) {
+		auto& value = std::get<AST::Module::InnerItem>(item.value);
+		if (std::holds_alternative<AST::Function>(value))
+			identify_labels(std::get<AST::Function>(value), file_id);
+		else if (std::holds_alternative<AST::Module>(value))
+			identify_labels(std::get<AST::Module>(value), file_id);
+	}
+}
+
+void Resolver::identify_labels() {
+	for (ParsedFile& file : parsed_files) { identify_labels(file.module, file.file_id); }
+}

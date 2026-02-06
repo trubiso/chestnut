@@ -346,6 +346,8 @@ void Resolver::resolve(Spanned<AST::Statement>& statement, Scope& scope, FileCon
 		return;
 	case AST::Statement::Kind::Return: resolve(statement.value.get_return(), scope, file_id); return;
 	case AST::Statement::Kind::Scope:  resolve(statement.value.get_scope(), scope, file_id); return;
+	case AST::Statement::Kind::Label:
+	case AST::Statement::Kind::Goto:   return;
 	}
 }
 

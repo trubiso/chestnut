@@ -208,7 +208,14 @@ private:
 		std::string     name;
 
 		/// Holds the module item that this points to, if any.
-		std::variant<AST::Module*, AST::Function*, IR::Module, IR::Function, IR::BuiltInFunction, std::monostate> item;
+		std::variant<
+			AST::Module*,
+			AST::Function*,
+			IR::Module,
+			IR::Function,
+			IR::BuiltInFunction,
+			std::monostate>
+			item;
 
 		TypeInfo::ID type;
 
@@ -262,6 +269,25 @@ private:
 	void identify_built_in_binary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
 	/// Identifies all built-in operators.
 	void identify_built_in_operators();
+	/// Populates the label map given a statement.
+	void identify_populate_labels(
+		Spanned<AST::Statement>&,
+		std::unordered_map<std::string, Spanned<AST::Statement::Label::ID>>&,
+		AST::Statement::Label::ID& counter,
+		FileContext::ID
+	);
+	/// Identifies all labels and statements using them given a statement and a mapping from names to label IDs.
+	void identify_labels(
+		Spanned<AST::Statement>&,
+		std::unordered_map<std::string, Spanned<AST::Statement::Label::ID>> const&,
+		FileContext::ID
+	);
+	/// Identifies all labels and statements using them in a given function.
+	void identify_labels(AST::Function&, FileContext::ID);
+	/// Identifies all labels and statements using them in all functions in a given module.
+	void identify_labels(AST::Module&, FileContext::ID);
+	/// Identifies all labels and statements using them in all functions.
+	void identify_labels();
 
 	/// === SYMBOLS ===
 
@@ -423,19 +449,31 @@ private:
 	Spanned<IR::Type> lower_type(Spanned<AST::Type>, FileContext::ID);
 
 	/// Lowers any identifier into its IR equivalent and type.
-	std::tuple<Spanned<IR::Identifier>, IR::Type> lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
+	std::tuple<Spanned<IR::Identifier>, IR::Type>
+	lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
 	/// Lowers any identifier into its IR equivalent and type.
 	std::tuple<IR::Identifier, IR::Type> lower(AST::Identifier const&, bool allow_functions = false);
 	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-alias module items).
 	Spanned<IR::Identifier> lower_identifier(Spanned<AST::Identifier> const&);
 
-	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression::Atom> extract_expression(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression::Atom>
+	extract_expression(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression::Atom>
+	extract_expression(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
 
-	Spanned<IR::Expression> lower(AST::Expression::FunctionCall const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression> lower(AST::Expression::Atom const&, TypeInfo::ID, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression> lower(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression> lower(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression>
+	lower(AST::Expression::FunctionCall const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression>
+	lower(AST::Expression::Atom const&,
+	      TypeInfo::ID,
+	      Span,
+	      IR::Scope&,
+	      FileContext::ID,
+	      bool allow_functions = false);
+	Spanned<IR::Expression>
+	lower(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression>
+	lower(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
 	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Declare const&, Span, IR::Scope&, FileContext::ID);
 	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Set const&, Span, IR::Scope&, FileContext::ID);
 	std::optional<Spanned<IR::Statement>> lower(Spanned<AST::Statement> const&, IR::Scope&, FileContext::ID);

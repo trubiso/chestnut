@@ -1128,6 +1128,8 @@ void Resolver::infer(Spanned<AST::Statement>& statement, AST::SymbolID function,
 		infer(statement.value.get_return(), statement.span, function, file_id);
 		return;
 	case AST::Statement::Kind::Scope: infer(statement.value.get_scope(), function, file_id); return;
+	case AST::Statement::Kind::Label:
+	case AST::Statement::Kind::Goto:  return;
 	}
 
 	// for expression statements, we want to throw a warning if it results in a non-void result
