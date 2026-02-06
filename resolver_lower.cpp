@@ -457,7 +457,8 @@ Resolver::lower(Spanned<AST::Statement> const& statement, IR::Scope& scope, File
 		return {};
 	case AST::Statement::Kind::Expression: break;
 	case AST::Statement::Kind::Label:
-	case AST::Statement::Kind::Goto:       return {};
+	case AST::Statement::Kind::Goto:
+	case AST::Statement::Kind::Branch:     return {};
 	}
 
 	// for expressions, it's a special case because we only care about function calls

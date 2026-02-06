@@ -1130,6 +1130,16 @@ void Resolver::infer(Spanned<AST::Statement>& statement, AST::SymbolID function,
 	case AST::Statement::Kind::Scope: infer(statement.value.get_scope(), function, file_id); return;
 	case AST::Statement::Kind::Label:
 	case AST::Statement::Kind::Goto:  return;
+	case AST::Statement::Kind::Branch:
+		// we need to infer the condition's type and unify it with bool
+		infer(statement.value.get_branch().condition.value,
+		      statement.value.get_branch().condition.span,
+		      file_id);
+		// FIXME: we need a better solution for built-in bool requirement
+		unify(statement.value.get_branch().condition.value.type.value(),
+		      register_type(TypeInfo::make_known_bool(), statement.value.get_branch().condition.span, file_id),
+		      file_id);
+		return;
 	}
 
 	// for expression statements, we want to throw a warning if it results in a non-void result

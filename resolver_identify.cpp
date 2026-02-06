@@ -237,9 +237,10 @@ void Resolver::identify_populate_labels(
 		for (Spanned<AST::Statement>& substatement : statement.value.get_scope())
 			identify_populate_labels(substatement, labels, counter, file_id);
 		return;
-	// we will deal with goto later!
-	case AST::Statement::Kind::Goto:  return;
-	case AST::Statement::Kind::Label: break;
+	// we will deal with goto and branch later!
+	case AST::Statement::Kind::Goto:
+	case AST::Statement::Kind::Branch: return;
+	case AST::Statement::Kind::Label:  break;
 	}
 
 	if (statement.value.kind() == AST::Statement::Kind::Label) {
@@ -276,6 +277,17 @@ void Resolver::identify_populate_labels(
 	}
 }
 
+void Resolver::identify_add_unknown_label_diagnostic(Span span, FileContext::ID file_id) {
+	parsed_files.at(file_id).diagnostics.push_back(
+		Diagnostic::error(
+			"unknown label",
+			{
+				Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red),
+			}
+		)
+	);
+}
+
 void Resolver::identify_labels(
 	Spanned<AST::Statement>&                                                   statement,
 	std::unordered_map<std::string, Spanned<AST::Statement::Label::ID>> const& labels,
@@ -291,31 +303,41 @@ void Resolver::identify_labels(
 			identify_labels(substatement, labels, file_id);
 		return;
 	// labels are already identified
-	case AST::Statement::Kind::Label: return;
-	case AST::Statement::Kind::Goto:  break;
+	case AST::Statement::Kind::Label:  return;
+	case AST::Statement::Kind::Goto:
+	case AST::Statement::Kind::Branch: break;
 	}
 
 	if (statement.value.kind() == AST::Statement::Kind::Goto) {
 		std::string const& destination = statement.value.get_goto().destination;
 		if (!labels.contains(destination)) {
-			parsed_files.at(file_id).diagnostics.push_back(
-				Diagnostic::error(
-					"unknown label",
-					{
-						Diagnostic::Sample(
-							get_context(file_id),
-							statement.span,
-							OutFmt::Color::Red
-						),
-					}
-				)
-			);
+			identify_add_unknown_label_diagnostic(statement.span, file_id);
 			return;
 		}
 		AST::Statement::Label::ID id = labels.at(destination).value;
 
 		statement.value.get_goto().destination_id = id;
 		return;
+	} else if (statement.value.kind() == AST::Statement::Kind::Branch) {
+		AST::Statement::Branch& branch = statement.value.get_branch();
+
+		// resolve the true destination
+		std::string const& true_destination = branch.true_.value.destination;
+		if (!labels.contains(true_destination)) {
+			identify_add_unknown_label_diagnostic(branch.true_.span, file_id);
+			return;
+		}
+		branch.true_.value.destination_id = labels.at(true_destination).value;
+
+		// resolve the false destination if it exists
+		if (branch.false_.has_value()) {
+			std::string const& false_destination = branch.false_.value().value.destination;
+			if (!labels.contains(false_destination)) {
+				identify_add_unknown_label_diagnostic(branch.false_.value().span, file_id);
+				return;
+			}
+			branch.false_.value().value.destination_id = labels.at(false_destination).value;
+		}
 	}
 }
 

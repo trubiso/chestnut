@@ -276,6 +276,8 @@ private:
 		AST::Statement::Label::ID& counter,
 		FileContext::ID
 	);
+	/// Adds an "unknown label" diagnostic at the provided span and file ID.
+	void identify_add_unknown_label_diagnostic(Span, FileContext::ID);
 	/// Identifies all labels and statements using them given a statement and a mapping from names to label IDs.
 	void identify_labels(
 		Spanned<AST::Statement>&,
