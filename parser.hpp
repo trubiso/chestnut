@@ -86,6 +86,7 @@ private:
 
 	bool consume_single_comma_or_more();
 
+	std::optional<std::string> consume_label();
 	std::optional<std::string> consume_number_literal();
 	std::optional<std::string> consume_string_literal();
 	std::optional<std::string> consume_char_literal();
@@ -119,6 +120,7 @@ private:
 	bool peek_symbol(Token::Symbol) const;
 	bool peek_keyword(Keyword) const;
 	bool peek_unqualified_identifier() const;
+	bool peek_label() const;
 
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
 	// upon failure. The reason string is only copied if a diagnostic is thrown.
@@ -130,6 +132,8 @@ private:
 	inline bool expect_semicolon(std::string_view reason) {
 		return expect_symbol(reason, Token::Symbol::Semicolon);
 	}
+
+	std::optional<std::string> expect_label(std::string_view reason);
 
 	std::optional<std::string> expect_bare_unqualified_identifier(std::string_view reason);
 	std::optional<Identifier>  expect_unqualified_identifier(std::string_view reason);

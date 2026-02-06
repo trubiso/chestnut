@@ -101,7 +101,7 @@ struct Token {
 
 	inline bool is_identifier() const { return kind() == Kind::Identifier; }
 
-	inline bool is_label() const { return kind() == Kind::Identifier; }
+	inline bool is_label() const { return kind() == Kind::Label; }
 
 	inline bool is_number_literal() const { return kind() == Kind::NumberLiteral; }
 
@@ -113,7 +113,7 @@ struct Token {
 
 	inline std::string const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 
-	inline std::string const& get_label() const { return std::get<(size_t) Kind::Identifier>(value); }
+	inline std::string const& get_label() const { return std::get<(size_t) Kind::Label>(value); }
 
 	inline std::string const& get_number_literal() const { return std::get<(size_t) Kind::NumberLiteral>(value); }
 

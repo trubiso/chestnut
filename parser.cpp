@@ -67,6 +67,17 @@ bool Parser::consume_single_comma_or_more() {
 	return true;
 }
 
+std::optional<std::string> Parser::consume_label() {
+	auto maybe_token = tokens_.peek();
+	if (!maybe_token.has_value()) return {};
+	Token token = maybe_token.value();
+	if (!token.is_label()) return {};
+	tokens_.advance();
+	std::string label = token.get_label();
+	// we must trim off the initial apostrophe
+	return label.substr(1);
+}
+
 std::optional<std::string> Parser::consume_number_literal() {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return {};
@@ -586,6 +597,12 @@ bool Parser::peek_unqualified_identifier() const {
 	return maybe_token.value().is_identifier();
 }
 
+bool Parser::peek_label() const {
+	auto maybe_token = tokens_.peek();
+	if (!maybe_token.has_value()) return false;
+	return maybe_token.value().is_label();
+}
+
 // TODO: add more context to some expected diagnoses (e.g. maybe for closing brace, add the header of what we want to
 // close?). also because some of these stop making sense (e.g. if it wants an argument type but doesn't find it, it goes
 // up and ends up expecting module closure or something)
@@ -619,6 +636,10 @@ bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
 	if (consume_symbol(symbol)) return true;
 	add_expected_diagnostic(std::format("symbol '{}'", get_variant_name(symbol)), reason);
 	return false;
+}
+
+std::optional<std::string> Parser::expect_label(std::string_view reason) {
+	EXPECT(consume_label, "label");
 }
 
 std::optional<std::string> Parser::expect_bare_unqualified_identifier(std::string_view reason) {
