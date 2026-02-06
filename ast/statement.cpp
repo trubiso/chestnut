@@ -31,6 +31,8 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	case Statement::Kind::Expression: return os << "[expr stmt: " << statement.get_expression() << ";]";
 	case Statement::Kind::Return:     return os << statement.get_return();
 	case Statement::Kind::Scope:      break;
+	case Statement::Kind::Label:      return os << "[label '" << statement.get_label().name << ":]";
+	case Statement::Kind::Goto:       return os << "[goto '" << statement.get_goto().destination << ";]";
 	}
 
 	Scope const& scope = statement.get_scope();

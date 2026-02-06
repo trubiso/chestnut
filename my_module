@@ -13,6 +13,15 @@ export func do_stuff(c: char) void {
 	return;
 }
 
+func my_control_flows() {
+	'a:
+	putchar('h');
+	'b:
+	putchar('i');
+	goto 'a;
+	return;
+}
+
 @extern func print_integer(anon x: uint64);
 @extern func print_float(anon x: float32);
 

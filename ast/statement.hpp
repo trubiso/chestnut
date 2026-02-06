@@ -32,9 +32,17 @@ struct Statement {
 		std::optional<Spanned<Expression>> value;
 	};
 
-	enum class Kind { Declare, Set, Expression, Return, Scope };
+	struct Label {
+		std::string name;
+	};
 
-	typedef std::variant<Declare, Set, Expression, Return, Scope> value_t;
+	struct Goto {
+		std::string destination;
+	};
+
+	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto };
+
+	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto> value_t;
 
 	value_t value;
 
@@ -60,6 +68,14 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Scope>, std::move(scope)});
 	}
 
+	inline static Statement make_label(Label&& label) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Label>, std::move(label)});
+	}
+
+	inline static Statement make_goto(Goto&& scope) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Goto>, std::move(scope)});
+	}
+
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Declare& get_declare() { return std::get<(size_t) Kind::Declare>(value); }
@@ -79,6 +95,10 @@ struct Statement {
 	inline Scope const& get_scope() const { return std::get<(size_t) Kind::Scope>(value); }
 
 	inline Scope& get_scope() { return std::get<(size_t) Kind::Scope>(value); }
+
+	inline Label const& get_label() const { return std::get<(size_t) Kind::Label>(value); }
+
+	inline Goto const& get_goto() const { return std::get<(size_t) Kind::Goto>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);

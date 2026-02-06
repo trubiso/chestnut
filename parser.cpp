@@ -538,13 +538,36 @@ std::optional<Statement> Parser::consume_statement_scope() {
 	return consume_scope().transform([](auto&& value) { return Statement::make_scope(std::move(value)); });
 }
 
+std::optional<Statement> Parser::consume_statement_label() {
+	// <label>:
+	auto maybe_label = consume_label();
+	if (!maybe_label.has_value()) return {};
+	auto label = maybe_label.value();
+	expect_symbol("expected colon after label", Token::Symbol::Colon);
+	return Statement::make_label(Statement::Label {std::move(label)});
+}
+
+std::optional<Statement> Parser::consume_statement_goto() {
+	// "goto" <lbl>;
+
+	// we start after the "goto" keyword
+	auto maybe_label = expect_label("expected label after goto keyword");
+	if (!maybe_label.has_value()) return {};
+	auto label = maybe_label.value();
+	expect_semicolon("expected semicolon after goto statement");
+	return Statement::make_goto(Statement::Goto {std::move(label)});
+}
+
 std::optional<Statement> Parser::consume_statement() {
 	if (peek_symbol(Token::Symbol::LBrace)) return consume_statement_scope();
 
-	// FIXME: if someone had a function or variable called const/mut/return, this would break!
-	if (peek_keyword(Keyword::Const) || peek_keyword(Keyword::Mut)) { return consume_statement_declare(); }
+	if (peek_label()) return consume_statement_label();
 
+	// FIXME: if someone had a function or variable called const/mut/return/goto, this would break!
+
+	if (peek_keyword(Keyword::Const) || peek_keyword(Keyword::Mut)) { return consume_statement_declare(); }
 	if (consume_keyword(Keyword::Return)) return consume_statement_return();
+	if (consume_keyword(Keyword::Goto)) return consume_statement_goto();
 
 	return consume_statement_set();
 }
@@ -586,6 +609,7 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	case Keyword::Anon:   return token.get_identifier() == "anon";
 	case Keyword::Func:   return token.get_identifier() == "func";
 	case Keyword::Return: return token.get_identifier() == "return";
+	case Keyword::Goto:   return token.get_identifier() == "goto";
 	}
 	[[assume(false)]];
 	return false;

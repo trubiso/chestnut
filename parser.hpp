@@ -58,6 +58,7 @@ private:
 		Anon,
 		Func,
 		Return,
+		Goto,
 	};
 
 	FileContext   context_;
@@ -112,6 +113,8 @@ private:
 	std::optional<Statement> consume_statement_expression(Expression&&);
 	std::optional<Statement> consume_statement_return();
 	std::optional<Statement> consume_statement_scope();
+	std::optional<Statement> consume_statement_label();
+	std::optional<Statement> consume_statement_goto();
 	std::optional<Statement> consume_statement();
 
 	std::optional<Scope> consume_scope();
