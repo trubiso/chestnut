@@ -3,6 +3,7 @@
 size_t Token::size() const {
 	switch (kind()) {
 	case Kind::Identifier:    return std::get<(size_t) Kind::Identifier>(value).size();
+	case Kind::Label:         return std::get<(size_t) Kind::Label>(value).size();
 	case Kind::NumberLiteral: return std::get<(size_t) Kind::NumberLiteral>(value).size();
 	case Kind::StringLiteral: return std::get<(size_t) Kind::StringLiteral>(value).size();
 	case Kind::CharLiteral:   return std::get<(size_t) Kind::CharLiteral>(value).size();
@@ -61,6 +62,7 @@ std::ostream& operator<<(std::ostream& os, Token const& token) {
 
 	switch (token.kind()) {
 		VISIT(Token::Kind::Identifier, "[id ", "]");
+		VISIT(Token::Kind::Label, "[label ", "]");
 		VISIT(Token::Kind::NumberLiteral, "[num ", "]");
 		VISIT(Token::Kind::StringLiteral, "[string ", "]");
 		VISIT(Token::Kind::CharLiteral, "[char ", "]");

@@ -43,8 +43,8 @@ bool Lexer::advance() {
 		consume_string_literal();
 		token = MAKE_STR_TOKEN(Token::Kind::StringLiteral);
 	} else if (current_value == '\'') {
-		consume_char_literal();
-		token = MAKE_STR_TOKEN(Token::Kind::CharLiteral);
+		bool is_label = consume_char_literal();
+		token = is_label ? MAKE_STR_TOKEN(Token::Kind::Label) : MAKE_STR_TOKEN(Token::Kind::CharLiteral);
 	} else if (is_symbol_start(current_value)) {
 		s = consume_symbol();
 		if (s == Token::Symbol::CommentStart || s == Token::Symbol::CommentMultilineStart) return true;
@@ -186,7 +186,7 @@ void Lexer::consume_string_literal() {
 		);
 }
 
-void Lexer::consume_char_literal() {
+bool Lexer::consume_char_literal() {
 	size_t char_begin = stream_.index();
 	stream_.advance();  // consume opening quote
 	std::optional<char> e;
@@ -202,7 +202,7 @@ void Lexer::consume_char_literal() {
 				{Diagnostic::Sample(context, Span(stream_.index() - 2, stream_.index()))}
 			)
 		);
-		goto ret;
+		goto ret_char;
 	case '\\':
 		current = stream_.consume();  // escaped character
 		if (!current.has_value()) goto unclosed_literal;
@@ -229,16 +229,26 @@ void Lexer::consume_char_literal() {
 	if (!current.has_value()) goto unclosed_literal;
 	if (current.value() != '\'') goto unclosed_literal;
 	stream_.advance();
-ret:
-	return;
+ret_char:
+	return false;
 
 unclosed_literal:
+	size_t new_position = stream_.index();
+	// since the character literal is not closed, we will try to parse a label instead
+	stream_.set_index(char_begin + 1);
+	consume_identifier();
+	if (stream_.index() > char_begin + 1) return true;
+	// if we stay exactly where we were, this isn't a label either
 	diagnostics_.push_back(
 		Diagnostic::error(
 			"unclosed character literal",
+			"if you attempted to create a label, please remember that labels are identifiers started by an apostrophe",
 			{Diagnostic::Sample(context, Span(char_begin, stream_.index()))}
 		)
 	);
+	// let's seek back to the original position for the purpose of diagnostics
+	stream_.set_index(new_position);
+	return false;
 }
 
 Token::Symbol Lexer::consume_symbol() {

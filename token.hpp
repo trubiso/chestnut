@@ -60,9 +60,9 @@ struct Token {
 
 	// TODO: make special case for the _ identifier which is treated as discard/nothing.
 
-	enum class Kind { Identifier, NumberLiteral, StringLiteral, CharLiteral, Symbol };
+	enum class Kind { Identifier, Label, NumberLiteral, StringLiteral, CharLiteral, Symbol };
 
-	typedef std::variant<std::string, std::string, std::string, std::string, Symbol> value_t;
+	typedef std::variant<std::string, std::string, std::string, std::string, std::string, Symbol> value_t;
 
 	size_t  begin;
 	value_t value;
@@ -77,6 +77,10 @@ struct Token {
 
 	inline static Token make_identifier(size_t begin, std::string identifier) {
 		return Token(begin, value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
+	}
+
+	inline static Token make_label(size_t begin, std::string label) {
+		return Token(begin, value_t {std::in_place_index<(size_t) Kind::Label>, label});
 	}
 
 	inline static Token make_number_literal(size_t begin, std::string literal) {
@@ -97,6 +101,8 @@ struct Token {
 
 	inline bool is_identifier() const { return kind() == Kind::Identifier; }
 
+	inline bool is_label() const { return kind() == Kind::Identifier; }
+
 	inline bool is_number_literal() const { return kind() == Kind::NumberLiteral; }
 
 	inline bool is_string_literal() const { return kind() == Kind::StringLiteral; }
@@ -106,6 +112,8 @@ struct Token {
 	inline bool is_symbol() const { return kind() == Kind::Symbol; }
 
 	inline std::string const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
+
+	inline std::string const& get_label() const { return std::get<(size_t) Kind::Identifier>(value); }
 
 	inline std::string const& get_number_literal() const { return std::get<(size_t) Kind::NumberLiteral>(value); }
 

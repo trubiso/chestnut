@@ -89,7 +89,8 @@ private:
 
 	void consume_number_literal();
 	void consume_string_literal();
-	void consume_char_literal();
+	/// If it is actually a label, returns true.
+	bool consume_char_literal();
 	/// If a comment is encountered, returns one of the special comment symbols.
 	Token::Symbol consume_symbol();
 
