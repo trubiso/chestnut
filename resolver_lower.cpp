@@ -214,46 +214,46 @@ Spanned<IR::Identifier> Resolver::lower_identifier(Spanned<AST::Identifier> cons
 }
 
 Spanned<IR::Expression::Atom> Resolver::extract_expression(
-	AST::Expression const& expression,
-	Span                   span,
-	IR::Scope&             scope,
-	FileContext::ID        file_id,
-	bool                   allow_functions
+	AST::Expression const&       expression,
+	Span                         span,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id,
+	bool                         allow_functions
 ) {
 	AST::SymbolID id = symbol_next();
 	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, expression.type.value(), false, false, {}});
 	Spanned<IR::Identifier> name {span, id};
 
 	IR::Type type = reconstruct_type(expression.type.value(), allow_functions);
-	scope.push_back(
-		Spanned<IR::Statement> {
-			span,
-			IR::Statement::make_declare(
-				IR::Statement::Declare {
-							name, type,
-							lower(expression, span, scope, file_id),
-							Spanned<bool> {span, false}
-				}
-			)
-        }
-	);
+	// we actually make the statement before pushing it just in case this lowering creates a new basic block
+	Spanned<IR::Statement> statement {
+		span,
+		IR::Statement::make_declare(
+			IR::Statement::Declare {
+						name, type,
+						lower(expression, span, basic_blocks, file_id),
+						Spanned<bool> {span, false}
+			}
+		)
+	};
+	basic_blocks.at(basic_blocks.size() - 1).statements.push_back(statement);
 	return {name.span, IR::Expression::Atom::make_identifier(std::move(name.value), type)};
 }
 
 Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	Spanned<AST::Expression> const& expression,
-	IR::Scope&                      scope,
+	std::vector<IR::BasicBlock>&    basic_blocks,
 	FileContext::ID                 file_id,
 	bool                            allow_functions
 ) {
-	return extract_expression(expression.value, expression.span, scope, file_id, allow_functions);
+	return extract_expression(expression.value, expression.span, basic_blocks, file_id, allow_functions);
 }
 
 Spanned<IR::Expression> Resolver::lower(
 	AST::Expression::Atom const& atom,
 	TypeInfo::ID                 type_id,
 	Span                         span,
-	IR::Scope&                   scope,
+	std::vector<IR::BasicBlock>& basic_blocks,
 	FileContext::ID              file_id,
 	bool                         allow_functions
 ) {
@@ -288,7 +288,7 @@ Spanned<IR::Expression> Resolver::lower(
 	case AST::Expression::Atom::Kind::Expression:
 		return {span,
 		        IR::Expression::make_atom(
-				extract_expression(*atom.get_expression(), span, scope, file_id).value
+				extract_expression(*atom.get_expression(), span, basic_blocks, file_id).value
 			)};
 	case AST::Expression::Atom::Kind::Identifier: break;
 	}
@@ -301,7 +301,7 @@ Spanned<IR::Expression> Resolver::lower(
 Spanned<IR::Expression> Resolver::lower(
 	AST::Expression::FunctionCall const& function_call,
 	Span                                 span,
-	IR::Scope&                           scope,
+	std::vector<IR::BasicBlock>&         basic_blocks,
 	FileContext::ID                      file_id,
 	bool                                 allow_functions
 ) {
@@ -312,7 +312,7 @@ Spanned<IR::Expression> Resolver::lower(
 			IR::Expression::Atom::make_identifier(0, IR::Type::make_atom(IR::Type::Atom::make_error()))
 		)
 	};
-	auto callee = lower(*function_call.callee, scope, file_id, true);
+	auto callee = lower(*function_call.callee, basic_blocks, file_id, true);
 	// if the callee is not valid, we've already thrown diagnostics about it
 	if (callee.value.kind() != IR::Expression::Kind::Atom
 	    || callee.value.get_atom().kind() != IR::Expression::Atom::Kind::Identifier)
@@ -330,7 +330,7 @@ Spanned<IR::Expression> Resolver::lower(
 	arguments.reserve(argument_count);
 	// ordered arguments are freebies
 	for (AST::Expression::FunctionCall::OrderedArgument const& ordered_argument : function_call.arguments.ordered) {
-		arguments.push_back(extract_expression(ordered_argument, scope, file_id));
+		arguments.push_back(extract_expression(ordered_argument, basic_blocks, file_id));
 	}
 	// labeled arguments have to be reordered according to the function call type
 	for (size_t i = function_call.arguments.ordered.size(); i < argument_count; ++i) {
@@ -339,7 +339,7 @@ Spanned<IR::Expression> Resolver::lower(
 		bool        argument_found = false;
 		for (auto const& [label, argument] : function_call.arguments.labeled) {
 			if (label.value.name() == argument_name) {
-				arguments.push_back(extract_expression(argument, scope, file_id));
+				arguments.push_back(extract_expression(argument, basic_blocks, file_id));
 				argument_found = true;
 			}
 		}
@@ -353,17 +353,24 @@ Spanned<IR::Expression> Resolver::lower(
 }
 
 Spanned<IR::Expression> Resolver::lower(
-	AST::Expression const& expression,
-	Span                   span,
-	IR::Scope&             scope,
-	FileContext::ID        file_id,
-	bool                   allow_functions
+	AST::Expression const&       expression,
+	Span                         span,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id,
+	bool                         allow_functions
 ) {
 	switch (expression.kind()) {
 	case AST::Expression::Kind::Atom:
-		return lower(expression.get_atom(), expression.type.value(), span, scope, file_id, allow_functions);
+		return lower(
+			expression.get_atom(),
+			expression.type.value(),
+			span,
+			basic_blocks,
+			file_id,
+			allow_functions
+		);
 	case AST::Expression::Kind::FunctionCall:
-		return lower(expression.get_function_call(), span, scope, file_id, allow_functions);
+		return lower(expression.get_function_call(), span, basic_blocks, file_id, allow_functions);
 	case AST::Expression::Kind::UnaryOperation:
 	case AST::Expression::Kind::BinaryOperation: [[assume(false)]];
 	}
@@ -371,19 +378,23 @@ Spanned<IR::Expression> Resolver::lower(
 
 Spanned<IR::Expression> Resolver::lower(
 	Spanned<AST::Expression> const& expression,
-	IR::Scope&                      scope,
+	std::vector<IR::BasicBlock>&    basic_blocks,
 	FileContext::ID                 file_id,
 	bool                            allow_functions
 ) {
-	return lower(expression.value, expression.span, scope, file_id, allow_functions);
+	return lower(expression.value, expression.span, basic_blocks, file_id, allow_functions);
 }
 
-std::optional<Spanned<IR::Statement>>
-Resolver::lower(AST::Statement::Declare const& declare, Span span, IR::Scope& scope, FileContext::ID file_id) {
+std::optional<Spanned<IR::Statement>> Resolver::lower(
+	AST::Statement::Declare const& declare,
+	Span                           span,
+	std::vector<IR::BasicBlock>&   basic_blocks,
+	FileContext::ID                file_id
+) {
 	auto identifier = lower(declare.name);
 
-	auto value = declare.value.transform([&scope, file_id, this](auto&& value) {
-		return lower(value, scope, file_id);
+	auto value = declare.value.transform([&basic_blocks, file_id, this](auto&& value) {
+		return lower(value, basic_blocks, file_id);
 	});
 
 	return Spanned<IR::Statement> {
@@ -399,12 +410,16 @@ Resolver::lower(AST::Statement::Declare const& declare, Span span, IR::Scope& sc
 	};
 }
 
-std::optional<Spanned<IR::Statement>>
-Resolver::lower(AST::Statement::Set const& set, Span span, IR::Scope& scope, FileContext::ID file_id) {
+std::optional<Spanned<IR::Statement>> Resolver::lower(
+	AST::Statement::Set const&   set,
+	Span                         span,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id
+) {
 	// skip invalid lhs
 	if (!set.lhs.value.can_be_lhs()) return {};
 	// TODO: in the future, once we do derefs, this will look different
-	auto lhs            = lower(set.lhs, scope, file_id);
+	auto lhs            = lower(set.lhs, basic_blocks, file_id);
 	auto lhs_identifier = Spanned<IR::Identifier> {lhs.span, lhs.value.get_atom().get_identifier()};
 	// check that we're setting an actually mutable variable
 	if (!symbol_pool_.at(lhs_identifier.value).mutable_) {
@@ -428,43 +443,93 @@ Resolver::lower(AST::Statement::Set const& set, Span span, IR::Scope& scope, Fil
 			)
 		);
 	}
-	auto value = lower(set.rhs, scope, file_id);
+	auto value = lower(set.rhs, basic_blocks, file_id);
 
 	return Spanned<IR::Statement> {span, IR::Statement::make_set(IR::Statement::Set {lhs_identifier, value})};
 }
 
-std::optional<Spanned<IR::Statement>>
-Resolver::lower(Spanned<AST::Statement> const& statement, IR::Scope& scope, FileContext::ID file_id) {
-	switch (statement.value.kind()) {
-	case AST::Statement::Kind::Declare: return lower(statement.value.get_declare(), statement.span, scope, file_id);
-	case AST::Statement::Kind::Set:     return lower(statement.value.get_set(), statement.span, scope, file_id);
-	case AST::Statement::Kind::Return:
-		// we lower the expression if it exists, otherwise identical
-		return Spanned<IR::Statement> {
-			statement.span,
-			IR::Statement::make_return(
-				IR::Statement::Return {statement.value.get_return().value.transform(
-					[&scope, file_id, this](auto&& value) { return lower(value, scope, file_id); }
-				)}
+std::optional<Spanned<IR::Statement>> Resolver::lower(
+	Spanned<AST::Statement> const& statement,
+	AST::Function&                 function,
+	std::vector<IR::BasicBlock>&   basic_blocks,
+	FileContext::ID                file_id
+) {
+	// if we already have a jump and this is not a label, it has to be dead code
+	if (!std::holds_alternative<std::monostate>(basic_blocks.at(basic_blocks.size() - 1).jump)
+	    && statement.value.kind() != AST::Statement::Kind::Label) {
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::warning(
+				"dead code",
+				"this statement will never get executed",
+				{Diagnostic::Sample(get_context(file_id), statement.span, OutFmt::Color::Yellow)}
 			)
-		};
-	case AST::Statement::Kind::Scope:
-		// we take advantage of the scope lowering function so it can do all the work for us
-		for (Spanned<IR::Statement> const& ir_statement : lower(statement.value.get_scope(), file_id)) {
-			scope.push_back(ir_statement);
-		}
-
+		);
 		return {};
-	case AST::Statement::Kind::Expression: break;
+	}
+
+	switch (statement.value.kind()) {
+	case AST::Statement::Kind::Declare:
+		return lower(statement.value.get_declare(), statement.span, basic_blocks, file_id);
+	case AST::Statement::Kind::Set: return lower(statement.value.get_set(), statement.span, basic_blocks, file_id);
+	case AST::Statement::Kind::Scope:
+		lower(statement.value.get_scope(), function, basic_blocks, file_id);
+		return {};
+	case AST::Statement::Kind::Expression:
 	case AST::Statement::Kind::Label:
+	case AST::Statement::Kind::Return:
 	case AST::Statement::Kind::Goto:
-	case AST::Statement::Kind::Branch:     return {};
+	case AST::Statement::Kind::Branch:     break;
+	}
+
+	// TODO: somehow have a way to insert drop statements before gotos
+	if (statement.value.kind() == AST::Statement::Kind::Label) {
+		// for labels, we end the current basic block and create a new one for this id
+		IR::BasicBlock::ID new_id = statement.value.get_label().id.value();
+		// only replace the jump if we need to
+		if (std::holds_alternative<std::monostate>(basic_blocks.at(basic_blocks.size() - 1).jump))
+			basic_blocks.at(basic_blocks.size() - 1).jump = IR::BasicBlock::Goto {new_id};
+		basic_blocks.push_back(IR::BasicBlock {new_id, {}, std::monostate {}});
+		return {};
+	} else if (statement.value.kind() == AST::Statement::Kind::Return) {
+		// for return statements, we set it as our jump
+		IR::BasicBlock::Return return_ {
+			statement.value.get_return().value.transform([&basic_blocks, file_id, this](auto&& value) {
+				return extract_expression(value, basic_blocks, file_id, true);
+			})
+		};
+		// we first compute it and then set it just in case a new basic block got created in the process
+		basic_blocks.at(basic_blocks.size() - 1).jump = return_;
+		return {};
+	} else if (statement.value.kind() == AST::Statement::Kind::Goto) {
+		// goto statements are literally just jumps
+		basic_blocks.at(basic_blocks.size() - 1).jump
+			= IR::BasicBlock::Goto {statement.value.get_goto().destination_id.value()};
+		return {};
+	} else if (statement.value.kind() == AST::Statement::Kind::Branch) {
+		// branch statements take a bit more effort
+		AST::Statement::Branch const& branch = statement.value.get_branch();
+		IR::Expression::Atom condition = extract_expression(branch.condition, basic_blocks, file_id).value;
+		// if we have a false branch, our job is done
+		if (branch.false_.has_value()) {
+			basic_blocks.at(basic_blocks.size() - 1).jump = IR::BasicBlock::Branch {
+				condition,
+				branch.true_.value.destination_id.value(),
+				branch.false_.value().value.destination_id.value()
+			};
+			return {};
+		}
+		// if we don't, we have to manually create one
+		AST::Statement::Label::ID new_id = function.label_counter++;
+		basic_blocks.at(basic_blocks.size() - 1).jump
+			= IR::BasicBlock::Branch {condition, branch.true_.value.destination_id.value(), new_id};
+		basic_blocks.push_back(IR::BasicBlock {new_id, {}, std::monostate {}});
+		return {};
 	}
 
 	// for expressions, it's a special case because we only care about function calls
 	// however, when we resolve expressions, we do extract all potential inner function calls
 	if (type_pool_.at(statement.value.get_expression().type.value()).kind() == TypeInfo::Kind::Bottom) return {};
-	auto expression = lower(statement.value.get_expression(), statement.span, scope, file_id);
+	auto expression = lower(statement.value.get_expression(), statement.span, basic_blocks, file_id);
 	if (expression.value.kind() != IR::Expression::Kind::FunctionCall) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::warning(
@@ -487,17 +552,20 @@ Resolver::lower(Spanned<AST::Statement> const& statement, IR::Scope& scope, File
 	return Spanned<IR::Statement> {expression.span, {expression.value.get_function_call()}};
 }
 
-IR::Scope Resolver::lower(AST::Scope const& original_scope, FileContext::ID file_id) {
-	IR::Scope scope {};
-	for (Spanned<AST::Statement> const& statement : original_scope) {
-		std::optional<Spanned<IR::Statement>> lowered_statement = lower(statement, scope, file_id);
-		if (lowered_statement.has_value()) scope.push_back(lowered_statement.value());
+void Resolver::lower(
+	std::vector<Spanned<AST::Statement>> const& statements,
+	AST::Function&                              function,
+	std::vector<IR::BasicBlock>&                basic_blocks,
+	FileContext::ID                             file_id
+) {
+	for (Spanned<AST::Statement> const& statement : statements) {
+		std::optional<Spanned<IR::Statement>> ir_statement = lower(statement, function, basic_blocks, file_id);
+		if (ir_statement.has_value())
+			basic_blocks.at(basic_blocks.size() - 1).statements.push_back(ir_statement.value());
 	}
-	// TODO: insert drop statements for all scope-local variables
-	return scope;
 }
 
-IR::Function Resolver::lower(AST::Function const& function, FileContext::ID file_id) {
+IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 	std::vector<IR::Function::Argument> arguments {};
 	arguments.reserve(function.arguments.size());
 	for (auto const& [name, type, _, mutable_] : function.arguments) {
@@ -505,23 +573,27 @@ IR::Function Resolver::lower(AST::Function const& function, FileContext::ID file
 		arguments.push_back(IR::Function::Argument {lower_identifier(name), lower_type(type, file_id)});
 	}
 	// TODO: ensure that we have a return statement at the end, since basic blocks need to always jump
-	auto body = function.body.transform([file_id, this](auto&& body) { return lower(body, file_id); });
+	std::vector<IR::BasicBlock> basic_blocks {};
+	if (function.body.has_value()) {
+		basic_blocks.push_back(IR::BasicBlock {0, {}, std::monostate {}});
+		lower(function.body.value(), function, basic_blocks, file_id);
+	};
 	return IR::Function {
 		{function.name.span, function.name.value.id.value()[0]},
 		std::move(arguments),
 		lower_type(function.return_type, file_id),
-		body,
+		basic_blocks,
 		false
 	};
 }
 
-IR::Module Resolver::lower(AST::Module const& original_module, FileContext::ID file_id) {
+IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id) {
 	IR::Module module {lower_identifier(original_module.name), {}};
 	// we don't need aliases anymore, those are purely for name resolution
-	for (Spanned<AST::Module::Item> const& item : original_module.body.items) {
+	for (Spanned<AST::Module::Item>& item : original_module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
-			AST::Function const& function = std::get<AST::Function>(value);
+			AST::Function& function = std::get<AST::Function>(value);
 			// TODO: make a more sophisticated system for these kinds of things
 			IR::Function lowered_function = lower(function, file_id);
 			for (AST::Tag const& tag : std::get<std::vector<AST::Tag>>(item.value)) {
@@ -530,7 +602,7 @@ IR::Module Resolver::lower(AST::Module const& original_module, FileContext::ID f
 			get_single_symbol(function.name.value).item = lowered_function;
 			module.items.push_back(function.name.value.id.value()[0]);
 		} else if (std::holds_alternative<AST::Module>(value)) {
-			AST::Module const& submodule                 = std::get<AST::Module>(value);
+			AST::Module& submodule                       = std::get<AST::Module>(value);
 			get_single_symbol(submodule.name.value).item = lower(submodule, file_id);
 			module.items.push_back(submodule.name.value.id.value()[0]);
 		}
@@ -541,6 +613,6 @@ IR::Module Resolver::lower(AST::Module const& original_module, FileContext::ID f
 std::vector<IR::Module> Resolver::lower() {
 	std::vector<IR::Module> files {};
 	files.reserve(parsed_files.size());
-	for (ParsedFile const& file : parsed_files) { files.push_back(lower(file.module, file.file_id)); }
+	for (ParsedFile& file : parsed_files) { files.push_back(lower(file.module, file.file_id)); }
 	return files;
 }

@@ -458,30 +458,19 @@ private:
 	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-alias module items).
 	Spanned<IR::Identifier> lower_identifier(Spanned<AST::Identifier> const&);
 
-	Spanned<IR::Expression::Atom>
-	extract_expression(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression::Atom>
-	extract_expression(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression::Atom> extract_expression(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 
-	Spanned<IR::Expression>
-	lower(AST::Expression::FunctionCall const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression>
-	lower(AST::Expression::Atom const&,
-	      TypeInfo::ID,
-	      Span,
-	      IR::Scope&,
-	      FileContext::ID,
-	      bool allow_functions = false);
-	Spanned<IR::Expression>
-	lower(AST::Expression const&, Span, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression>
-	lower(Spanned<AST::Expression> const&, IR::Scope&, FileContext::ID, bool allow_functions = false);
-	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Declare const&, Span, IR::Scope&, FileContext::ID);
-	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Set const&, Span, IR::Scope&, FileContext::ID);
-	std::optional<Spanned<IR::Statement>> lower(Spanned<AST::Statement> const&, IR::Scope&, FileContext::ID);
-	IR::Scope                             lower(AST::Scope const&, FileContext::ID);
-	IR::Function                          lower(AST::Function const&, FileContext::ID);
-	IR::Module                            lower(AST::Module const&, FileContext::ID);
+	Spanned<IR::Expression> lower(AST::Expression::FunctionCall const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Declare const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID);
+	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Set const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID);
+	std::optional<Spanned<IR::Statement>> lower(Spanned<AST::Statement> const&, AST::Function&, std::vector<IR::BasicBlock>&, FileContext::ID);
+	void                                  lower(std::vector<Spanned<AST::Statement>> const&, AST::Function&, std::vector<IR::BasicBlock>&, FileContext::ID);
+	IR::Function                          lower(AST::Function&, FileContext::ID);
+	IR::Module                            lower(AST::Module&, FileContext::ID);
 	/// Lowers all files into IR modules.
 	std::vector<IR::Module> lower();
 

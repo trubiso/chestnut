@@ -25,6 +25,13 @@ func my_control_flows() {
 	return;
 }
 
+func spam_labels() {
+	'a:
+	'b:
+	'c:
+	return;
+}
+
 @extern func print_integer(anon x: uint64);
 @extern func print_float(anon x: float32);
 

@@ -21,6 +21,8 @@ struct Function {
 	Spanned<Type>         return_type;
 
 	std::optional<Scope> body;
+
+	Statement::Label::ID label_counter = 1;
 };
 
 std::ostream& operator<<(std::ostream&, Function const&);

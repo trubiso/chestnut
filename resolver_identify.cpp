@@ -354,6 +354,8 @@ void Resolver::identify_labels(AST::Function& function, FileContext::ID file_id)
 	for (Spanned<AST::Statement>& statement : function.body.value()) {
 		identify_labels(statement, labels, file_id);
 	}
+
+	function.label_counter = counter;
 }
 
 void Resolver::identify_labels(AST::Module& module, FileContext::ID file_id) {
