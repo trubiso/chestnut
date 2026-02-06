@@ -97,7 +97,7 @@ std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 std::ostream& operator<<(std::ostream& os, Statement::Declare const& declare) {
 	os << "[declare stmt: ";
 	os << (declare.mutable_.value ? "mut" : "const") << " @" << declare.name.value;
-	os << ": " << declare.type;
+	os << ":" << declare.type;
 	if (declare.value.has_value()) os << " = " << declare.value.value().value;
 	return os << ";]";
 }
@@ -108,20 +108,34 @@ std::ostream& operator<<(std::ostream& os, Statement::Set const& set) {
 	return os << ";]";
 }
 
-std::ostream& operator<<(std::ostream& os, Statement::Return const& return_) {
-	os << "[return stmt: ";
-	if (return_.value.has_value()) os << return_.value.value().value;
-	else os << "(no value)";
-	return os << ";]";
-}
-
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	switch (statement.kind()) {
 	case Statement::Kind::Declare: return os << statement.get_declare();
 	case Statement::Kind::Set:     return os << statement.get_set();
 	case Statement::Kind::Call:    return os << "[call stmt: " << statement.get_call() << ";]";
-	case Statement::Kind::Return:  return os << statement.get_return();
+	}
+}
+
+std::ostream& operator<<(std::ostream& os, BasicBlock const& basic_block) {
+	os << "'@" << basic_block.id << " {\n";
+	os.iword(0)++;
+	for (auto const& stmt : basic_block.statements) { os << stmt.value << '\n'; }
+	os.iword(0)--;
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
+	os << "}";
+	if (std::holds_alternative<BasicBlock::Goto>(basic_block.jump))
+		return os << " goto '@" << std::get<BasicBlock::Goto>(basic_block.jump).id;
+	else if (std::holds_alternative<BasicBlock::Branch>(basic_block.jump)) {
+		BasicBlock::Branch const& branch = std::get<BasicBlock::Branch>(basic_block.jump);
+		return os << " branch (" << branch.condition << ") '@" << branch.true_ << " '@" << branch.false_;
+	} else if (std::holds_alternative<BasicBlock::Return>(basic_block.jump)) {
+		BasicBlock::Return const& return_ = std::get<BasicBlock::Return>(basic_block.jump);
+		os << " return ";
+		if (return_.value.has_value()) return os << return_.value.value().value;
+		else return os << "(void)";
+	} else {
+		return os << " no jump (invalid)";
 	}
 }
 
@@ -132,19 +146,16 @@ std::ostream& operator<<(std::ostream& os, Function const& function) {
 		os << '@' << arg.name.value << ": " << arg.type.value;
 		if (++count < function.arguments.size()) os << ", ";
 	}
-	os << ")";
-	if (function.body.has_value()) {
-		Scope const& scope = function.body.value();
-		os << ": ";
-		if (scope.empty()) return os << "(empty body)";
-		os << "{\n";
-		os.iword(0)++;
-		for (auto const& stmt : scope) { os << stmt.value << '\n'; }
-		os.iword(0)--;
+	os << "): ";
+	if (function.body.empty()) return os << "(empty body)";
+	os.iword(0)++;
+	for (BasicBlock const& basic_block : function.body) {
+		os << '\n';
 		for (long i = 0; i < os.iword(0); ++i) os << "    ";
-		os << "}";
+		os << basic_block;
 	}
-	return os;
+	os.iword(0)--;
+	return os << '\n';
 }
 
 }  // namespace IR

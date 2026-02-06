@@ -255,14 +255,10 @@ struct Statement {
 		Spanned<Expression> value;
 	};
 
-	struct Return {
-		std::optional<Spanned<Expression>> value;
-	};
-
 	// expression statements are now calls and scope statements are resolved now anyways
-	enum class Kind { Declare, Set, Call, Return };
+	enum class Kind { Declare, Set, Call };
 
-	typedef std::variant<Declare, Set, Expression::FunctionCall, Return> value_t;
+	typedef std::variant<Declare, Set, Expression::FunctionCall> value_t;
 
 	value_t value;
 
@@ -280,10 +276,6 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Call>, std::move(call)});
 	}
 
-	inline static Statement make_return(Return&& return_) {
-		return Statement(value_t {std::in_place_index<(size_t) Kind::Return>, std::move(return_)});
-	}
-
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Declare& get_declare() { return std::get<(size_t) Kind::Declare>(value); }
@@ -295,16 +287,38 @@ struct Statement {
 	inline Expression::FunctionCall const& get_call() const { return std::get<(size_t) Kind::Call>(value); }
 
 	inline Expression::FunctionCall& get_call() { return std::get<(size_t) Kind::Call>(value); }
-
-	inline Return const& get_return() const { return std::get<(size_t) Kind::Return>(value); }
-
-	inline Return& get_return() { return std::get<(size_t) Kind::Return>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
 std::ostream& operator<<(std::ostream&, Statement::Set const&);
-std::ostream& operator<<(std::ostream&, Statement::Return const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
+
+struct BasicBlock {
+	typedef uint32_t ID;
+
+	ID id;
+
+	std::vector<Spanned<Statement>> statements;
+
+	struct Goto {
+		ID id;
+	};
+
+	struct Branch {
+		Expression::Atom condition;
+
+		ID true_;
+		ID false_;
+	};
+
+	struct Return {
+		std::optional<Spanned<Expression::Atom>> value;
+	};
+
+	std::variant<Goto, Branch, Return, std::monostate> jump;
+};
+
+std::ostream& operator<<(std::ostream&, BasicBlock const&);
 
 struct Function {
 	struct Argument {
@@ -316,7 +330,7 @@ struct Function {
 	std::vector<Argument> arguments;
 	Spanned<Type>         return_type;
 
-	std::optional<Scope> body;
+	std::vector<BasicBlock> body;
 
 	bool extern_;
 };
