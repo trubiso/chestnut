@@ -97,7 +97,7 @@ std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 std::ostream& operator<<(std::ostream& os, Statement::Declare const& declare) {
 	os << "[declare stmt: ";
 	os << (declare.mutable_.value ? "mut" : "const") << " @" << declare.name.value;
-	os << ":" << declare.type;
+	os << ": " << declare.type;
 	if (declare.value.has_value()) os << " = " << declare.value.value().value;
 	return os << ";]";
 }
