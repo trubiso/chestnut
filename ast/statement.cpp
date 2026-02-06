@@ -23,6 +23,18 @@ std::ostream& operator<<(std::ostream& os, Statement::Return const& return_) {
 	return os << ";]";
 }
 
+std::ostream& operator<<(std::ostream& os, Statement::Label const& label) {
+	os << "[label '" << label.name;
+	if (label.id.has_value()) os << " ('@" << label.id.value() << ")";
+	return os << ":]";
+}
+
+std::ostream& operator<<(std::ostream& os, Statement::Goto const& goto_) {
+	os << "[goto '" << goto_.destination;
+	if (goto_.destination_id.has_value()) os << " ('@" << goto_.destination_id.value() << ")";
+	return os << ";]";
+}
+
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	switch (statement.kind()) {
@@ -31,8 +43,8 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	case Statement::Kind::Expression: return os << "[expr stmt: " << statement.get_expression() << ";]";
 	case Statement::Kind::Return:     return os << statement.get_return();
 	case Statement::Kind::Scope:      break;
-	case Statement::Kind::Label:      return os << "[label '" << statement.get_label().name << ":]";
-	case Statement::Kind::Goto:       return os << "[goto '" << statement.get_goto().destination << ";]";
+	case Statement::Kind::Label:      return os << statement.get_label();
+	case Statement::Kind::Goto:       return os << statement.get_goto();
 	}
 
 	Scope const& scope = statement.get_scope();

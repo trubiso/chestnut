@@ -33,11 +33,14 @@ struct Statement {
 	};
 
 	struct Label {
-		std::string name;
+		typedef uint32_t  ID;
+		std::string       name;
+		std::optional<ID> id = {};
 	};
 
 	struct Goto {
-		std::string destination;
+		std::string              destination;
+		std::optional<Label::ID> destination_id = {};
 	};
 
 	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto };
@@ -98,12 +101,18 @@ struct Statement {
 
 	inline Label const& get_label() const { return std::get<(size_t) Kind::Label>(value); }
 
+	inline Label& get_label() { return std::get<(size_t) Kind::Label>(value); }
+
 	inline Goto const& get_goto() const { return std::get<(size_t) Kind::Goto>(value); }
+
+	inline Goto& get_goto() { return std::get<(size_t) Kind::Goto>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
 std::ostream& operator<<(std::ostream&, Statement::Set const&);
 std::ostream& operator<<(std::ostream&, Statement::Return const&);
+std::ostream& operator<<(std::ostream&, Statement::Label const&);
+std::ostream& operator<<(std::ostream&, Statement::Goto const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
 
 }  // namespace AST
