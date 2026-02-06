@@ -548,7 +548,7 @@ std::optional<Statement> Parser::consume_statement_label() {
 }
 
 std::optional<Statement> Parser::consume_statement_goto() {
-	// "goto" <lbl>;
+	// "goto" <label>;
 
 	// we start after the "goto" keyword
 	auto maybe_label = expect_label("expected label after goto keyword");
@@ -556,6 +556,26 @@ std::optional<Statement> Parser::consume_statement_goto() {
 	auto label = maybe_label.value();
 	expect_semicolon("expected semicolon after goto statement");
 	return Statement::make_goto(Statement::Goto {std::move(label)});
+}
+
+std::optional<Statement> Parser::consume_statement_branch() {
+	// "branch" "(" <expr> ")" <true_label> [false_label];
+
+	// we start after the "branch" keyword
+	// TODO: should we be this liberal with the parentheses?
+	expect_symbol("expected opening parenthesis after branch keyword", Token::Symbol::LParen);
+	auto maybe_expression = SPANNED_REASON(expect_expression, "expected condition expression for branch statement");
+	if (!maybe_expression.has_value()) return {};
+	expect_symbol("expected closing parenthesis after branch condition expression", Token::Symbol::RParen);
+	auto maybe_label1 = SPANNED_REASON(expect_label, "expected label after branch condition expression");
+	if (!maybe_label1.has_value()) return {};
+	auto maybe_label2 = SPANNED(consume_label);
+	expect_semicolon("expected semicolon after branch statement");
+	Spanned<Statement::Goto>                true_ {maybe_label1.value().span, {maybe_label1.value().value}};
+	std::optional<Spanned<Statement::Goto>> false_ = maybe_label2.transform([](auto&& value) {
+		return Spanned<Statement::Goto> {value.span, Statement::Goto {value.value}};
+	});
+	return Statement::make_branch(Statement::Branch {std::move(maybe_expression.value()), true_, false_});
 }
 
 std::optional<Statement> Parser::consume_statement() {
@@ -568,6 +588,7 @@ std::optional<Statement> Parser::consume_statement() {
 	if (peek_keyword(Keyword::Const) || peek_keyword(Keyword::Mut)) { return consume_statement_declare(); }
 	if (consume_keyword(Keyword::Return)) return consume_statement_return();
 	if (consume_keyword(Keyword::Goto)) return consume_statement_goto();
+	if (consume_keyword(Keyword::Branch)) return consume_statement_branch();
 
 	return consume_statement_set();
 }
@@ -610,6 +631,7 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	case Keyword::Func:   return token.get_identifier() == "func";
 	case Keyword::Return: return token.get_identifier() == "return";
 	case Keyword::Goto:   return token.get_identifier() == "goto";
+	case Keyword::Branch: return token.get_identifier() == "branch";
 	}
 	[[assume(false)]];
 	return false;

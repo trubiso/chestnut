@@ -59,6 +59,7 @@ private:
 		Func,
 		Return,
 		Goto,
+		Branch,
 	};
 
 	FileContext   context_;
@@ -115,6 +116,7 @@ private:
 	std::optional<Statement> consume_statement_scope();
 	std::optional<Statement> consume_statement_label();
 	std::optional<Statement> consume_statement_goto();
+	std::optional<Statement> consume_statement_branch();
 	std::optional<Statement> consume_statement();
 
 	std::optional<Scope> consume_scope();

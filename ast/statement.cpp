@@ -35,6 +35,18 @@ std::ostream& operator<<(std::ostream& os, Statement::Goto const& goto_) {
 	return os << ";]";
 }
 
+std::ostream& operator<<(std::ostream& os, Statement::Branch const& branch) {
+	os << "[branch (" << branch.condition.value << ") '" << branch.true_.value.destination;
+	if (branch.true_.value.destination_id.has_value())
+		os << " ('@" << branch.true_.value.destination_id.value() << ")";
+	if (branch.false_.has_value()) {
+		os << " '" << branch.false_.value().value.destination;
+		if (branch.false_.value().value.destination_id.has_value())
+			os << " ('@" << branch.false_.value().value.destination_id.value() << ")";
+	}
+	return os << ";]";
+}
+
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	switch (statement.kind()) {
@@ -45,6 +57,7 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	case Statement::Kind::Scope:      break;
 	case Statement::Kind::Label:      return os << statement.get_label();
 	case Statement::Kind::Goto:       return os << statement.get_goto();
+	case Statement::Kind::Branch:     return os << statement.get_branch();
 	}
 
 	Scope const& scope = statement.get_scope();

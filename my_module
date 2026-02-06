@@ -18,6 +18,8 @@ func my_control_flows() {
 	putchar('h');
 	'b:
 	putchar('i');
+	branch (1) 'a 'b;
+	branch (2) 'b;
 	goto 'a;
 	return;
 }

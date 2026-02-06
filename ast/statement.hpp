@@ -43,9 +43,15 @@ struct Statement {
 		std::optional<Label::ID> destination_id = {};
 	};
 
-	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto };
+	struct Branch {
+		Spanned<Expression>          condition;
+		Spanned<Goto>                true_;
+		std::optional<Spanned<Goto>> false_;
+	};
 
-	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto> value_t;
+	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto, Branch };
+
+	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto, Branch> value_t;
 
 	value_t value;
 
@@ -75,8 +81,12 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Label>, std::move(label)});
 	}
 
-	inline static Statement make_goto(Goto&& scope) {
-		return Statement(value_t {std::in_place_index<(size_t) Kind::Goto>, std::move(scope)});
+	inline static Statement make_goto(Goto&& goto_) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Goto>, std::move(goto_)});
+	}
+
+	inline static Statement make_branch(Branch&& branch) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Branch>, std::move(branch)});
 	}
 
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
@@ -106,6 +116,10 @@ struct Statement {
 	inline Goto const& get_goto() const { return std::get<(size_t) Kind::Goto>(value); }
 
 	inline Goto& get_goto() { return std::get<(size_t) Kind::Goto>(value); }
+
+	inline Branch const& get_branch() const { return std::get<(size_t) Kind::Branch>(value); }
+
+	inline Branch& get_branch() { return std::get<(size_t) Kind::Branch>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
@@ -113,6 +127,7 @@ std::ostream& operator<<(std::ostream&, Statement::Set const&);
 std::ostream& operator<<(std::ostream&, Statement::Return const&);
 std::ostream& operator<<(std::ostream&, Statement::Label const&);
 std::ostream& operator<<(std::ostream&, Statement::Goto const&);
+std::ostream& operator<<(std::ostream&, Statement::Branch const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
 
 }  // namespace AST
