@@ -2,6 +2,7 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "resolver.hpp"
+#include "test.hpp"
 
 #include <cerrno>
 #include <fstream>
@@ -69,9 +70,52 @@ std::vector<Resolver::ParsedFile> parse_files(std::vector<std::tuple<Stream<Toke
 	return parsed_files;
 }
 
-int main(void) {
-	// TODO: at some point, we have to solve folders and how they create submodules
+bool run_tests() {
+	std::vector<std::string> files_to_test {"lexer/unterminated_string"};
+	std::string              tests_folder = "tests";
+	std::vector<std::string> sources {};
+	sources.reserve(files_to_test.size());
+	for (std::string const& file_to_test : files_to_test) {
+		std::string   actual_path = std::format("{}/{}", tests_folder, file_to_test);
+		std::ifstream file;
+		file.open(actual_path.data());
+		if (!file.is_open()) {
+			std::cerr << "Failed to open test file '" << actual_path << "'." << std::endl;
+			errno = ENOENT;
+			return false;
+		}
+		sources.emplace_back(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+	}
+	assert(sources.size() == files_to_test.size());
+	bool all_passed = true;
+	for (size_t i = 0; i < sources.size(); ++i) {
+		Test                       test  = Test::from_file(std::move(sources.at(i)));
+		std::optional<std::string> error = test.run();
+		if (error.has_value()) {
+			all_passed = false;
+			OutFmt::bg(OutFmt::Color::Red);
+			OutFmt::fg(OutFmt::Color::BrightWhite);
+			OutFmt::set_bold();
+			std::cout << "[ F ]";
+			OutFmt::reset();
+			std::cout << " " << files_to_test.at(i) << '\n' << error.value() << std::endl;
+		} else {
+			OutFmt::bg(OutFmt::Color::BrightGreen);
+			OutFmt::fg(OutFmt::Color::Black);
+			OutFmt::set_bold();
+			std::cout << "[ P ]";
+			OutFmt::reset();
+			std::cout << " " << files_to_test.at(i) << std::endl;
+		}
+	}
+	return all_passed;
+}
 
+int main(void) {
+	run_tests();
+	return 0;
+
+	// TODO: at some point, we have to solve folders and how they create submodules
 	std::vector<std::string> files_to_parse {"my_module"};
 
 	std::optional<std::vector<std::string>> maybe_sources = get_sources(files_to_parse);

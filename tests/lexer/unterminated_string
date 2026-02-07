@@ -1,0 +1,3 @@
+// pass: Lexer, expect: Diagnostics
+// severity: Error, title: "unterminated string literal"
+"hello
