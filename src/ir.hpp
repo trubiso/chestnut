@@ -157,6 +157,7 @@ struct Expression {
 		enum class Kind {
 			Identifier,
 			Literal,
+			Bool,
 		};
 
 		struct Literal {
@@ -164,7 +165,7 @@ struct Expression {
 			std::string literal;
 		};
 
-		typedef std::variant<Identifier, Literal> value_t;
+		typedef std::variant<Identifier, Literal, bool> value_t;
 
 		value_t  value;
 		IR::Type type;
@@ -185,11 +186,16 @@ struct Expression {
 			);
 		}
 
+		// TODO: the type should always be bool, idk if it's even worth having it as an arg
+		inline static Atom make_bool(bool value, IR::Type type) { return Atom {value, type}; }
+
 		inline Identifier get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline Identifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline Literal const& get_literal() const { return std::get<(size_t) Kind::Literal>(value); }
+
+		inline bool get_bool() const { return std::get<(size_t) Kind::Bool>(value); }
 	};
 
 	struct FunctionCall {

@@ -194,6 +194,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 	case IR::Expression::Atom::Kind::Identifier:
 		return builder_.CreateLoad(generate_type(atom.type), variables_[atom.get_identifier()]);
 	case IR::Expression::Atom::Kind::Literal: break;
+	case IR::Expression::Atom::Kind::Bool:    return builder_.getInt1(atom.get_bool());
 	}
 
 	// literals vary depending on their type

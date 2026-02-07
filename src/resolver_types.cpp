@@ -768,8 +768,9 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom const& atom, Span s
 	case AST::Expression::Atom::Kind::CharLiteral:
 		// TODO: apply suffixes
 		return register_type(TypeInfo::make_known_char(), span, file_id);
-	case AST::Expression::Atom::Kind::Expression: return infer(*atom.get_expression(), span, file_id);
-	case AST::Expression::Atom::Kind::Identifier: break;
+	case AST::Expression::Atom::Kind::BoolLiteral: return register_type(TypeInfo::make_known_bool(), span, file_id);
+	case AST::Expression::Atom::Kind::Expression:  return infer(*atom.get_expression(), span, file_id);
+	case AST::Expression::Atom::Kind::Identifier:  break;
 	}
 
 	// for identifiers, we match the type in the symbol pool

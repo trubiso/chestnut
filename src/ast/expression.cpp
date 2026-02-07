@@ -44,7 +44,9 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	case Expression::Atom::Kind::NumberLiteral: return os << atom.get_number_literal();
 	case Expression::Atom::Kind::StringLiteral: return os << atom.get_string_literal();
 	case Expression::Atom::Kind::CharLiteral:   return os << atom.get_char_literal();
-	case Expression::Atom::Kind::Expression:    return os << '(' << *atom.get_expression() << ')';
+	case Expression::Atom::Kind::BoolLiteral:
+		return os << '[' << (atom.get_bool_literal().value ? "true" : "false") << ']';
+	case Expression::Atom::Kind::Expression: return os << '(' << *atom.get_expression() << ')';
 	}
 	[[assume(false)]];
 }

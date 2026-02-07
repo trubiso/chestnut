@@ -285,6 +285,14 @@ Spanned<IR::Expression> Resolver::lower(
 					reconstruct_type(type_id)
 				)
 			)};
+	case AST::Expression::Atom::Kind::BoolLiteral:
+		return {span,
+		        IR::Expression::make_atom(
+				IR::Expression::Atom::make_bool(
+					atom.get_bool_literal().value,
+					reconstruct_type(type_id)
+				)
+			)};
 	case AST::Expression::Atom::Kind::Expression:
 		return {span,
 		        IR::Expression::make_atom(
@@ -414,9 +422,10 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 					   )
 				   )};
 			break;
+		case IR::Type::Atom::Kind::Bool:
+			value = {span, IR::Expression::make_atom(IR::Expression::Atom::make_bool(false, type))};
 		case IR::Type::Atom::Kind::Void:  break;
 		case IR::Type::Atom::Kind::Error: break;
-		case IR::Type::Atom::Kind::Bool:  // TODO: add a false literal for bool
 		case IR::Type::Atom::Kind::Char:
 			parsed_files.at(file_id).diagnostics.push_back(
 				Diagnostic::error(

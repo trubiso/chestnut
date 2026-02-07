@@ -11,7 +11,7 @@ namespace AST {
 
 struct Expression {
 	struct Atom {
-		enum class Kind { Identifier, NumberLiteral, StringLiteral, CharLiteral, Expression };
+		enum class Kind { Identifier, NumberLiteral, StringLiteral, CharLiteral, BoolLiteral, Expression };
 
 		struct NumberLiteral {
 			std::string               literal;
@@ -30,7 +30,17 @@ struct Expression {
 			std::optional<Identifier> suffix;  // unqualified
 		};
 
-		typedef std::variant<Identifier, NumberLiteral, StringLiteral, CharLiteral, std::unique_ptr<Expression>>
+		struct BoolLiteral {
+			bool value;
+		};
+
+		typedef std::variant<
+			Identifier,
+			NumberLiteral,
+			StringLiteral,
+			CharLiteral,
+			BoolLiteral,
+			std::unique_ptr<Expression>>
 			value_t;
 
 		value_t value;
@@ -68,6 +78,10 @@ struct Expression {
 			);
 		}
 
+		inline static Atom make_bool_literal(bool value) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::BoolLiteral>, BoolLiteral {value}});
+		}
+
 		inline static Atom make_expression(std::unique_ptr<Expression>&& expression) {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
 		}
@@ -87,6 +101,8 @@ struct Expression {
 		inline CharLiteral const& get_char_literal() const {
 			return std::get<(size_t) Kind::CharLiteral>(value);
 		}
+
+		inline BoolLiteral get_bool_literal() const { return std::get<(size_t) Kind::BoolLiteral>(value); }
 
 		inline std::unique_ptr<Expression> const& get_expression() const {
 			return std::get<(size_t) Kind::Expression>(value);

@@ -220,8 +220,17 @@ std::optional<Type> Parser::consume_type() {
 std::optional<Expression> Parser::consume_expression_atom() {
 	// it could be a potentially qualified identifier
 	std::optional<Identifier> identifier = consume_identifier();
-	if (identifier.has_value())
+	if (identifier.has_value()) {
+		// special case for "true" and "false", which refer to boolean literals. they are strict keywords in
+		// this sense
+		if (identifier.value().is_unqualified()
+		    && (identifier.value().name() == "true" || identifier.value().name() == "false")) {
+			return Expression::make_atom(
+				Expression::Atom::make_bool_literal(identifier.value().name() == "true")
+			);
+		}
 		return Expression::make_atom(Expression::Atom::make_identifier(std::move(identifier.value())));
+	}
 
 	// since it's not an identifier, it has to be a literal
 	std::optional<std::string> sv;

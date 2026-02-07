@@ -67,6 +67,7 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	switch (atom.kind()) {
 	case Expression::Atom::Kind::Identifier: return os << '@' << atom.get_identifier();
 	case Expression::Atom::Kind::Literal:    return os << atom.get_literal();
+	case Expression::Atom::Kind::Bool:       return os << "(bool) " << (atom.get_bool() ? "true" : "false");
 	}
 	[[assume(false)]];
 }
