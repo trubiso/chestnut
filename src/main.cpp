@@ -89,28 +89,31 @@ bool run_tests() {
 		paths.push_back(entry.path().string().substr(tests_folder.size() + 1));
 	}
 	assert(sources.size() == paths.size());
-	bool all_passed = true;
+	size_t tests_passed = 0;
 	for (size_t i = 0; i < sources.size(); ++i) {
 		Test                       test  = Test::from_file(std::move(sources.at(i)));
 		std::optional<std::string> error = test.run();
 		if (error.has_value()) {
-			all_passed = false;
 			OutFmt::bg(OutFmt::Color::Red);
 			OutFmt::fg(OutFmt::Color::BrightWhite);
 			OutFmt::set_bold();
 			std::cout << "[ F ]";
 			OutFmt::reset();
-			std::cout << " " << paths.at(i) << '\n' << error.value() << std::endl;
+			std::cout << " " << paths.at(i) << '\n' << error.value() << '\n';
 		} else {
+			tests_passed++;
 			OutFmt::bg(OutFmt::Color::BrightGreen);
 			OutFmt::fg(OutFmt::Color::Black);
 			OutFmt::set_bold();
 			std::cout << "[ P ]";
 			OutFmt::reset();
-			std::cout << " " << paths.at(i) << std::endl;
+			std::cout << " " << paths.at(i) << '\n';
 		}
 	}
-	return all_passed;
+	std::cout << tests_passed << " test" << (tests_passed == 1 ? "" : "s") << " passed";
+	if (tests_passed < sources.size()) std::cout << ", " << sources.size() - tests_passed << " failed";
+	std::cout << std::endl;
+	return tests_passed == sources.size();
 }
 
 int main(void) {
