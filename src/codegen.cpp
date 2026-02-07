@@ -307,7 +307,6 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression const& expression
 void CodeGenerator::emit_statement(IR::Statement::Declare const& declare, llvm::BasicBlock* block) {
 	llvm::Type*  type  = generate_type(declare.type);
 	llvm::Value* value = declare.value.has_value() ? generate_expression(declare.value.value().value) : nullptr;
-	// TODO: move alloca to beginning of function
 	variables_[declare.name.value]
 		= llvm::IRBuilder<>(block, block->begin()).CreateAlloca(type, nullptr, get_name(declare.name.value));
 	if (value) builder_.CreateStore(value, variables_[declare.name.value]);
