@@ -107,7 +107,8 @@ void print_label_text(
 			else putchar(' ');
 		}
 	}
-	printf(" %s\n", label.label.value().c_str());
+	if (label.label.has_value()) printf(" %s", label.label.value().c_str());
+	putchar('\n');
 }
 
 void Diagnostic::Sample::print() const {
@@ -150,7 +151,6 @@ void Diagnostic::Sample::print() const {
 	// calculate the spans of the labels for each line
 	std::unordered_map<size_t, std::vector<Label>> labels_per_line {};
 	for (Label const& label : labels) {
-		if (!label.label.has_value()) continue;
 		size_t label_loc_start = context.loc.size() - 1;
 		assert(label.span.end > 0);
 		for (size_t i = 0; i < context.loc.size(); ++i) {
