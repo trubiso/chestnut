@@ -10,7 +10,6 @@ export func do_stuff(c: char) void {
 	const a: uint64 = 2;
 	::my_module::my_submodule::sum_numbers(a, 3);
 	::my_module::my_submodule::sum_numbers(20.34134, 30.2185);
-	return;
 }
 
 func my_control_flows() {
@@ -22,14 +21,12 @@ func my_control_flows() {
 	branch (a) 'a 'b;
 	branch (a) 'b;
 	goto 'a;
-	return;
 }
 
 func spam_labels() {
 	'a:
 	'b:
 	'c:
-	return;
 }
 
 @extern func print_integer(anon x: uint64);
@@ -62,5 +59,4 @@ def sum_numbers ::my_module::my_submodule::sum_numbers;
 	const f = 2.3298412390;
 	print_float(f);
 	putchar('\n');
-	return;
 }

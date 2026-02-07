@@ -572,16 +572,65 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 		// we don't need to push arguments as anonymous or mutable, we only cared during resolution and stuff
 		arguments.push_back(IR::Function::Argument {lower_identifier(name), lower_type(type, file_id)});
 	}
+	Spanned<IR::Type> return_type = lower_type(function.return_type, file_id);
 	// TODO: ensure that we have a return statement at the end, since basic blocks need to always jump
 	std::vector<IR::BasicBlock> basic_blocks {};
 	if (function.body.has_value()) {
 		basic_blocks.push_back(IR::BasicBlock {0, {}, std::monostate {}});
 		lower(function.body.value(), function, basic_blocks, file_id);
+		// after lowering, we need to ensure that all of these basic blocks are valid IR
+		bool returns         = false,
+		     needs_to_return = return_type.value.get_atom().kind() != IR::Type::Atom::Kind::Void;
+		for (IR::BasicBlock const& basic_block : basic_blocks) {
+			if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
+				returns = true;
+				break;
+			}
+		}
+		if (!returns) {
+			// if it doesn't need to return, we can add the return manually
+			if (!needs_to_return) {
+				// this is the only place where we could have a monostate!
+				if (std::holds_alternative<std::monostate>(
+					    basic_blocks.at(basic_blocks.size() - 1).jump
+				    )) {
+					// we can automatically add a return void
+					basic_blocks.at(basic_blocks.size() - 1).jump
+						= IR::BasicBlock::Return {std::nullopt};
+				} else {
+					// otherwise, this function actually never returns
+					parsed_files.at(file_id).diagnostics.push_back(
+						Diagnostic::warning(
+							"function never returns",
+							"there is no way for this function to ever return. if this is intentional, you should mark the function as such (there is no way to do so currently)",
+							{Diagnostic::Sample(
+								get_context(file_id),
+								function.name.span,
+								OutFmt::Color::Yellow
+							)}
+						)
+					);
+				}
+			} else {
+				// if it does, we need to add an error. this will prevent codegen from running
+				parsed_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"non-void function has no return statement",
+						"there is no way for this non-void function to ever return a value",
+						{Diagnostic::Sample(
+							get_context(file_id),
+							function.name.span,
+							OutFmt::Color::Red
+						)}
+					)
+				);
+			}
+		}
 	};
 	return IR::Function {
 		{function.name.span, function.name.value.id.value()[0]},
 		std::move(arguments),
-		lower_type(function.return_type, file_id),
+		return_type,
 		basic_blocks,
 		false
 	};
