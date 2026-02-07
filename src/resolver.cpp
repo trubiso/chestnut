@@ -11,32 +11,26 @@ std::vector<IR::Module> Resolver::resolve() {
 	infer_types();
 
 	auto lowered = lower();
-	for (IR::Module const& module : lowered) {
-		print(module);
-		std::cout << std::endl;
-	}
+	for (IR::Module const& module : lowered) { print(std::cout, module) << std::endl; }
 	return lowered;
 }
 
-void Resolver::print(IR::Module const& module) const {
-	std::cout << "declare module @" << module.name.value << ": ";
-	if (module.items.empty()) {
-		std::cout << "(empty module)";
-		return;
-	}
-	std::cout << "{\n";
-	std::cout.iword(0)++;
+std::ostream& Resolver::print(std::ostream& os, IR::Module const& module) const {
+	os << "declare module @" << module.name.value << ": ";
+	if (module.items.empty()) { return os << "(empty module)"; }
+	os << "{\n";
+	os.iword(0)++;
 	for (auto item : module.items) {
-		for (long i = 0; i < std::cout.iword(0); ++i) std::cout << "    ";
+		for (long i = 0; i < os.iword(0); ++i) os << "    ";
 		if (std::holds_alternative<IR::Module>(symbol_pool_.at(item).item))
-			print(std::get<IR::Module>(symbol_pool_.at(item).item));
+			print(os, std::get<IR::Module>(symbol_pool_.at(item).item));
 		else if (std::holds_alternative<IR::Function>(symbol_pool_.at(item).item))
-			std::cout << std::get<IR::Function>(symbol_pool_.at(item).item);
-		std::cout << '\n';
+			os << std::get<IR::Function>(symbol_pool_.at(item).item);
+		os << '\n';
 	}
-	std::cout.iword(0)--;
-	for (long i = 0; i < std::cout.iword(0); ++i) std::cout << "    ";
-	std::cout << "}";
+	os.iword(0)--;
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
+	return os << "}";
 }
 
 std::vector<IR::Symbol> Resolver::export_symbols() const {

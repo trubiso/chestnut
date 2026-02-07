@@ -34,6 +34,8 @@ public:
 	std::vector<IR::Symbol> export_symbols() const;
 	/// Prints a dump of all symbols and their corresponding types.
 	void dump() const;
+	/// Prints an IR module using the symbol table.
+	std::ostream& print(std::ostream&, IR::Module const&) const;
 
 private:
 	// === STRUCTS ===
@@ -473,6 +475,4 @@ private:
 	IR::Module                            lower(AST::Module&, FileContext::ID);
 	/// Lowers all files into IR modules.
 	std::vector<IR::Module> lower();
-
-	void print(IR::Module const&) const;
 };
