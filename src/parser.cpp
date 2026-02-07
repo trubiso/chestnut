@@ -11,9 +11,10 @@
 
 namespace AST {
 
-#define SPANNED(fn) spanned((std::function<decltype(fn())()>) [this] { return fn(); })
-#define SPANNED_REASON(fn, reason)                                                                               \
-	spanned((std::function<decltype(fn(std::declval<decltype(reason)>()))()>) [this] { return fn(reason); })
+#define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
+#define SPANNED_REASON(fn, reason)                                                                                     \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
+		                                                                      this] { return (fn) (reason); })
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -376,6 +377,37 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 
 // TODO: greatly improve this code with macros or some system that doesn't require this much repetition
 
+std::optional<Expression> Parser::consume_generic_binop(
+	std::optional<Expression> (Parser::*consume)(),
+	std::optional<Expression> (Parser::*expect)(std::string_view),
+	std::vector<Token::Symbol>&& operators
+) {
+	std::optional<Spanned<Expression>> maybe_lhs = SPANNED(this->*consume);
+	if (!maybe_lhs.has_value()) return {};
+	Spanned<Expression> lhs = std::move(maybe_lhs.value());
+
+	std::optional<Token::Symbol> operator_;
+	while ((operator_ = peek_symbols(operators)).has_value()) {
+		tokens_.advance();
+
+		std::optional<Spanned<Expression>> should_rhs
+			= SPANNED_REASON(this->*expect, "expected expression after binary operator");
+		if (!should_rhs.has_value()) return std::move(lhs.value);  // error recovery
+		Spanned<Expression> rhs = std::move(should_rhs.value());
+
+		lhs = Spanned<Expression> {
+			Span(lhs.span.start, rhs.span.end),
+			Expression::make_binary_operation(
+				std::make_unique<Spanned<Expression>>(std::move(lhs)),
+				std::make_unique<Spanned<Expression>>(std::move(rhs)),
+				operator_.value()
+			)
+		};
+	}
+
+	return std::move(lhs.value);
+}
+
 std::optional<Expression> Parser::consume_expression_unary_l1() {
 	// this refers to unary negation. this code is really ugly
 	size_t negations = 0;
@@ -398,63 +430,21 @@ std::optional<Expression> Parser::consume_expression_unary_l1() {
 }
 
 std::optional<Expression> Parser::consume_expression_binop_l1() {
-	// highest precedence will be mul/div
-	std::optional<Spanned<Expression>> maybe_lhs = SPANNED(consume_expression_unary_l1);
-	if (!maybe_lhs.has_value()) return {};
-	Spanned<Expression> lhs = std::move(maybe_lhs.value());
-
-	bool has_star = false, has_div = false;
-	while ((has_star = peek_symbol(Token::Symbol::Star)) || (has_div = peek_symbol(Token::Symbol::Div))) {
-		// consume whichever of the symbols it was
-		Token::Symbol operation = has_star ? Token::Symbol::Star : Token::Symbol::Div;
-		tokens_.advance();
-
-		std::optional<Spanned<Expression>> should_rhs
-			= SPANNED_REASON(expect_expression_unary_l1, "expected expression after binary operator");
-		if (!should_rhs.has_value()) return std::move(lhs.value);  // error recovery
-		Spanned<Expression> rhs = std::move(should_rhs.value());
-
-		lhs = Spanned<Expression> {
-			Span(lhs.span.start, rhs.span.end),
-			Expression::make_binary_operation(
-				std::make_unique<Spanned<Expression>>(std::move(lhs)),
-				std::make_unique<Spanned<Expression>>(std::move(rhs)),
-				operation
-			)
-		};
-	}
-
-	return std::move(lhs.value);
+	// then *, /
+	return consume_generic_binop(
+		&Parser::consume_expression_unary_l1,
+		&Parser::expect_expression_unary_l1,
+		{Token::Symbol::Star, Token::Symbol::Div}
+	);
 }
 
 std::optional<Expression> Parser::consume_expression() {
-	// highest precedence will be mul/div
-	std::optional<Spanned<Expression>> maybe_lhs = SPANNED(consume_expression_binop_l1);
-	if (!maybe_lhs.has_value()) return {};
-	Spanned<Expression> lhs = std::move(maybe_lhs.value());
-
-	bool has_plus = false, has_minus = false;
-	while ((has_plus = peek_symbol(Token::Symbol::Plus)) || (has_minus = peek_symbol(Token::Symbol::Minus))) {
-		// consume whichever of the symbols it was
-		Token::Symbol operation = has_plus ? Token::Symbol::Plus : Token::Symbol::Minus;
-		tokens_.advance();
-
-		std::optional<Spanned<Expression>> should_rhs
-			= SPANNED_REASON(expect_expression_binop_l1, "expected expression after binary operator");
-		if (!should_rhs.has_value()) return std::move(lhs.value);  // error recovery
-		Spanned<Expression> rhs = std::move(should_rhs.value());
-
-		lhs = Spanned<Expression> {
-			Span(lhs.span.start, rhs.span.end),
-			Expression::make_binary_operation(
-				std::make_unique<Spanned<Expression>>(std::move(lhs)),
-				std::make_unique<Spanned<Expression>>(std::move(rhs)),
-				operation
-			)
-		};
-	}
-
-	return std::move(lhs.value);
+	// lowest precedence: +, -
+	return consume_generic_binop(
+		&Parser::consume_expression_binop_l1,
+		&Parser::expect_expression_binop_l1,
+		{Token::Symbol::Plus, Token::Symbol::Minus}
+	);
 }
 
 std::optional<Statement> Parser::consume_statement_declare() {
@@ -630,6 +620,12 @@ bool Parser::peek_symbol(Token::Symbol symbol) const {
 	Token token = maybe_token.value();
 	if (!token.is_symbol()) return false;
 	return token.get_symbol() == symbol;
+}
+
+std::optional<Token::Symbol> Parser::peek_symbols(std::vector<Token::Symbol> const& symbols) const {
+	for (Token::Symbol symbol : symbols)
+		if (peek_symbol(symbol)) return symbol;
+	return {};
 }
 
 bool Parser::peek_keyword(Keyword keyword) const {

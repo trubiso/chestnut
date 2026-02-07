@@ -102,6 +102,12 @@ private:
 	std::optional<Type::Atom> consume_type_atom();
 	std::optional<Type>       consume_type();
 
+	std::optional<Expression> consume_generic_binop(
+		std::optional<Expression> (Parser::*consume)(),
+		std::optional<Expression> (Parser::*expect)(std::string_view),
+		std::vector<Token::Symbol>&& operators
+	);
+
 	std::optional<Expression>                         consume_expression_atom();
 	std::optional<Expression::FunctionCall::Argument> consume_expression_function_call_argument();
 	std::optional<Expression>                         consume_expression_function_call();
@@ -123,9 +129,11 @@ private:
 
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;
-	bool peek_keyword(Keyword) const;
-	bool peek_unqualified_identifier() const;
-	bool peek_label() const;
+	/// Returns the first matching symbol in the vector, if any do match.
+	std::optional<Token::Symbol> peek_symbols(std::vector<Token::Symbol> const&) const;
+	bool                         peek_keyword(Keyword) const;
+	bool                         peek_unqualified_identifier() const;
+	bool                         peek_label() const;
 
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
 	// upon failure. The reason string is only copied if a diagnostic is thrown.
