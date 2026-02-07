@@ -1,0 +1,7 @@
+// pass: Parser, expect: Diagnostics
+// severity: Error, title: "duplicate argument name", subtitle: "argument name used twice in function call"
+// severity: Error, title: "cannot specify ordered argument after labeled argument(s)", subtitle: "labeled arguments should be specified after all ordered arguments, so no ordered arguments can appear between the labeled arguments"
+// severity: Error, title: "expected symbol ')' (or symbol ';')", subtitle: "expected closing parenthesis to end argument list | (expected semicolon after expression statement)"
+func main() {
+	call()(a: 3, a: 4, 5
+}

@@ -1,0 +1,6 @@
+// pass: Parser, expect: Diagnostics
+// severity: Error, title: "invalid left-hand side for set statement", subtitle: "set statements can only take lvalues (identifiers, dereferences and access expressions) in their left-hand side"
+// severity: Error, title: "expected expression (or symbol '}')", subtitle: "expected expression after equals sign in set statement | (expected closing brace to end scope)"
+func main() {
+	1 + 1 =;
+}
