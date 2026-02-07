@@ -28,7 +28,7 @@ cleanall:
 build: ./chc
 run: ./chc
 	./chc my_module
-	g++ -o main output.o
+	gcc -o main output.o my_module_print_integer.c
 	./main
 test: ./chc
 	./chc --run-compiler-tests
