@@ -28,6 +28,7 @@ private:
 	std::vector<IR::Symbol> symbols_;
 
 	std::string get_name(IR::Identifier) const;
+	std::string get_block_name(IR::BasicBlock::ID) const;
 
 	llvm::Type* generate_type(IR::Type const&);
 
@@ -39,8 +40,10 @@ private:
 
 	void emit_statement(IR::Statement::Declare const&, llvm::BasicBlock*);
 	void emit_statement(IR::Statement::Set const&);
-	void emit_statement(IR::Statement::Return const&);
 	void emit_statement(IR::Statement const&, llvm::BasicBlock*);
+	
+	void emit_basic_block(IR::BasicBlock const&, llvm::BasicBlock*);
+	void emit_basic_block_jump(IR::BasicBlock const&, std::unordered_map<IR::BasicBlock::ID, llvm::BasicBlock*>);
 
 	/// Assumes the function has already been created.
 	void emit_function(IR::Function const&);

@@ -94,6 +94,10 @@ std::string CodeGenerator::get_name(IR::Identifier identifier) const {
 	return std::format("{}_{}", symbols_.at(identifier).name, identifier);
 }
 
+std::string CodeGenerator::get_block_name(IR::BasicBlock::ID id) const {
+	return std::format("_{}b", id);
+}
+
 llvm::Type* CodeGenerator::generate_type(IR::Type const& type) {
 	if (type.kind() != IR::Type::Kind::Atom) {
 		std::cout << "non-atoms cannot yet be lowered" << std::endl;
@@ -300,12 +304,12 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression const& expression
 	}
 }
 
-void CodeGenerator::emit_statement(IR::Statement::Declare const& declare, llvm::BasicBlock* entry) {
+void CodeGenerator::emit_statement(IR::Statement::Declare const& declare, llvm::BasicBlock* block) {
 	llvm::Type*  type  = generate_type(declare.type);
 	llvm::Value* value = declare.value.has_value() ? generate_expression(declare.value.value().value) : nullptr;
 	// TODO: move alloca to beginning of function
 	variables_[declare.name.value]
-		= llvm::IRBuilder<>(entry, entry->begin()).CreateAlloca(type, nullptr, get_name(declare.name.value));
+		= llvm::IRBuilder<>(block, block->begin()).CreateAlloca(type, nullptr, get_name(declare.name.value));
 	if (value) builder_.CreateStore(value, variables_[declare.name.value]);
 }
 
@@ -314,43 +318,82 @@ void CodeGenerator::emit_statement(IR::Statement::Set const& set) {
 	builder_.CreateStore(value, variables_[set.name.value]);
 }
 
-void CodeGenerator::emit_statement(IR::Statement::Return const& return_) {
-	if (!return_.value.has_value()) {
-		builder_.CreateRetVoid();
-		return;
-	}
-
-	llvm::Value* value = generate_expression(return_.value.value().value);
-	builder_.CreateRet(value);
-}
-
-void CodeGenerator::emit_statement(IR::Statement const& statement, llvm::BasicBlock* entry) {
+void CodeGenerator::emit_statement(IR::Statement const& statement, llvm::BasicBlock* block) {
 	switch (statement.kind()) {
-	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare(), entry);
+	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare(), block);
 	case IR::Statement::Kind::Set:     return emit_statement(statement.get_set());
 	case IR::Statement::Kind::Call:    generate_expression(statement.get_call()); return;
-	case IR::Statement::Kind::Return:  return emit_statement(statement.get_return());
+	}
+}
+
+void CodeGenerator::emit_basic_block(IR::BasicBlock const& basic_block, llvm::BasicBlock* block) {
+	// this just emits the statements
+	for (auto const& statement : basic_block.statements) emit_statement(statement.value, block);
+}
+
+void CodeGenerator::emit_basic_block_jump(
+	IR::BasicBlock const&                                     basic_block,
+	std::unordered_map<IR::BasicBlock::ID, llvm::BasicBlock*> blocks
+) {
+	if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
+		IR::BasicBlock::Goto const& goto_ = std::get<IR::BasicBlock::Goto>(basic_block.jump);
+		builder_.CreateBr(blocks.at(goto_.id));
+	} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
+		IR::BasicBlock::Branch const& branch    = std::get<IR::BasicBlock::Branch>(basic_block.jump);
+		llvm::Value*                  condition = generate_expression(branch.condition);
+		builder_.CreateCondBr(condition, blocks.at(branch.true_), blocks.at(branch.false_));
+	} else if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
+		IR::BasicBlock::Return const& return_ = std::get<IR::BasicBlock::Return>(basic_block.jump);
+		if (!return_.value.has_value()) {
+			builder_.CreateRetVoid();
+			return;
+		}
+		llvm::Value* value = generate_expression(return_.value.value().value);
+		if (value->getType()->isVoidTy()) {
+			builder_.CreateRetVoid();
+			return;
+		}
+		builder_.CreateRet(value);
+	} else {
+		// this block is invalid, so we shouldn't have made it this far
+		// let's add a return void for the lulz
+		builder_.CreateRetVoid();
 	}
 }
 
 void CodeGenerator::emit_function(IR::Function const& ir_function) {
-	if (!ir_function.body.has_value()) return;
+	if (ir_function.body.empty()) return;
 	llvm::Function* function = program_.getFunction(get_name(ir_function.name.value));
 	assert(function);
 
-	llvm::BasicBlock* block = llvm::BasicBlock::Create(context_, "entry", function);
-	builder_.SetInsertPoint(block);
-
-	size_t i = 0;
-	for (auto& arg : function->args()) {
-		AST::SymbolID argument_id   = ir_function.arguments[i++].name.value;
-		std::string   argument_name = get_name(argument_id);
-		variables_[argument_id]
-			= llvm::IRBuilder<>(block, block->begin()).CreateAlloca(arg.getType(), nullptr, argument_name);
-		builder_.CreateStore(&arg, variables_[argument_id]);
+	size_t count = 0;
+	// we store two hashmaps to be able to add the jumps later on
+	std::unordered_map<IR::BasicBlock::ID, IR::BasicBlock const*> basic_blocks {};
+	std::unordered_map<IR::BasicBlock::ID, llvm::BasicBlock*>     blocks {};
+	for (IR::BasicBlock const& basic_block : ir_function.body) {
+		llvm::BasicBlock* block = llvm::BasicBlock::Create(context_, get_block_name(basic_block.id), function);
+		builder_.SetInsertPoint(block);
+		if (count++ == 0) {
+			// if this is the first basic block, we have to insert argument boilerplate
+			size_t i = 0;
+			for (auto& arg : function->args()) {
+				AST::SymbolID argument_id   = ir_function.arguments[i++].name.value;
+				std::string   argument_name = get_name(argument_id);
+				variables_[argument_id]     = llvm::IRBuilder<>(block, block->begin())
+				                                  .CreateAlloca(arg.getType(), nullptr, argument_name);
+				builder_.CreateStore(&arg, variables_[argument_id]);
+			}
+		}
+		emit_basic_block(basic_block, block);
+		blocks.emplace(basic_block.id, block);
+		basic_blocks.emplace(basic_block.id, &basic_block);
 	}
 
-	for (Spanned<IR::Statement> const& statement : ir_function.body.value()) emit_statement(statement.value, block);
+	// after emitting all statements, we can now emit all jumps
+	for (auto const& [id, block] : blocks) {
+		builder_.SetInsertPoint(block);
+		emit_basic_block_jump(*basic_blocks.at(id), blocks);
+	}
 
 	llvm::verifyFunction(*function, &llvm::errs());
 }
@@ -378,8 +421,8 @@ void CodeGenerator::create_function(IR::Function const& function) {
 		);
 		// we need to make sure that if we're exporting a definition, the definition is on the correct one
 		// though! that is, if we have a body, the exported one becomes the stub
-		llvm::Function* defined = function.body.has_value() ? stub_function : actual_function;
-		llvm::Function* alias   = function.body.has_value() ? actual_function : stub_function;
+		llvm::Function* defined = function.body.empty() ? actual_function : stub_function;
+		llvm::Function* alias   = function.body.empty() ? stub_function : actual_function;
 		// this stub just calls the function and returns whatever it returns
 		llvm::BasicBlock* block = llvm::BasicBlock::Create(context_, "entry", alias);
 		builder_.SetInsertPoint(block);
@@ -391,7 +434,7 @@ void CodeGenerator::create_function(IR::Function const& function) {
 		else builder_.CreateRet(value);
 		// if we don't have a body, we want to actually replace all calls to the alias with calls to the
 		// function
-		if (!function.body.has_value()) alias->addFnAttr(llvm::Attribute::AlwaysInline);
+		if (function.body.empty()) alias->addFnAttr(llvm::Attribute::AlwaysInline);
 		return;
 	}
 
