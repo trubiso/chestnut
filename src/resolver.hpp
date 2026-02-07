@@ -453,16 +453,16 @@ private:
 	Spanned<IR::Type> lower_type(Spanned<AST::Type>, FileContext::ID);
 
 	/// Lowers any identifier into its IR equivalent and type.
-	std::tuple<Spanned<IR::Identifier>, IR::Type>
-	lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
+	std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>> lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
 	/// Lowers any identifier into its IR equivalent and type.
-	std::tuple<IR::Identifier, IR::Type> lower(AST::Identifier const&, bool allow_functions = false);
+	std::optional<std::tuple<IR::Identifier, IR::Type>> lower(AST::Identifier const&, bool allow_functions = false);
 	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-alias module items).
 	Spanned<IR::Identifier> lower_identifier(Spanned<AST::Identifier> const&);
 
 	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression::Atom> extract_expression(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 
+	// FIXME: clang-format goes BALLISTIC over these function declarations
 	Spanned<IR::Expression> lower(AST::Expression::FunctionCall const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression> lower(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression> lower(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);

@@ -158,6 +158,7 @@ struct Expression {
 			Identifier,
 			Literal,
 			Bool,
+			Error,
 		};
 
 		struct Literal {
@@ -165,7 +166,7 @@ struct Expression {
 			std::string literal;
 		};
 
-		typedef std::variant<Identifier, Literal, bool> value_t;
+		typedef std::variant<Identifier, Literal, bool, std::monostate> value_t;
 
 		value_t  value;
 		IR::Type type;
@@ -188,6 +189,10 @@ struct Expression {
 
 		// TODO: the type should always be bool, idk if it's even worth having it as an arg
 		inline static Atom make_bool(bool value, IR::Type type) { return Atom {value, type}; }
+
+		inline static Atom make_error() {
+			return Atom {std::monostate {}, Type::make_atom(Type::Atom::make_error())};
+		}
 
 		inline Identifier get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 

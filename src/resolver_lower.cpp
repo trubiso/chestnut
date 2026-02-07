@@ -189,24 +189,23 @@ Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type> spanned_type, FileCont
 	}
 }
 
-std::tuple<Spanned<IR::Identifier>, IR::Type>
+std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>>
 Resolver::lower(Spanned<AST::Identifier> const& identifier, bool allow_functions) {
-	auto [id, type] = lower(identifier.value, allow_functions);
-	return {
+	auto data = lower(identifier.value, allow_functions);
+	if (!data.has_value()) return std::nullopt;
+	auto [id, type] = data.value();
+	return std::tuple<Spanned<IR::Identifier>, IR::Type> {
 		{identifier.span, id},
 		type
 	};
 }
 
-std::tuple<IR::Identifier, IR::Type> Resolver::lower(AST::Identifier const& identifier, bool allow_functions) {
+std::optional<std::tuple<IR::Identifier, IR::Type>>
+Resolver::lower(AST::Identifier const& identifier, bool allow_functions) {
 	// for identifiers, we need to ensure that they are fully resolved
-	if (!identifier.id.has_value() || identifier.id.value().size() != 1) {
-		// we have no real way of skipping as of right now unfortunately
-		// FIXME: this is dumb and silly and stupid and so on
-		return {0, IR::Type::make_atom(IR::Type::Atom::make_error())};
-	}
+	if (!identifier.id.has_value() || identifier.id.value().size() != 1) { return std::nullopt; }
 	AST::SymbolID id = identifier.id.value()[0];
-	return {id, reconstruct_type(symbol_pool_.at(id).type, allow_functions)};
+	return std::tuple {id, reconstruct_type(symbol_pool_.at(id).type, allow_functions)};
 }
 
 Spanned<IR::Identifier> Resolver::lower_identifier(Spanned<AST::Identifier> const& identifier) {
@@ -302,7 +301,9 @@ Spanned<IR::Expression> Resolver::lower(
 	}
 	// for identifiers, we need to extract the type as well.
 	// only identifiers can be functions!
-	auto [identifier, type] = lower(atom.get_identifier(), allow_functions);
+	auto data = lower(atom.get_identifier(), allow_functions);
+	if (!data.has_value()) return {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
+	auto [identifier, type] = data.value();
 	return {span, IR::Expression::make_atom(IR::Expression::Atom::make_identifier(identifier, type))};
 }
 
@@ -313,13 +314,8 @@ Spanned<IR::Expression> Resolver::lower(
 	FileContext::ID                      file_id,
 	bool                                 allow_functions
 ) {
-	// FIXME: better solution for fail expressions
-	auto error_expression = Spanned<IR::Expression> {
-		span,
-		IR::Expression::make_atom(
-			IR::Expression::Atom::make_identifier(0, IR::Type::make_atom(IR::Type::Atom::make_error()))
-		)
-	};
+	auto error_expression
+		= Spanned<IR::Expression> {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
 	auto callee = lower(*function_call.callee, basic_blocks, file_id, true);
 	// if the callee is not valid, we've already thrown diagnostics about it
 	if (callee.value.kind() != IR::Expression::Kind::Atom
@@ -399,7 +395,9 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	std::vector<IR::BasicBlock>&   basic_blocks,
 	FileContext::ID                file_id
 ) {
-	auto [name, type] = lower(declare.name);
+	auto data = lower(declare.name);
+	if (!data.has_value()) return {};
+	auto [name, type] = data.value();
 
 	auto value = declare.value.transform([&basic_blocks, file_id, this](auto&& value) {
 		return lower(value, basic_blocks, file_id);
