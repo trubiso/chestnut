@@ -3,20 +3,27 @@ CXXFLAGS = `llvm-config --system-libs --cppflags --ldflags --libs core` -std=c++
 
 OBJS = codegen.o diagnostic.o ir.o levenshtein.o lexer.o main.o out_fmt.o parser.o resolver.o resolver_identify.o resolver_lower.o resolver_symbols.o resolver_types.o token.o ast/expression.o ast/function.o ast/identifier.o ast/module.o ast/statement.o ast/tag.o ast/type.o
 
+BUILD_DIR := build
+SRC_DIR   := src
+
+OBJS := $(addprefix $(BUILD_DIR)/,$(OBJS))
+SRCS := $(OBJS:$(BUILD_DIR)/%.o=$(SRC_DIR)/%.cpp)
+
 ./out: $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o ./out
 .PHONY: build
 
-%.o : %.cpp
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 .PHONY: clean cleanall build run tidy cleancallgrind callgrind
 
 clean:
-	rm -f *.o **/*.o out
+	rm -rf $(BUILD_DIR) out
 
 cleanall:
-	rm -f *.o **/*.o out compile_commands.json
+	rm -rf $(BUILD_DIR) out compile_commands.json
 
 build: ./out
 run: ./out
@@ -27,7 +34,7 @@ compile_commands.json:
 	bear -- make -j4
 
 tidy: compile_commands.json
-	clang-tidy -header-filter=.* $(OBJS:.o=.cpp)
+	clang-tidy -header-filter=.* $(SRCS)
 
 cleancallgrind:
 	rm -f vgcore.* callgrind.*
