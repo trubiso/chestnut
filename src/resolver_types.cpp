@@ -1,6 +1,7 @@
 #include "levenshtein.hpp"
 #include "resolver.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -53,7 +54,7 @@ Resolver::TypeInfo::get_callable_subitems(TypeInfo::ID self_id, std::vector<Type
 	std::vector<ID> ids {};
 	for (TypeInfo::ID id : get_same_as().ids) {
 		std::vector<ID> subids = pool.at(id).get_callable_subitems(id, pool);
-		for (TypeInfo::ID subid : subids) ids.push_back(subid);
+		std::copy(subids.cbegin(), subids.cend(), std::back_inserter(ids));
 	}
 
 	return ids;
@@ -253,8 +254,9 @@ Resolver::TypeInfo Resolver::unify_follow_references(
 
 	// if we have more than one, filter the non-unifiable ones out
 	std::vector<TypeInfo::ID> new_ids {};
-	for (TypeInfo::ID id : ids)
-		if (can_unify(id, other)) new_ids.push_back(id);
+	std::copy_if(ids.cbegin(), ids.cend(), std::back_inserter(new_ids), [this, other](TypeInfo::ID id) {
+		return can_unify(id, other);
+	});
 
 	// if none can be unified, throw a diagnostic and return Bottom
 	if (new_ids.empty()) {
@@ -608,9 +610,7 @@ void Resolver::unify(TypeInfo::ID a_id, TypeInfo::ID b_id, FileContext::ID file_
 bool Resolver::can_unify_follow_references(TypeInfo const& same_as, TypeInfo const& other) const {
 	assert(same_as.kind() == TypeInfo::Kind::SameAs);
 	std::vector<TypeInfo::ID> const& ids = same_as.get_same_as().ids;
-	for (TypeInfo::ID id : ids)
-		if (can_unify(id, other)) return true;
-	return false;
+	return std::any_of(ids.cbegin(), ids.cend(), [this, other](TypeInfo::ID id) { return can_unify(id, other); });
 }
 
 std::optional<bool> Resolver::can_unify_basic_known(TypeInfo::Kind kind, TypeInfo const& a, TypeInfo const& b) const {
@@ -785,7 +785,9 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom const& atom, Span s
 	if (ids.empty()) return register_type(TypeInfo::make_bottom(), span, file_id);
 	std::vector<TypeInfo::ID> type_ids {};
 	type_ids.reserve(ids.size());
-	for (AST::SymbolID id : ids) { type_ids.push_back(get_single_symbol(id).type); }
+	std::transform(ids.cbegin(), ids.cend(), std::back_inserter(type_ids), [this](AST::SymbolID id) {
+		return get_single_symbol(id).type;
+	});
 	if (type_ids.size() == 1) return register_type(TypeInfo::make_same_as(type_ids[0]), span, file_id);
 	else return register_type(TypeInfo::make_same_as(std::move(type_ids)), span, file_id);
 }
@@ -861,14 +863,16 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 			bool all_arguments_exist = true;
 			for (auto const& argument : function_call.arguments.labeled) {
-				auto const& identifier      = std::get<0>(argument);
-				bool        argument_exists = false;
-				for (std::string_view actual_argument : arguments_under_consideration) {
-					if (actual_argument == identifier.value.name()) {
-						argument_exists = true;
-						break;
+				auto const& identifier = std::get<0>(argument);
+
+				bool argument_exists = std::any_of(
+					arguments_under_consideration.cbegin(),
+					arguments_under_consideration.cend(),
+					[&identifier](std::string_view actual_argument) {
+						return actual_argument == identifier.value.name();
 					}
-				}
+				);
+
 				if (!argument_exists) {
 					std::stringstream text {};
 					text << "missing labeled argument '" << identifier.value.name() << "'";
@@ -910,9 +914,12 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	// it's time to infer the arguments now that we have a set of possible callees
 	std::vector<TypeInfo::ID> ordered_arguments {};
 	ordered_arguments.reserve(function_call.arguments.ordered.size());
-	for (auto& argument : function_call.arguments.ordered) {
-		ordered_arguments.push_back(infer(argument.value, argument.span, file_id));
-	}
+	std::transform(
+		function_call.arguments.ordered.begin(),
+		function_call.arguments.ordered.end(),
+		std::back_inserter(ordered_arguments),
+		[this, file_id](auto& argument) { return infer(argument.value, argument.span, file_id); }
+	);
 
 	std::unordered_map<std::string, TypeInfo::ID> labeled_arguments {};
 	ordered_arguments.reserve(function_call.arguments.labeled.size());
@@ -933,7 +940,12 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		assert(function_arguments.size() == provided_arguments);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> arguments {};
 		arguments.reserve(provided_arguments);
-		for (TypeInfo::ID argument : ordered_arguments) arguments.push_back({std::nullopt, argument});
+		std::transform(
+			ordered_arguments.cbegin(),
+			ordered_arguments.cend(),
+			std::back_inserter(arguments),
+			[](TypeInfo::ID argument) { return std::tuple {std::nullopt, argument}; }
+		);
 		for (size_t i = arguments.size(); i < function_arguments.size(); ++i) {
 			std::optional<std::string> name = std::get<0>(function_arguments.at(i));
 			// if it didn't have a name, it couldn't be a labeled argument
@@ -992,14 +1004,18 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		std::vector<Diagnostic::Sample> samples = {rejections.at(0)};
 
 		size_t count = 0;
-		for (TypeInfo::ID id : found_functions)
-			samples.push_back(
-				Diagnostic::Sample(
+		std::transform(
+			found_functions.cbegin(),
+			found_functions.cend(),
+			std::back_inserter(samples),
+			[this, &count](TypeInfo::ID id) {
+				return Diagnostic::Sample(
 					get_context(get_type_file_id(id)),
 					std::format("candidate #{}", ++count),
 					{Diagnostic::Sample::Label(get_type_span(id), OutFmt::Color::Cyan)}
-				)
-			);
+				);
+			}
+		);
 
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(

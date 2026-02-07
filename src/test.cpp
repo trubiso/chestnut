@@ -98,7 +98,7 @@ std::optional<std::string> Test::run() const {
 	// lexer
 	Lexer         lexer {context, source};
 	Stream<Token> tokens {std::move(lexer.collect_all())};
-	for (auto&& diagnostic : lexer.diagnostics()) diagnostics.push_back(std::move(diagnostic));
+	std::move(lexer.diagnostics().begin(), lexer.diagnostics().end(), std::back_inserter(diagnostics));
 	if (pass == Pass::Lexer) {
 		if (std::holds_alternative<std::vector<ExpectedDiagnostic>>(expected_output)) {
 			return compare_diagnostics(
@@ -113,9 +113,10 @@ std::optional<std::string> Test::run() const {
 	}
 
 	// parser
-	AST::Parser parser {context, std::move(tokens)};
-	AST::Module parsed = parser.parse_all(context.name);
-	for (auto&& diagnostic : parser.diagnostics()) diagnostics.push_back(std::move(diagnostic));
+	AST::Parser             parser {context, std::move(tokens)};
+	AST::Module             parsed             = parser.parse_all(context.name);
+	std::vector<Diagnostic> parser_diagnostics = parser.diagnostics();
+	std::move(parser_diagnostics.begin(), parser_diagnostics.end(), std::back_inserter(diagnostics));
 	if (pass == Pass::Parser) {
 		if (std::holds_alternative<std::vector<ExpectedDiagnostic>>(expected_output)) {
 			return compare_diagnostics(

@@ -115,7 +115,12 @@ void Resolver::resolve(
 	if (!module_table_.contains(identifier.path[0].value)) {
 		std::vector<std::string> modules {};
 		modules.reserve(module_table_.size());
-		for (auto const& v : module_table_) modules.push_back(v.first);
+		std::transform(
+			module_table_.cbegin(),
+			module_table_.cend(),
+			std::back_inserter(modules),
+			[](auto const& v) { return v.first; }
+		);
 
 		add_unknown_symbol_diagnostic(
 			identifier.path[0].value,

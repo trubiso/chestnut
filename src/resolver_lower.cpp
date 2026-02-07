@@ -1,5 +1,6 @@
 #include "resolver.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -333,9 +334,14 @@ Spanned<IR::Expression> Resolver::lower(
 	std::vector<Spanned<IR::Expression::Atom>> arguments {};
 	arguments.reserve(argument_count);
 	// ordered arguments are freebies
-	for (AST::Expression::FunctionCall::OrderedArgument const& ordered_argument : function_call.arguments.ordered) {
-		arguments.push_back(extract_expression(ordered_argument, basic_blocks, file_id));
-	}
+	std::transform(
+		function_call.arguments.ordered.cbegin(),
+		function_call.arguments.ordered.cend(),
+		std::back_inserter(arguments),
+		[this, &basic_blocks, file_id](auto const& ordered_argument) {
+			return extract_expression(ordered_argument, basic_blocks, file_id);
+		}
+	);
 	// labeled arguments have to be reordered according to the function call type
 	for (size_t i = function_call.arguments.ordered.size(); i < argument_count; ++i) {
 		assert(std::get<0>(function.arguments.at(i)).has_value());
@@ -610,14 +616,14 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 		basic_blocks.push_back(IR::BasicBlock {0, {}, std::monostate {}});
 		lower(function.body.value(), function, basic_blocks, file_id);
 		// after lowering, we need to ensure that all of these basic blocks are valid IR
-		bool returns         = false,
+		bool returns = std::any_of(
+			     basic_blocks.cbegin(),
+			     basic_blocks.cend(),
+			     [](IR::BasicBlock const& basic_block) {
+				     return std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump);
+			     }
+		     ),
 		     needs_to_return = return_type.value.get_atom().kind() != IR::Type::Atom::Kind::Void;
-		for (IR::BasicBlock const& basic_block : basic_blocks) {
-			if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
-				returns = true;
-				break;
-			}
-		}
 		if (!returns) {
 			// if it doesn't need to return, we can add the return manually
 			if (!needs_to_return) {
@@ -693,6 +699,8 @@ IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id
 std::vector<IR::Module> Resolver::lower() {
 	std::vector<IR::Module> files {};
 	files.reserve(parsed_files.size());
-	for (ParsedFile& file : parsed_files) { files.push_back(lower(file.module, file.file_id)); }
+	std::transform(parsed_files.begin(), parsed_files.end(), std::back_inserter(files), [this](ParsedFile& file) {
+		return lower(file.module, file.file_id);
+	});
 	return files;
 }

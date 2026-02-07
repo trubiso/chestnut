@@ -307,34 +307,41 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 				auto labeled_argument = std::move(
 					std::get<Expression::FunctionCall::LabeledArgument>(argument.value())
 				);
-				bool duplicate = false;
-				for (auto const& existing_argument : arguments.labeled) {
-					if (std::get<0>(existing_argument).value.name()
-					    == std::get<0>(labeled_argument).value.name()) {
-						diagnostics_.push_back(
-							Diagnostic::error(
-								"duplicate argument name",
-								"argument name used twice in function call",
-								{Diagnostic::Sample(
-									context_,
-									{Diagnostic::Sample::Label(
-										 std::get<0>(labeled_argument).span,
-										 OutFmt::Color::Red
-									 ),
-						                         Diagnostic::Sample::Label(
-										 std::get<0>(existing_argument).span,
-										 "first used here",
-										 OutFmt::Color::Cyan
-									 )}
-								)}
-							)
-						);
-						duplicate = true;
-						break;
+
+				auto duplicate_argument = std::find_if(
+					arguments.labeled.cbegin(),
+					arguments.labeled.cend(),
+					[&labeled_argument](auto const& existing_argument) {
+						return std::get<0>(existing_argument).value.name()
+					            == std::get<0>(labeled_argument).value.name();
 					}
+				);
+
+				if (duplicate_argument != arguments.labeled.cend()) {
+					diagnostics_.push_back(
+						Diagnostic::error(
+							"duplicate argument name",
+							"argument name used twice in function call",
+							{Diagnostic::Sample(
+								context_,
+								{Diagnostic::Sample::Label(
+									 std::get<0>(labeled_argument).span,
+									 OutFmt::Color::Red
+								 ),
+					                         Diagnostic::Sample::Label(
+									 std::get<0>(*duplicate_argument).span,
+									 "first used here",
+									 OutFmt::Color::Cyan
+								 )}
+							)}
+						)
+					);
+				} else {
+					// we only push the argument if it's not duplicate to avoid confusing later
+					// stages
+					arguments.labeled.push_back(std::move(labeled_argument));
 				}
-				// we don't want to confuse later stages
-				if (!duplicate) arguments.labeled.push_back(std::move(labeled_argument));
+
 			} else {
 				auto ordered_argument = std::move(
 					std::get<Expression::FunctionCall::OrderedArgument>(argument.value())
@@ -659,9 +666,10 @@ bool Parser::peek_symbol(Token::Symbol symbol) const {
 }
 
 std::optional<Token::Symbol> Parser::peek_symbols(std::vector<Token::Symbol> const& symbols) const {
-	for (Token::Symbol symbol : symbols)
-		if (peek_symbol(symbol)) return symbol;
-	return {};
+	auto symbol = std::find_if(symbols.cbegin(), symbols.cend(), [this](Token::Symbol symbol) {
+		return peek_symbol(symbol);
+	});
+	return (symbol == symbols.cend()) ? std::nullopt : std::optional {*symbol};
 }
 
 bool Parser::peek_keyword(Keyword keyword) const {
@@ -856,34 +864,38 @@ std::optional<Function> Parser::parse_function() {
 		if (!expect_symbol("expected ':' to specify argument type", Token::Symbol::Colon)) return {};
 		auto argument_type = SPANNED_REASON(expect_type, "expected argument type");
 		if (!argument_type.has_value()) return {};
-		bool duplicate = false;
-		for (Function::Argument const& argument : arguments) {
-			if (argument.name.value.name() == argument_name.value().value.name()) {
-				diagnostics_.push_back(
-					Diagnostic::error(
-						"duplicate argument name",
-						"argument name used twice in function declaration",
-						{Diagnostic::Sample(
-							context_,
-							{Diagnostic::Sample::Label(
-								 argument_name.value().span,
-								 OutFmt::Color::Red
-							 ),
-				                         Diagnostic::Sample::Label(
-								 argument.name.span,
-								 "first used here",
-								 OutFmt::Color::Cyan
-							 )}
-						)}
-					)
-				);
-				duplicate = true;
-				break;
+
+		auto duplicate_argument = std::find_if(
+			arguments.cbegin(),
+			arguments.cend(),
+			[&argument_name](Function::Argument const& argument) {
+				return argument.name.value.name() == argument_name.value().value.name();
 			}
-		}
-		// we don't want to confuse later stages
-		if (!duplicate)
+		);
+
+		if (duplicate_argument != arguments.cend()) {
+			diagnostics_.push_back(
+				Diagnostic::error(
+					"duplicate argument name",
+					"argument name used twice in function declaration",
+					{Diagnostic::Sample(
+						context_,
+						{Diagnostic::Sample::Label(
+							 argument_name.value().span,
+							 OutFmt::Color::Red
+						 ),
+			                         Diagnostic::Sample::Label(
+							 duplicate_argument->name.span,
+							 "first used here",
+							 OutFmt::Color::Cyan
+						 )}
+					)}
+				)
+			);
+		} else {
+			// we only push the argument if it's not duplicate to avoid confusing later stages
 			arguments.emplace_back(argument_name.value(), argument_type.value(), anonymous, mutable_);
+		}
 		if (!consume_single_comma_or_more()) break;
 	}
 	if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen)) return {};

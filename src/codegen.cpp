@@ -135,7 +135,12 @@ llvm::Value* CodeGenerator::call_built_in(
 	std::vector<Spanned<IR::Expression::Atom>> const& function_arguments
 ) {
 	std::vector<llvm::Value*> arguments {};
-	for (auto const& argument : function_arguments) arguments.push_back(generate_expression(argument.value));
+	std::transform(
+		function_arguments.cbegin(),
+		function_arguments.cend(),
+		std::back_inserter(arguments),
+		[this](auto const& argument) { return generate_expression(argument.value); }
+	);
 	switch (function) {
 	case IR::BuiltInFunction::AddUIntegers:
 		assert(arguments.size() == 2);
@@ -359,7 +364,12 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::FunctionCall con
 	// this should be an actual function now hopefully
 	llvm::Function*           callee = program_.getFunction(get_name(callee_id));
 	std::vector<llvm::Value*> arguments {};
-	for (auto const& argument : function_call.arguments) arguments.push_back(generate_expression(argument.value));
+	std::transform(
+		function_call.arguments.cbegin(),
+		function_call.arguments.cend(),
+		std::back_inserter(arguments),
+		[this](auto const& argument) { return generate_expression(argument.value); }
+	);
 	return builder_.CreateCall(callee, arguments);
 }
 
@@ -465,7 +475,12 @@ void CodeGenerator::emit_function(IR::Function const& ir_function) {
 
 void CodeGenerator::create_function(IR::Function const& function) {
 	std::vector<llvm::Type*> argument_types {};
-	for (auto const& argument : function.arguments) argument_types.push_back(generate_type(argument.type.value));
+	std::transform(
+		function.arguments.cbegin(),
+		function.arguments.cend(),
+		std::back_inserter(argument_types),
+		[this](auto const& argument) { return generate_type(argument.type.value); }
+	);
 	llvm::Type*         return_type   = generate_type(function.return_type.value);
 	llvm::FunctionType* function_type = llvm::FunctionType::get(return_type, argument_types, false);
 
@@ -493,7 +508,12 @@ void CodeGenerator::create_function(IR::Function const& function) {
 		builder_.SetInsertPoint(block);
 		std::vector<llvm::Value*> arguments {};
 		arguments.reserve(alias->arg_size());
-		for (auto& arg : alias->args()) arguments.push_back(&arg);
+		std::transform(
+			alias->args().begin(),
+			alias->args().end(),
+			std::back_inserter(arguments),
+			[](auto& arg) { return &arg; }
+		);
 		llvm::Value* value = builder_.CreateCall(defined, arguments);
 		if (value->getType()->isVoidTy()) builder_.CreateRetVoid();
 		else builder_.CreateRet(value);
