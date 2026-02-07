@@ -143,6 +143,26 @@ void Resolver::identify_built_in_binary_operator(
 	identify_built_in_operator(function, operator_, std::move(function_type));
 }
 
+void Resolver::identify_built_in_binary_comparison_operator(
+	IR::BuiltInFunction function,
+	Token::Symbol       operator_,
+	TypeInfo&&          type
+) {
+	// TODO: have designated sentinel values for these
+	Span            span    = Span(0);
+	FileContext::ID file_id = 42;
+
+	TypeInfo::ID type_id       = register_type(std::move(type), span, file_id);
+	TypeInfo::ID return_id     = register_type(TypeInfo::make_known_bool(), span, file_id);
+	TypeInfo     function_type = TypeInfo::make_function(
+                TypeInfo::Function {
+			    {{std::nullopt, type_id}, {std::nullopt, type_id}},
+                        return_id
+        }
+        );
+	identify_built_in_operator(function, operator_, std::move(function_type));
+}
+
 void Resolver::identify_built_in_operators() {
 	// TODO: implement the integer operators for all kinds of integers through generics, once those are a thing. for
 	// now, we will only implement them for 8, 16, 32, 64.
@@ -183,6 +203,39 @@ void Resolver::identify_built_in_operators() {
 			);
 		}
 	}
+	// identify comparison for integers
+	std::vector<std::tuple<Token::Symbol, std::tuple<IR::BuiltInFunction, IR::BuiltInFunction>>>
+		binary_comparison_integer_operators {
+			{Token::Symbol::EqEq,   {IR::BuiltInFunction::EqIntegers, IR::BuiltInFunction::EqIntegers}},
+			{  Token::Symbol::Ne,   {IR::BuiltInFunction::NeIntegers, IR::BuiltInFunction::NeIntegers}},
+			{  Token::Symbol::Gt, {IR::BuiltInFunction::GtSIntegers, IR::BuiltInFunction::GtUIntegers}},
+			{  Token::Symbol::Ge, {IR::BuiltInFunction::GeSIntegers, IR::BuiltInFunction::GeUIntegers}},
+			{  Token::Symbol::Lt, {IR::BuiltInFunction::LtSIntegers, IR::BuiltInFunction::LtUIntegers}},
+			{  Token::Symbol::Le, {IR::BuiltInFunction::LeSIntegers, IR::BuiltInFunction::LeUIntegers}},
+        };
+	for (auto [operator_, functions] : binary_comparison_integer_operators) {
+		auto [signed_, unsigned_] = functions;
+		for (uint32_t size : integer_sizes) {
+			identify_built_in_binary_comparison_operator(
+				unsigned_,
+				operator_,
+				TypeInfo::make_known_integer(
+					TypeInfo::KnownInteger {
+						AST::Type::Atom::Integer::with_width(size, false).value()
+					}
+				)
+			);
+			identify_built_in_binary_comparison_operator(
+				signed_,
+				operator_,
+				TypeInfo::make_known_integer(
+					TypeInfo::KnownInteger {
+						AST::Type::Atom::Integer::with_width(size, true).value()
+					}
+				)
+			);
+		}
+	}
 	// identify unary negation for integers
 	for (uint32_t size : integer_sizes)
 		identify_built_in_unary_operator(
@@ -213,6 +266,22 @@ void Resolver::identify_built_in_operators() {
 				operator_,
 				TypeInfo::make_known_float(TypeInfo::KnownFloat {width})
 			);
+	// identify comparison for floats
+	std::vector<std::tuple<Token::Symbol, IR::BuiltInFunction>> binary_comparison_float_operators {
+		{Token::Symbol::EqEq, IR::BuiltInFunction::EqFloats},
+		{  Token::Symbol::Ne, IR::BuiltInFunction::NeFloats},
+		{  Token::Symbol::Gt, IR::BuiltInFunction::GtFloats},
+		{  Token::Symbol::Ge, IR::BuiltInFunction::GeFloats},
+		{  Token::Symbol::Lt, IR::BuiltInFunction::LtFloats},
+		{  Token::Symbol::Le, IR::BuiltInFunction::LeFloats},
+	};
+	for (auto [operator_, function] : binary_comparison_float_operators)
+		for (auto width : widths)
+			identify_built_in_binary_comparison_operator(
+				function,
+				operator_,
+				TypeInfo::make_known_float(TypeInfo::KnownFloat {width})
+			);
 	// identify unary negation for floats
 	for (auto width : widths)
 		identify_built_in_unary_operator(
@@ -220,6 +289,27 @@ void Resolver::identify_built_in_operators() {
 			Token::Symbol::Minus,
 			TypeInfo::make_known_float(TypeInfo::KnownFloat {width})
 		);
+	// identify equality and inequality operator for char and bool
+	identify_built_in_binary_comparison_operator(
+		IR::BuiltInFunction::EqChars,
+		Token::Symbol::EqEq,
+		TypeInfo::make_known_char()
+	);
+	identify_built_in_binary_comparison_operator(
+		IR::BuiltInFunction::EqBools,
+		Token::Symbol::EqEq,
+		TypeInfo::make_known_bool()
+	);
+	identify_built_in_binary_comparison_operator(
+		IR::BuiltInFunction::NeChars,
+		Token::Symbol::Ne,
+		TypeInfo::make_known_char()
+	);
+	identify_built_in_binary_comparison_operator(
+		IR::BuiltInFunction::NeBools,
+		Token::Symbol::Ne,
+		TypeInfo::make_known_bool()
+	);
 }
 
 void Resolver::identify_populate_labels(

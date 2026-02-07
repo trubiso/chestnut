@@ -460,12 +460,26 @@ std::optional<Expression> Parser::consume_expression_binop_l1() {
 	);
 }
 
-std::optional<Expression> Parser::consume_expression() {
-	// lowest precedence: +, -
+std::optional<Expression> Parser::consume_expression_binop_l0() {
+	// then +, -
 	return consume_generic_binop(
 		&Parser::consume_expression_binop_l1,
 		&Parser::expect_expression_binop_l1,
 		{Token::Symbol::Plus, Token::Symbol::Minus}
+	);
+}
+
+std::optional<Expression> Parser::consume_expression() {
+	// lowest precedence: comparison <, >, <=, >=, ==, !=
+	return consume_generic_binop(
+		&Parser::consume_expression_binop_l0,
+		&Parser::expect_expression_binop_l0,
+		{Token::Symbol::Lt,
+	         Token::Symbol::Gt,
+	         Token::Symbol::Le,
+	         Token::Symbol::Ge,
+	         Token::Symbol::EqEq,
+	         Token::Symbol::Ne}
 	);
 }
 
@@ -753,6 +767,10 @@ std::optional<Expression> Parser::expect_expression_unary_l1(std::string_view re
 
 std::optional<Expression> Parser::expect_expression_binop_l1(std::string_view reason) {
 	EXPECT(consume_expression_binop_l1, "expression");
+}
+
+std::optional<Expression> Parser::expect_expression_binop_l0(std::string_view reason) {
+	EXPECT(consume_expression_binop_l0, "expression");
 }
 
 std::optional<Expression> Parser::expect_expression(std::string_view reason) {

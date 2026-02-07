@@ -186,6 +186,66 @@ llvm::Value* CodeGenerator::call_built_in(
 			false
 		);
 	case IR::BuiltInFunction::NegateFloat: assert(arguments.size() == 1); return builder_.CreateFNeg(arguments[0]);
+	case IR::BuiltInFunction::EqIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpEQ(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::EqFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFCmpOEQ(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::EqChars:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpEQ(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::EqBools:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpEQ(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::NeIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpNE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::NeFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFCmpONE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::NeChars:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpNE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::NeBools:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpNE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::GtUIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpUGT(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::GtSIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpSGT(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::GtFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFCmpOGT(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::GeUIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpUGE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::GeSIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpSGE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::GeFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFCmpOGE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::LtUIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpULT(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::LtSIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpSLT(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::LtFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFCmpOLT(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::LeUIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpULE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::LeSIntegers:
+		assert(arguments.size() == 2);
+		return builder_.CreateICmpSLE(arguments[0], arguments[1]);
+	case IR::BuiltInFunction::LeFloats:
+		assert(arguments.size() == 2);
+		return builder_.CreateFCmpOLE(arguments[0], arguments[1]);
 	}
 }
 

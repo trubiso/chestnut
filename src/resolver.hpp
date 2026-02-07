@@ -269,6 +269,8 @@ private:
 	void identify_built_in_unary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
 	/// Identifies a built-in binary operator which returns the same type as it takes in.
 	void identify_built_in_binary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	/// Identifies a built-in binary comparison operator (returning a boolean value).
+	void identify_built_in_binary_comparison_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
 	/// Identifies all built-in operators.
 	void identify_built_in_operators();
 	/// Populates the label map given a statement.

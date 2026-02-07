@@ -132,6 +132,7 @@ struct Type {
 std::ostream& operator<<(std::ostream&, Type::Atom const&);
 std::ostream& operator<<(std::ostream&, Type const&);
 
+// TODO: deal with the partial ordering of floats
 enum class BuiltInFunction {
 	AddUIntegers,
 	AddSIntegers,
@@ -147,6 +148,26 @@ enum class BuiltInFunction {
 	DivideFloats,
 	NegateSInteger,
 	NegateFloat,
+	EqIntegers,
+	EqFloats,
+	EqChars,
+	EqBools,
+	NeIntegers,
+	NeFloats,
+	NeChars,
+	NeBools,
+	GtUIntegers,
+	GtSIntegers,
+	GtFloats,
+	GeUIntegers,
+	GeSIntegers,
+	GeFloats,
+	LtUIntegers,
+	LtSIntegers,
+	LtFloats,
+	LeUIntegers,
+	LeSIntegers,
+	LeFloats,
 };
 
 std::ostream& operator<<(std::ostream&, BuiltInFunction const&);

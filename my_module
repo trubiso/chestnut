@@ -32,6 +32,24 @@ func spam_labels() {
 @extern func print_integer(anon x: uint64);
 @extern func print_float(anon x: float32);
 
+func print_largest(anon x: uint64, anon y: uint64) {
+	branch (x > y) 'x;
+	branch (y > x) 'y;
+	// if both are equal, we print both
+	print_integer(x);
+	putchar(' ');
+	putchar('=');
+	putchar(' ');
+	print_integer(y);
+	return;
+'x:
+	print_integer(x);
+	return;
+'y:
+	print_integer(y);
+	return;
+}
+
 func choose_char(a: char, b: char) char => a;
 
 @extern export func putchar(c: char) void;
@@ -55,7 +73,7 @@ def sum_numbers ::my_module::my_submodule::sum_numbers;
 	putchar(' ');
 	const a: uint64 = 42;
 	const b = 69;
-	print_integer(sum_numbers(a, b));
+	print_largest(a, b);
 	const f = 2.3298412390;
 	print_float(f);
 	putchar('\n');
