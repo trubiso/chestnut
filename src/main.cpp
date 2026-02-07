@@ -4,6 +4,7 @@
 #include "resolver.hpp"
 #include "test.hpp"
 
+#include <boost/program_options.hpp>
 #include <cerrno>
 #include <filesystem>
 #include <fstream>
@@ -116,18 +117,85 @@ bool run_tests() {
 	return tests_passed == sources.size();
 }
 
-int main(void) {
-	run_tests();
-	return 0;
+static std::string compiler_name = "chc";
+
+struct Input {
+	bool                     run_compiler_tests;
+	std::vector<std::string> inputs;
+};
+
+Input get_input(int argc, char** argv) {
+	try {
+		boost::program_options::options_description options("options");
+		options.add_options()("help,h", "show help message")(
+			"run-compiler-tests",
+			"run compiler-internal tests"
+		);
+
+		boost::program_options::options_description hidden("");
+		hidden.add_options()("inputs", boost::program_options::value<std::vector<std::string>>());
+
+		boost::program_options::options_description visible;
+		visible.add(options);
+
+		boost::program_options::options_description all;
+		all.add(visible).add(hidden);
+
+		boost::program_options::positional_options_description positional;
+		positional.add("inputs", -1);
+
+		boost::program_options::variables_map variables_map;
+		boost::program_options::store(
+			boost::program_options::command_line_parser(argc, argv)
+				.options(all)
+				.positional(positional)
+				.run(),
+			variables_map
+		);
+		boost::program_options::notify(variables_map);
+
+		if (variables_map.count("help")) {
+			std::cout << compiler_name << " chestnut compiler\n\n";
+			std::cout << "usage: " << compiler_name << " [options] file...\n";
+			std::cout << visible;
+			std::exit(0);
+		}
+
+		if (variables_map.count("run-compiler-tests")) { return Input {true, {}}; }
+
+		if (!variables_map.count("inputs")) {
+			std::cerr << "error: no input files" << std::endl;
+			std::exit(1);
+		}
+
+		return Input {false, std::move(variables_map.at("inputs").as<std::vector<std::string>>())};
+	} catch (boost::program_options::error const& error) {
+		std::cerr << "argument error: " << error.what() << std::endl;
+		std::exit(1);
+	}
+}
+
+int main(int argc, char** argv) {
+	Input input = get_input(argc, argv);
+
+	if (input.run_compiler_tests) {
+		bool passed = run_tests();
+		return !passed;
+	}
 
 	// TODO: at some point, we have to solve folders and how they create submodules
-	std::vector<std::string> files_to_parse {"my_module"};
+	for (auto const& filename : input.inputs) {
+		if (filename.contains('/') || filename.contains('\\')) {
+			std::cerr << "todo: files within folders are unsupported" << std::endl;
+			std::exit(1);
+		}
+	}
 
-	std::optional<std::vector<std::string>> maybe_sources = get_sources(files_to_parse);
+	std::optional<std::vector<std::string>> maybe_sources = get_sources(input.inputs);
 	if (!maybe_sources.has_value()) return errno;
 	std::vector<std::string> sources = std::move(maybe_sources.value());
 
-	auto lexed_files = lex_files(sources, files_to_parse);
+	auto lexed_files = lex_files(sources, input.inputs);
 
 	std::vector<Resolver::ParsedFile> parsed_files = parse_files(std::move(lexed_files));
 
