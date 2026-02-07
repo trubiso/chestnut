@@ -102,7 +102,15 @@ private:
 	std::optional<Type::Atom> consume_type_atom();
 	std::optional<Type>       consume_type();
 
+	/// Generic function for binary operators.
 	std::optional<Expression> consume_generic_binop(
+		std::optional<Expression> (Parser::*consume)(),
+		std::optional<Expression> (Parser::*expect)(std::string_view),
+		std::vector<Token::Symbol>&& operators
+	);
+
+	/// Generic function for unary operators.
+	std::optional<Expression> consume_generic_unop(
 		std::optional<Expression> (Parser::*consume)(),
 		std::optional<Expression> (Parser::*expect)(std::string_view),
 		std::vector<Token::Symbol>&& operators

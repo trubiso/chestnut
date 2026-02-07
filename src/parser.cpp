@@ -375,8 +375,6 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 	return std::move(callee.value);
 }
 
-// TODO: greatly improve this code with macros or some system that doesn't require this much repetition
-
 std::optional<Expression> Parser::consume_generic_binop(
 	std::optional<Expression> (Parser::*consume)(),
 	std::optional<Expression> (Parser::*expect)(std::string_view),
@@ -408,25 +406,49 @@ std::optional<Expression> Parser::consume_generic_binop(
 	return std::move(lhs.value);
 }
 
-std::optional<Expression> Parser::consume_expression_unary_l1() {
-	// this refers to unary negation. this code is really ugly
-	size_t negations = 0;
-	while (consume_symbol(Token::Symbol::Minus)) negations++;
+std::optional<Expression> Parser::consume_generic_unop(
+	std::optional<Expression> (Parser::*consume)(),
+	std::optional<Expression> (Parser::*expect)(std::string_view),
+	std::vector<Token::Symbol>&& operators
+) {
+	std::vector<Spanned<Token::Symbol>> operations {};
+	std::optional<Token::Symbol>        operator_;
+	while ((operator_ = peek_symbols(operators)).has_value()) {
+		Span span = tokens_.peek().value().span();
+		operations.push_back({span, operator_.value()});
+		tokens_.advance();
+	}
+
+	// if there are no operations, we just need to parse a consume instance
+	if (operations.empty()) return (this->*consume)();
+
+	// we must iterate over them in reverse order: ABC<expr> needs to become A(B(C(<expr>))).
 	std::optional<Spanned<Expression>> should_operand
-		= negations
-	                ? SPANNED_REASON(expect_expression_function_call, "expected expression after unary operator")
-	                : SPANNED(consume_expression_function_call);
+		= SPANNED_REASON(this->*expect, "expected expression after unary operator");
 	if (!should_operand.has_value()) return {};
 	Spanned<Expression> operand = std::move(should_operand.value());
-	while (negations--)
+	for (size_t i = operations.size(); i > 0; --i) {
+		Spanned<Token::Symbol> const& operation = operations.at(i - 1);
+
 		operand = Spanned<Expression> {
-			Span(operand.span.start - 1, operand.span.end),
+			Span(operation.span.start, operand.span.end),
 			Expression::make_unary_operation(
 				std::make_unique<Spanned<Expression>>(std::move(operand)),
-				Token::Symbol::Minus
+				operation.value
 			)
 		};
+	}
+
 	return std::move(operand.value);
+}
+
+std::optional<Expression> Parser::consume_expression_unary_l1() {
+	// then, unary -
+	return consume_generic_unop(
+		&Parser::consume_expression_function_call,
+		&Parser::expect_expression_function_call,
+		{Token::Symbol::Minus}
+	);
 }
 
 std::optional<Expression> Parser::consume_expression_binop_l1() {
