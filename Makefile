@@ -9,25 +9,29 @@ SRC_DIR   := src
 OBJS := $(addprefix $(BUILD_DIR)/,$(OBJS))
 SRCS := $(OBJS:$(BUILD_DIR)/%.o=$(SRC_DIR)/%.cpp)
 
-./out: $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ -o ./out
+./chc: $(OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o ./chc
 .PHONY: build
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
-.PHONY: clean cleanall build run tidy cleancallgrind callgrind
+.PHONY: clean cleanall build run test tidy cleancallgrind callgrind
 
 clean:
-	rm -rf $(BUILD_DIR) out
+	rm -rf $(BUILD_DIR) chc
 
 cleanall:
-	rm -rf $(BUILD_DIR) out compile_commands.json
+	rm -rf $(BUILD_DIR) chc compile_commands.json
 
-build: ./out
-run: ./out
-	./out
+build: ./chc
+run: ./chc
+	./chc my_module
+	g++ -o main output.o
+	./main
+test: ./chc
+	./chc --run-compiler-tests
 
 compile_commands.json:
 	make cleanall
@@ -39,5 +43,5 @@ tidy: compile_commands.json
 cleancallgrind:
 	rm -f vgcore.* callgrind.*
 
-callgrind: ./out cleancallgrind
-	valgrind --dump-instr=yes --tool=callgrind ./out
+callgrind: ./chc cleancallgrind
+	valgrind --dump-instr=yes --tool=callgrind ./chc
