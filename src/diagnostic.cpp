@@ -85,28 +85,45 @@ void print_label_text(
 	size_t                           loc_current,
 	size_t                           loc_pad
 ) {
+	// calculate the span for single-line labels
 	Span label_span = label.span;
 	label_span.end -= context.loc[loc_current - 1];
 	if (label_span.start <= context.loc[loc_current - 1]) label_span.start = 0;
 	else label_span.start -= context.loc[loc_current - 1];
-	print_loc_line(loc_pad);
 	size_t line_size = ((loc_current == context.loc.size()) ? context.source.size() : context.loc[loc_current])
 	                 - context.loc[loc_current - 1]
 	                 - 1;
 	assert(label_span.end <= line_size);
-	bool printed_out_first = false;
+
+	// we precalculate the amount of spaces and pointies
+	size_t space_count  = 0;
+	size_t pointy_count = 0;
 	for (size_t j = 0; j < label_span.end; ++j) {
 		bool is_tab = context.source.at(context.loc[loc_current - 1] + j) == '\t';
-		if (j >= label_span.start) {
-			if (!printed_out_first) OutFmt::fg(label.color);
-			if (is_tab) printf("^^^^^^^^");
-			else putchar('^');
-			printed_out_first = true;
-		} else {
-			if (is_tab) printf(TAB_STR);
-			else putchar(' ');
-		}
+		if (j >= label_span.start) pointy_count += is_tab ? 8 : 1;
+		else space_count += is_tab ? 8 : 1;
 	}
+
+	// for multi-line labels, we want to pointy the maximum amount of area
+	if (context.loc[loc_current - 1] > label.span.start)
+		for (size_t i = loc_current - 1; i > 0; --i) {
+			if (context.loc[i - 1] <= label.span.start) {
+				if (space_count != 0) pointy_count += space_count;
+				space_count             = 0;
+				size_t new_pointy_count = 0;
+				for (size_t j = context.loc[i - 1]; j < context.loc[i] - 1; ++j) {
+					bool is_tab       = context.source.at(j) == '\t';
+					new_pointy_count += is_tab ? 8 : 1;
+				}
+				pointy_count = std::max(pointy_count, new_pointy_count);
+			}
+		}
+
+	// print the label
+	print_loc_line(loc_pad);
+	for (size_t i = 0; i < space_count; ++i) putchar(' ');
+	OutFmt::fg(label.color);
+	for (size_t i = 0; i < pointy_count; ++i) putchar('^');
 	if (label.label.has_value()) printf(" %s", label.label.value().c_str());
 	putchar('\n');
 }
