@@ -5,6 +5,7 @@
 #include "test.hpp"
 
 #include <cerrno>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -71,22 +72,23 @@ std::vector<Resolver::ParsedFile> parse_files(std::vector<std::tuple<Stream<Toke
 }
 
 bool run_tests() {
-	std::vector<std::string> files_to_test {"lexer/unterminated_string"};
 	std::string              tests_folder = "tests";
 	std::vector<std::string> sources {};
-	sources.reserve(files_to_test.size());
-	for (std::string const& file_to_test : files_to_test) {
-		std::string   actual_path = std::format("{}/{}", tests_folder, file_to_test);
-		std::ifstream file;
-		file.open(actual_path.data());
+	std::vector<std::string> paths {};
+	for (std::filesystem::directory_entry const& entry :
+	     std::filesystem::recursive_directory_iterator(tests_folder)) {
+		if (!entry.is_regular_file()) continue;
+
+		std::ifstream file(entry.path());
 		if (!file.is_open()) {
-			std::cerr << "Failed to open test file '" << actual_path << "'." << std::endl;
+			std::cerr << "Failed to open test file '" << entry.path().string() << "'." << std::endl;
 			errno = ENOENT;
 			return false;
 		}
 		sources.emplace_back(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+		paths.push_back(entry.path().string().substr(tests_folder.size() + 1));
 	}
-	assert(sources.size() == files_to_test.size());
+	assert(sources.size() == paths.size());
 	bool all_passed = true;
 	for (size_t i = 0; i < sources.size(); ++i) {
 		Test                       test  = Test::from_file(std::move(sources.at(i)));
@@ -98,14 +100,14 @@ bool run_tests() {
 			OutFmt::set_bold();
 			std::cout << "[ F ]";
 			OutFmt::reset();
-			std::cout << " " << files_to_test.at(i) << '\n' << error.value() << std::endl;
+			std::cout << " " << paths.at(i) << '\n' << error.value() << std::endl;
 		} else {
 			OutFmt::bg(OutFmt::Color::BrightGreen);
 			OutFmt::fg(OutFmt::Color::Black);
 			OutFmt::set_bold();
 			std::cout << "[ P ]";
 			OutFmt::reset();
-			std::cout << " " << files_to_test.at(i) << std::endl;
+			std::cout << " " << paths.at(i) << std::endl;
 		}
 	}
 	return all_passed;
