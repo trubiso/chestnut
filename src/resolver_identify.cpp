@@ -9,7 +9,6 @@ void Resolver::identify(AST::Identifier& identifier) {
 }
 
 void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file_id) {
-	// TODO: ensure there are no duplicated item names (including aliases)
 	identify(module.name.value);
 	symbol_pool_.push_back(
 		Symbol {module.name.value.id.value()[0],
