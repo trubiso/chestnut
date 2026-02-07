@@ -1008,6 +1008,11 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 				std::move(samples)
 			)
 		);
+		// we need to "unresolve" the callee identifier just in case
+		if (function_call.callee->value.kind() == AST::Expression::Kind::Atom
+		    || function_call.callee->value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier) {
+			function_call.callee->value.get_atom().get_identifier().id = {};
+		}
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
