@@ -219,6 +219,18 @@ bool Lexer::consume_char_literal() {
 			);
 		}
 		break;
+	case '\n':
+		diagnostics_.push_back(
+			Diagnostic::error(
+				"invalid character literal",
+				"character literals may not have newlines within them",
+				{Diagnostic::Sample(context, Span(stream_.index() - 2, stream_.index()))}
+			)
+		);
+		// as a preventive measure, we will skip the newline and the closing quote if it exists
+		stream_.advance();
+		if (stream_.has_value() && stream_.peek().value() == '\'') stream_.advance();
+		goto ret_char;
 	default:
 		// regular character
 		break;
