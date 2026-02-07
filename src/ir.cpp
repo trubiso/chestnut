@@ -51,6 +51,27 @@ std::ostream& operator<<(std::ostream& os, BuiltInFunction const& built_in_funct
 	case BuiltInFunction::DivideFloats:      return os << "DivideFloats";
 	case BuiltInFunction::NegateSInteger:    return os << "NegateSInteger";
 	case BuiltInFunction::NegateFloat:       return os << "NegateFloat";
+	case BuiltInFunction::NegateBool:        return os << "NegateBool";
+	case BuiltInFunction::EqIntegers:        return os << "EqIntegers";
+	case BuiltInFunction::EqFloats:          return os << "EqFloats";
+	case BuiltInFunction::EqChars:           return os << "EqChars";
+	case BuiltInFunction::EqBools:           return os << "EqBools";
+	case BuiltInFunction::NeIntegers:        return os << "NeIntegers";
+	case BuiltInFunction::NeFloats:          return os << "NeFloats";
+	case BuiltInFunction::NeChars:           return os << "NeChars";
+	case BuiltInFunction::NeBools:           return os << "NeBools";
+	case BuiltInFunction::GtUIntegers:       return os << "GtUIntegers";
+	case BuiltInFunction::GtSIntegers:       return os << "GtSIntegers";
+	case BuiltInFunction::GtFloats:          return os << "GtFloats";
+	case BuiltInFunction::GeUIntegers:       return os << "GeUIntegers";
+	case BuiltInFunction::GeSIntegers:       return os << "GeSIntegers";
+	case BuiltInFunction::GeFloats:          return os << "GeFloats";
+	case BuiltInFunction::LtUIntegers:       return os << "LtUIntegers";
+	case BuiltInFunction::LtSIntegers:       return os << "LtSIntegers";
+	case BuiltInFunction::LtFloats:          return os << "LtFloats";
+	case BuiltInFunction::LeUIntegers:       return os << "LeUIntegers";
+	case BuiltInFunction::LeSIntegers:       return os << "LeSIntegers";
+	case BuiltInFunction::LeFloats:          return os << "LeFloats";
 	}
 }
 
@@ -68,6 +89,7 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	case Expression::Atom::Kind::Identifier: return os << '@' << atom.get_identifier();
 	case Expression::Atom::Kind::Literal:    return os << atom.get_literal();
 	case Expression::Atom::Kind::Bool:       return os << "(bool) " << (atom.get_bool() ? "true" : "false");
+	case Expression::Atom::Kind::Error:      return os << "(error)";
 	}
 	[[assume(false)]];
 }

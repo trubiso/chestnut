@@ -148,6 +148,7 @@ enum class BuiltInFunction {
 	DivideFloats,
 	NegateSInteger,
 	NegateFloat,
+	NegateBool,
 	EqIntegers,
 	EqFloats,
 	EqChars,

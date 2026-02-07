@@ -443,11 +443,11 @@ std::optional<Expression> Parser::consume_generic_unop(
 }
 
 std::optional<Expression> Parser::consume_expression_unary_l1() {
-	// then, unary -
+	// then, unary - and !
 	return consume_generic_unop(
 		&Parser::consume_expression_function_call,
 		&Parser::expect_expression_function_call,
-		{Token::Symbol::Minus}
+		{Token::Symbol::Minus, Token::Symbol::Bang}
 	);
 }
 

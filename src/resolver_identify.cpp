@@ -310,6 +310,12 @@ void Resolver::identify_built_in_operators() {
 		Token::Symbol::Ne,
 		TypeInfo::make_known_bool()
 	);
+	// identify unary boolean negation
+	identify_built_in_unary_operator(
+		IR::BuiltInFunction::NegateBool,
+		Token::Symbol::Bang,
+		TypeInfo::make_known_bool()
+	);
 }
 
 void Resolver::identify_populate_labels(

@@ -34,7 +34,7 @@ func spam_labels() {
 
 func print_largest(anon x: uint64, anon y: uint64) {
 	branch (x > y) 'x;
-	branch (y > x) 'y;
+	branch (!(x >= y)) 'y;
 	// if both are equal, we print both
 	print_integer(x);
 	putchar(' ');

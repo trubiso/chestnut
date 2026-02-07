@@ -174,6 +174,7 @@ llvm::Value* CodeGenerator::call_built_in(
 		assert(arguments.size() == 2);
 		return builder_.CreateFDiv(arguments[0], arguments[1]);
 	case IR::BuiltInFunction::NegateSInteger:
+		// since there is no built-in function, we do 0-x
 		assert(arguments.size() == 1);
 		return builder_.CreateSub(
 			builder_.getIntN(
@@ -186,6 +187,10 @@ llvm::Value* CodeGenerator::call_built_in(
 			false
 		);
 	case IR::BuiltInFunction::NegateFloat: assert(arguments.size() == 1); return builder_.CreateFNeg(arguments[0]);
+	case IR::BuiltInFunction::NegateBool:
+		// since there is no built-in function, we compare against false
+		assert(arguments.size() == 1);
+		return builder_.CreateICmpEQ(arguments[0], builder_.getInt1(false));
 	case IR::BuiltInFunction::EqIntegers:
 		assert(arguments.size() == 2);
 		return builder_.CreateICmpEQ(arguments[0], arguments[1]);
