@@ -1,0 +1,19 @@
+// pass: Lexer, expect: Output
+/*
+[char 'h'][char 'i'][char '!'][char '\0'][char '\''][char '\"'][char '\a'][char '\b'][char '\f'][char '\n'][char '\r'][char '\t'][char '\v']
+*/
+
+// some random valid literals
+'h' 'i' '!'
+
+// escape sequences
+'\0'
+'\''
+'\"'
+'\a'
+'\b'
+'\f'
+'\n'
+'\r'
+'\t'
+'\v'

@@ -1,0 +1,11 @@
+// pass: Lexer, expect: Output
+/*
+[string "\0\'\"\a\b\f\n\r\t\v
+/* i have a supposed comment */
+// and another one
+but my string continues down here"]
+*/
+"\0\'\"\a\b\f\n\r\t\v
+/* i have a supposed comment */
+// and another one
+but my string continues down here"

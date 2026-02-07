@@ -1,0 +1,3 @@
+// pass: Lexer, expect: Diagnostics
+// severity: Error, title: "unclosed character literal", subtitle: "if you attempted to create a label, please remember that labels are identifiers started by an apostrophe"
+'=lalala

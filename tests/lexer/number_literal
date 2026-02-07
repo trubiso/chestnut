@@ -1,0 +1,37 @@
+// pass: Lexer, expect: Output
+/*
+[num 0][num 0][id b][num 0][id o][num 0][id x][num 0][id B_10][num 0][id b2_9][num 0b0][num 9][num 0][id O99_9][num 0][id xGH_I][num 0B1_0][num 0o7_23][num 0xA_BC][id g][num 0123456_789_0123][id abc][num 0][symbol .][num 0][symbol .][id _012_345][num 0][symbol .][id abc][num 0.0_2_3_5][id f]
+*/
+
+// bare 0
+0
+
+// bases without numbers
+0b
+0o
+0x
+
+// incorrect base usage
+0B_10
+0b2_9
+0b09
+0O99_9
+0xGH_I
+
+// correct base usage
+0B1_0
+0o7_23
+0xA_BCg
+
+// decimal
+0123456_789_0123abc
+
+// incorrect float
+0.
+
+// dot access
+0._012_345
+0.abc
+
+// correct float
+0.0_2_3_5f

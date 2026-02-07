@@ -1,0 +1,4 @@
+// pass: Lexer, expect: Diagnostics
+// severity: Error, title: "invalid character literal", subtitle: "character literals may not have newlines within them"
+'
+' 'e' // we have this extra char here to test the recovery strategy

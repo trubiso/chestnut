@@ -1,0 +1,5 @@
+// pass: Lexer, expect: Output
+/*
+[id a][id b][num 9][id a][id _a][id HelloWorld]
+*/
+a b 9a _a HelloWorld

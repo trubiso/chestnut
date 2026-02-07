@@ -1,0 +1,5 @@
+// pass: Lexer, expect: Output
+/*
+[label 'return][label '0][label '99_and_counting][label 'KeepGoing]
+*/
+'return '0 '99_and_counting 'KeepGoing

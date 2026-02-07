@@ -1,0 +1,4 @@
+// pass: Lexer, expect: Diagnostics
+// severity: Error, title: "unterminated multiline comment"
+/*
+/* this is a nested comment */

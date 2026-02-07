@@ -1,0 +1,3 @@
+// pass: Lexer, expect: Diagnostics
+// severity: Error, title: "invalid escape sequence", subtitle: "found invalid sequence \q"
+'\q'
