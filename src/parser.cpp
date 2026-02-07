@@ -451,8 +451,6 @@ std::optional<Expression> Parser::consume_expression() {
 std::optional<Statement> Parser::consume_statement_declare() {
 	// <"const"|"mut"> <name> [: <type>] [= <expr|"undefined">];
 
-	// TODO: should we do something different for the "undefined" case?
-
 	// we know we had to peek mut or const to get here
 	bool mutable_value = peek_keyword(Keyword::Mut);
 	Span mutable_span  = tokens_.peek().value().span();
@@ -474,11 +472,21 @@ std::optional<Statement> Parser::consume_statement_declare() {
 	}
 
 	std::optional<Spanned<Expression>> value;
+	bool                               is_undefined = false;
 	if (consume_symbol(Token::Symbol::Eq)) {
 		value = SPANNED_REASON(
 			expect_expression,
 			"expected expression after equals sign in variable declaration"
 		);
+		// if the value is just "undefined", this corresponds to the undefined case
+		if (value.has_value()
+		    && value.value().value.kind() == AST::Expression::Kind::Atom
+		    && value.value().value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier
+		    && value.value().value.get_atom().get_identifier().is_unqualified()
+		    && value.value().value.get_atom().get_identifier().name() == "undefined") {
+			value        = {};
+			is_undefined = true;
+		}
 		// if there is no possible expression (perhaps a semicolon instead), a valueless stmt will be emitted as
 		// fallback
 	}
@@ -486,7 +494,7 @@ std::optional<Statement> Parser::consume_statement_declare() {
 	expect_semicolon("expected semicolon after variable declaration");
 
 	return Statement::make_declare(
-		Statement::Declare {std::move(name), std::move(type), std::move(value), mutable_}
+		Statement::Declare {std::move(name), std::move(type), std::move(value), mutable_, is_undefined}
 	);
 }
 

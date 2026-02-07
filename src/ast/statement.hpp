@@ -21,6 +21,7 @@ struct Statement {
 		std::optional<Spanned<Expression>> value;
 
 		Spanned<bool> mutable_;
+		bool          is_undefined;  // if this is true, we know !value.has_value()
 	};
 
 	struct Set {

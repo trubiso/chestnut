@@ -391,22 +391,46 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	std::vector<IR::BasicBlock>&   basic_blocks,
 	FileContext::ID                file_id
 ) {
-	auto identifier = lower(declare.name);
+	auto [name, type] = lower(declare.name);
 
 	auto value = declare.value.transform([&basic_blocks, file_id, this](auto&& value) {
 		return lower(value, basic_blocks, file_id);
 	});
 
+	if (declare.is_undefined) assert(!value.has_value());
+
+	// value will only be {} if it is undefined
+	if (!declare.is_undefined && !value.has_value()) {
+		switch (type.get_atom().kind()) {
+		case IR::Type::Atom::Kind::Integer:
+		case IR::Type::Atom::Kind::Float:
+			value
+				= {span,
+			           IR::Expression::make_atom(
+					   IR::Expression::Atom::make_literal(
+						   IR::Expression::Atom::Literal::Kind::Number,
+						   "0",
+						   type
+					   )
+				   )};
+			break;
+		case IR::Type::Atom::Kind::Void:  break;
+		case IR::Type::Atom::Kind::Error: break;
+		case IR::Type::Atom::Kind::Bool:  // TODO: add a false literal for bool
+		case IR::Type::Atom::Kind::Char:
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"no default value",
+					"this variable's type has no defined default value. if you intended to have an undefined value, specify it by writing '= undefined'",
+					{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+				)
+			);
+		}
+	}
+
 	return Spanned<IR::Statement> {
 		span,
-		IR::Statement::make_declare(
-			IR::Statement::Declare {
-				std::get<0>(identifier),
-				std::get<1>(identifier),
-				value,
-				declare.mutable_
-			}
-		)
+		IR::Statement::make_declare(IR::Statement::Declare {name, type, value, declare.mutable_})
 	};
 }
 
