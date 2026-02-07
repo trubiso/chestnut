@@ -5,7 +5,15 @@
 #include "resolver.hpp"
 
 #include <cstring>
+#include <regex>
 #include <sstream>
+
+std::optional<std::string> process_subtitle(std::optional<std::string> const& subtitle) {
+	if (!subtitle.has_value()) return {};
+	std::string without_newlines = std::regex_replace(subtitle.value(), std::regex("\n"), " | ");
+	std::string without_tabs     = std::regex_replace(without_newlines, std::regex("\t"), "");
+	return without_tabs;
+}
 
 std::optional<std::string> compare_diagnostics_inner(
 	std::vector<Diagnostic> const&               diagnostics,
@@ -19,7 +27,10 @@ std::optional<std::string> compare_diagnostics_inner(
 			return "\tdifferent severity for one of the diagnostics";
 		if (diagnostic.title != expected_diagnostic.title)
 			return "\tdifferent title for one of the diagnostics";
-		if (diagnostic.subtitle != expected_diagnostic.subtitle)
+		if (diagnostic.subtitle.has_value() != expected_diagnostic.subtitle.has_value())
+			return "\tdifferent subtitle for one of the diagnostics";
+		if (diagnostic.subtitle.has_value()
+		    && process_subtitle(diagnostic.subtitle) != expected_diagnostic.subtitle)
 			return "\tdifferent subtitle for one of the diagnostics";
 	}
 	return std::nullopt;
@@ -59,7 +70,10 @@ std::optional<std::string> compare_diagnostics(
 				}
 				diagnostics_str << ", title: \"" << diagnostic.title << '"';
 				if (diagnostic.subtitle.has_value()) {
-					diagnostics_str << ", subtitle: \"" << diagnostic.subtitle.value() << '"';
+					diagnostics_str
+						<< ", subtitle: \""
+						<< process_subtitle(diagnostic.subtitle).value()
+						<< '"';
 				}
 			}
 
