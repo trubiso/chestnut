@@ -1128,6 +1128,8 @@ void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 	}
 	// lhs and rhs must have the same type
 	Symbol const& lhs      = symbol_pool_.at(set.lhs.value.get_atom().get_identifier().id.value().at(0));
+	// ensure this has the type set!!!
+	set.lhs.value.type     = lhs.type;
 	TypeInfo ::ID rhs_type = infer(set.rhs.value, set.rhs.span, file_id);
 	unify(lhs.type, rhs_type, file_id);
 }

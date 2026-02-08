@@ -66,6 +66,17 @@ func print_largest_expr(anon x: uint64, anon y: uint64) {
 	print_integer(if (x > y) x else if (y > x) y else x+y);
 }
 
+func print_up_to(limit: uint64) {
+	mut x: uint64 = 0;
+'loop:
+	if (x > limit) return;
+	if (x < 10) print_integer(0);
+	print_integer(x);
+	if (x < limit) putchar(' ');
+	x = x + 1;
+	goto 'loop;
+}
+
 func choose_char(a: char, b: char) char => a;
 
 @extern export func putchar(c: char) void;
@@ -93,4 +104,5 @@ def sum_numbers ::my_module::my_submodule::sum_numbers;
 	const f = 2.3298412390;
 	print_float(f);
 	putchar('\n');
+	print_up_to(100);
 }
