@@ -336,6 +336,8 @@ void Resolver::identify_populate_labels(
 	case AST::Statement::Kind::Goto:
 	case AST::Statement::Kind::Branch: return;
 	case AST::Statement::Kind::Label:  break;
+	// more complex control flow is desugared later
+	case AST::Statement::Kind::If: return;
 	}
 
 	if (statement.value.kind() == AST::Statement::Kind::Label) {
@@ -401,6 +403,8 @@ void Resolver::identify_labels(
 	case AST::Statement::Kind::Label:  return;
 	case AST::Statement::Kind::Goto:
 	case AST::Statement::Kind::Branch: break;
+	// more complex control flow is desugared later
+	case AST::Statement::Kind::If: return;
 	}
 
 	if (statement.value.kind() == AST::Statement::Kind::Goto) {
@@ -465,4 +469,107 @@ void Resolver::identify_labels(AST::Module& module, FileContext::ID file_id) {
 
 void Resolver::identify_labels() {
 	for (ParsedFile& file : parsed_files) { identify_labels(file.module, file.file_id); }
+}
+
+AST::Scope Resolver::desugar_control_flow(AST::Scope&& scope, AST::Statement::Label::ID& label_counter) {
+	std::vector<Spanned<AST::Statement>> new_scope {};
+	new_scope.reserve(scope.size());
+	for (Spanned<AST::Statement>& statement : scope) {
+		switch (statement.value.kind()) {
+		case AST::Statement::Kind::Declare:
+		case AST::Statement::Kind::Set:
+		case AST::Statement::Kind::Expression:
+		case AST::Statement::Kind::Return:
+		case AST::Statement::Kind::Scope:
+		case AST::Statement::Kind::Label:
+		case AST::Statement::Kind::Goto:
+		case AST::Statement::Kind::Branch:     new_scope.push_back(std::move(statement)); continue;
+		case AST::Statement::Kind::If:         break;
+		}
+
+		if (statement.value.kind() == AST::Statement::Kind::If) {
+			// FIXME: use the correct spans ("if" for the true case and mby the branch stmt, "else" for the
+			// false case)
+			Span               stub_span = statement.span;
+			AST::Statement::If if_       = std::move(statement.value.get_if());
+
+			Spanned<AST::Statement::Goto> goto_true {
+				stub_span,
+				{"true", label_counter++}
+			};
+
+			auto goto_false
+				= if_.false_.has_value() ? std::optional<Spanned<AST::Statement::Goto>> {{stub_span, {"false", label_counter++}}}
+			                                 : std::nullopt;
+
+			AST::Statement::Goto goto_cont {"cont", label_counter++};
+
+			AST::Statement::Branch branch {std::move(if_.condition), goto_true, goto_false};
+
+			// now we need to create the branch, then true, then false, then cont label
+
+			// branch
+			new_scope.emplace_back(stub_span, AST::Statement::make_branch(std::move(branch)));
+
+			// true
+			new_scope.emplace_back(
+				stub_span,
+				AST::Statement::make_label(
+					AST::Statement::Label {"true", goto_true.value.destination_id}
+				)
+			);
+			new_scope.emplace_back(
+				if_.true_.span,
+				AST::Statement::make_scope(
+					desugar_control_flow(std::move(if_.true_.value), label_counter)
+				)
+			);
+			// TODO: don't add these post-gotos if the scope ends on a branch/goto
+			auto goto_1 = goto_cont;
+			new_scope.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_1)));
+
+			// false
+			if (goto_false.has_value()) {
+				new_scope.emplace_back(
+					stub_span,
+					AST::Statement::make_label(
+						AST::Statement::Label {"false", goto_false.value().value.destination_id}
+					)
+				);
+				new_scope.emplace_back(
+					if_.false_.value().span,
+					AST::Statement::make_scope(
+						desugar_control_flow(std::move(if_.false_.value().value), label_counter)
+					)
+				);
+				// TODO: don't add these post-gotos if the scope ends on a branch/goto
+				auto goto_2 = goto_cont;
+				new_scope.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_2)));
+			}
+
+			// cont
+			new_scope.emplace_back(
+				stub_span,
+				AST::Statement::make_label(AST::Statement::Label {"cont", goto_cont.destination_id})
+			);
+		}
+	}
+	return new_scope;
+}
+
+void Resolver::desugar_control_flow(AST::Function& function) {
+	if (!function.body.has_value()) return;
+	function.body = desugar_control_flow(std::move(function.body.value()), function.label_counter);
+}
+
+void Resolver::desugar_control_flow(AST::Module& module) {
+	for (Spanned<AST::Module::Item>& item : module.body.items) {
+		auto& value = std::get<AST::Module::InnerItem>(item.value);
+		if (std::holds_alternative<AST::Function>(value)) desugar_control_flow(std::get<AST::Function>(value));
+		else if (std::holds_alternative<AST::Module>(value)) desugar_control_flow(std::get<AST::Module>(value));
+	}
+}
+
+void Resolver::desugar_control_flow() {
+	for (ParsedFile& file : parsed_files) desugar_control_flow(file.module);
 }

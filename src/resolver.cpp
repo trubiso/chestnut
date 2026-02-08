@@ -5,6 +5,7 @@
 std::vector<IR::Module> Resolver::resolve() {
 	identify_built_in_operators();
 	identify_labels();
+	desugar_control_flow();
 	populate_module_table();
 	identify_module_items();
 	resolve_identifiers();

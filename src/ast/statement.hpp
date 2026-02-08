@@ -133,6 +133,8 @@ struct Statement {
 	inline Branch& get_branch() { return std::get<(size_t) Kind::Branch>(value); }
 
 	inline If const& get_if() const { return std::get<(size_t) Kind::If>(value); }
+
+	inline If& get_if() { return std::get<(size_t) Kind::If>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);

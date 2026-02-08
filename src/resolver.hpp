@@ -294,6 +294,15 @@ private:
 	/// Identifies all labels and statements using them in all functions.
 	void identify_labels();
 
+	/// Desugars all higher-level control-flow structures within a scope.
+	AST::Scope desugar_control_flow(AST::Scope&&, AST::Statement::Label::ID& label_counter);
+	/// Desugars all higher-level control-flow structures within a function.
+	void desugar_control_flow(AST::Function&);
+	/// Desugars all higher-level control-flow structures within a module.
+	void desugar_control_flow(AST::Module&);
+	/// Desugars all higher-level control-flow structures into combinations of labels, goto and branch.
+	void desugar_control_flow();
+
 	/// === SYMBOLS ===
 
 	/// Holds all symbols. All valid AST::SymbolIDs are valid indices to this array.

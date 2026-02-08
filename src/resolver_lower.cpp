@@ -516,6 +516,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	case AST::Statement::Kind::Return:
 	case AST::Statement::Kind::Goto:
 	case AST::Statement::Kind::Branch:     break;
+	case AST::Statement::Kind::If:         return {};
 	}
 
 	// TODO: somehow have a way to insert drop statements before gotos

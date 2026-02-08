@@ -354,6 +354,7 @@ void Resolver::resolve(Spanned<AST::Statement>& statement, Scope& scope, FileCon
 	case AST::Statement::Kind::Label:
 	case AST::Statement::Kind::Goto:   return;
 	case AST::Statement::Kind::Branch: resolve(statement.value.get_branch().condition, scope, file_id); return;
+	case AST::Statement::Kind::If:     return;
 	}
 }
 

@@ -1162,6 +1162,7 @@ void Resolver::infer(Spanned<AST::Statement>& statement, AST::SymbolID function,
 		      register_type(TypeInfo::make_known_bool(), statement.value.get_branch().condition.span, file_id),
 		      file_id);
 		return;
+	case AST::Statement::Kind::If: return;
 	}
 
 	// for expression statements, we want to throw a warning if it results in a non-void result
