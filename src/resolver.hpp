@@ -296,29 +296,30 @@ private:
 
 	// === DESUGAR ===
 
-	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::UnaryOperation&, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::BinaryOperation&, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::FunctionCall&, Span, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::If&, Span, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression&, Span, AST::Statement::Label::ID& label_counter);
-	/// Desugars all higher-level control-flow structures within an expression, returning any necessary statements to be inserted before it.
-	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(Spanned<AST::Expression>&, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr_if(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Declare&&, Span, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Set&&, Span, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Expression&&, Span, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Return&&, Span, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Branch&&, Span, AST::Statement::Label::ID& label_counter);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::If&&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::UnaryOperation&, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::BinaryOperation&, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::FunctionCall&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	/// Desugars all higher-level control-flow structures within an expression, returning any necessary statements to be inserted before it.
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(Spanned<AST::Expression>&, AST::Statement::Label::ID& label_counter, FileContext::ID);
+
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Declare&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Set&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Expression&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Return&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Branch&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::If&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within a statement, returning its transformation into a set of statements.
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement&&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 
 	/// Desugars all higher-level control-flow structures within a scope.
-	AST::Scope desugar_control_flow(AST::Scope&&, AST::Statement::Label::ID& label_counter);
+	AST::Scope desugar_control_flow(AST::Scope&&, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within a function.
-	void desugar_control_flow(AST::Function&);
+	void desugar_control_flow(AST::Function&, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within a module.
-	void desugar_control_flow(AST::Module&);
+	void desugar_control_flow(AST::Module&, FileContext::ID);
 	/// Desugars all higher-level control-flow structures into combinations of labels, goto and branch.
 	void desugar_control_flow();
 
