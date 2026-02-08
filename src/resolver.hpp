@@ -294,6 +294,25 @@ private:
 	/// Identifies all labels and statements using them in all functions.
 	void identify_labels();
 
+	// === DESUGAR ===
+
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::UnaryOperation&, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::BinaryOperation&, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::FunctionCall&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::If&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression&, Span, AST::Statement::Label::ID& label_counter);
+	/// Desugars all higher-level control-flow structures within an expression, returning any necessary statements to be inserted before it.
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(Spanned<AST::Expression>&, AST::Statement::Label::ID& label_counter);
+
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Declare&&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Set&&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Expression&&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Return&&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Branch&&, Span, AST::Statement::Label::ID& label_counter);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::If&&, Span, AST::Statement::Label::ID& label_counter);
+	/// Desugars all higher-level control-flow structures within a statement, returning its transformation into a set of statements.
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement&&, Span, AST::Statement::Label::ID& label_counter);
+
 	/// Desugars all higher-level control-flow structures within a scope.
 	AST::Scope desugar_control_flow(AST::Scope&&, AST::Statement::Label::ID& label_counter);
 	/// Desugars all higher-level control-flow structures within a function.
@@ -303,7 +322,7 @@ private:
 	/// Desugars all higher-level control-flow structures into combinations of labels, goto and branch.
 	void desugar_control_flow();
 
-	/// === SYMBOLS ===
+	// === SYMBOLS ===
 
 	/// Holds all symbols. All valid AST::SymbolIDs are valid indices to this array.
 	std::vector<Symbol> symbol_pool_;
@@ -352,7 +371,7 @@ private:
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
 
-	/// === TYPES ===
+	// === TYPES ===
 
 	/// Holds all types. All valid TypeInfo::IDs are valid indices to this array.
 	std::vector<TypeInfo> type_pool_;
