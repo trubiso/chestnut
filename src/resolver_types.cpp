@@ -1062,6 +1062,7 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, F
 	case AST::Expression::Kind::FunctionCall:
 		expression.type = infer(expression.get_function_call(), span, file_id);
 		break;
+	case AST::Expression::Kind::If: [[assume(false)]]; return expression.type.value();
 	}
 
 	// for operations, we turn them into function calls and then resolve them

@@ -382,7 +382,8 @@ Spanned<IR::Expression> Resolver::lower(
 	case AST::Expression::Kind::FunctionCall:
 		return lower(expression.get_function_call(), span, basic_blocks, file_id, allow_functions);
 	case AST::Expression::Kind::UnaryOperation:
-	case AST::Expression::Kind::BinaryOperation: [[assume(false)]];
+	case AST::Expression::Kind::BinaryOperation:
+	case AST::Expression::Kind::If:              [[assume(false)]];
 	}
 }
 

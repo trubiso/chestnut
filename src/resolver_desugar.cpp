@@ -64,23 +64,16 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 	// FIXME: these spans are not correct
 	Span stub_span = span;
 
-	AST::SymbolID new_id = symbol_next();
-	symbol_pool_.push_back(
-		Symbol {new_id,
-	                file_id,
-	                stub_span,
-	                "_",
-	                std::monostate {},
-	                register_type(TypeInfo::make_unknown(), stub_span, file_id, new_id),
-	                true,
-	                false,
-	                {}}
-	);
+	AST::SymbolID new_id  = symbol_next();
+	TypeInfo::ID  type_id = register_type(TypeInfo::make_unknown(), stub_span, file_id, new_id);
+	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, true, false, {}});
 	AST::Identifier new_var {
 		{stub_span, "_"}
 	};
 	new_var.id = {new_id};
 
+	// FIXME: i hate this variable being mutable. we need to find a different solution (const variables are
+	// single-assignment from declaration, for instance).
 	stmts.emplace_back(
 		stub_span,
 		AST::Statement::make_declare(
@@ -111,12 +104,20 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 
 	AST::Identifier new_var1 = new_var, new_var2 = new_var;
 
+	AST::Expression new_var_expr
+		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var)));
+	AST::Expression new_var_expr1
+		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var1)));
+	AST::Expression new_var_expr2
+		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var2)));
+	new_var_expr.type = new_var_expr1.type = new_var_expr2.type = type_id;
+
 	AST::Statement::Set set_true {
-		{stub_span, AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var1)))},
+		{stub_span, std::move(new_var_expr1)},
 		std::move(*if_.true_)
 	};
 	AST::Statement::Set set_false {
-		{stub_span, AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var2)))},
+		{stub_span, std::move(new_var_expr2)},
 		std::move(*if_.false_)
 	};
 
@@ -131,7 +132,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 	stmts.emplace_back(stub_span, AST::Statement::make_label(std::move(cont_label)));
 
 	// and finally we can replace the expression
-	expression = AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var)));
+	expression = std::move(new_var_expr);
 
 	return stmts;
 }

@@ -289,6 +289,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	case AST::Expression::Kind::BinaryOperation: resolve(expression.get_binary_operation(), scope, file_id); return;
 	case AST::Expression::Kind::FunctionCall:    resolve(expression.get_function_call(), scope, file_id); return;
 	case AST::Expression::Kind::Atom:            break;
+	case AST::Expression::Kind::If:              return;
 	}
 
 	// atom resolution (better to do it here directly)
@@ -311,6 +312,7 @@ void Resolver::resolve(Spanned<AST::Expression>& expression, Scope const& scope,
 void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileContext::ID file_id) {
 	// resolve the value before the name, otherwise 'const a = a;' would not work
 	if (declare.value.has_value()) resolve(declare.value.value(), scope, file_id);
+	if (declare.name.value.id.has_value()) return;
 	identify(declare.name.value);
 	symbol_pool_.push_back(
 		Symbol {declare.name.value.id.value()[0],
