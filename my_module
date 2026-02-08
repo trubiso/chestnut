@@ -62,6 +62,10 @@ func print_largest_if(anon x: uint64, anon y: uint64) {
 	}
 }
 
+func print_largest_expr(anon x: uint64, anon y: uint64) {
+	const largest = if (x > y) x else if (y > x) y else x+y;
+}
+
 func choose_char(a: char, b: char) char => a;
 
 @extern export func putchar(c: char) void;

@@ -138,9 +138,15 @@ struct Expression {
 		} arguments;
 	};
 
-	enum class Kind { Atom, UnaryOperation, BinaryOperation, FunctionCall };
+	struct If {
+		std::unique_ptr<Spanned<Expression>> condition;
+		std::unique_ptr<Spanned<Expression>> true_;
+		std::unique_ptr<Spanned<Expression>> false_;
+	};
 
-	typedef std::variant<Atom, UnaryOperation, BinaryOperation, FunctionCall> value_t;
+	enum class Kind { Atom, UnaryOperation, BinaryOperation, FunctionCall, If };
+
+	typedef std::variant<Atom, UnaryOperation, BinaryOperation, FunctionCall, If> value_t;
 
 	value_t value;
 	// TODO: move TypeInfo::ID elsewhere to have it here
@@ -187,6 +193,18 @@ struct Expression {
 		);
 	}
 
+	inline static Expression
+	make_if(std::unique_ptr<Spanned<Expression>>&& condition,
+	        std::unique_ptr<Spanned<Expression>>&& true_,
+	        std::unique_ptr<Spanned<Expression>>&& false_) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::If>,
+				If {std::move(condition), std::move(true_), std::move(false_)}
+                }
+		);
+	}
+
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 
 	inline Atom& get_atom() { return std::get<(size_t) Kind::Atom>(value); }
@@ -207,6 +225,10 @@ struct Expression {
 
 	inline FunctionCall& get_function_call() { return std::get<(size_t) Kind::FunctionCall>(value); }
 
+	inline If const& get_if() const { return std::get<(size_t) Kind::If>(value); }
+
+	inline If& get_if() { return std::get<(size_t) Kind::If>(value); }
+
 	bool can_be_lhs() const;
 };
 
@@ -217,6 +239,7 @@ std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::UnaryOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::BinaryOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
+std::ostream& operator<<(std::ostream&, Expression::If const&);
 std::ostream& operator<<(std::ostream&, Expression const&);
 
 }  // namespace AST

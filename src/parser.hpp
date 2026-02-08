@@ -123,7 +123,8 @@ private:
 	std::optional<Expression>                         consume_expression_function_call();
 	std::optional<Expression>                         consume_expression_unary_l1();
 	std::optional<Expression>                         consume_expression_binop_l1();
-	std::optional<Expression>                         consume_expression_binop_l0();
+	std::optional<Expression>                         consume_expression_binop_l2();
+	std::optional<Expression>                         consume_expression_binop_l3();
 	std::optional<Expression>                         consume_expression();
 
 	std::optional<Statement> consume_statement_declare();
@@ -139,6 +140,8 @@ private:
 
 	std::optional<Scope> consume_scope();
 
+	static char const* get_variant_name(Keyword);
+
 	// peek_ methods do not increment the index.
 	bool peek_symbol(Token::Symbol) const;
 	/// Returns the first matching symbol in the vector, if any do match.
@@ -151,6 +154,7 @@ private:
 	// upon failure. The reason string is only copied if a diagnostic is thrown.
 	void add_expected_diagnostic(std::string_view what, std::string_view why);
 
+	bool expect_keyword(std::string_view reason, Keyword);
 	bool expect_symbol(std::string_view reason, Token::Symbol);
 
 	// TODO: point one token further back so it is clearer where the semicolon is missing
@@ -170,7 +174,8 @@ private:
 	std::optional<Expression> expect_expression_function_call(std::string_view reason);
 	std::optional<Expression> expect_expression_unary_l1(std::string_view reason);
 	std::optional<Expression> expect_expression_binop_l1(std::string_view reason);
-	std::optional<Expression> expect_expression_binop_l0(std::string_view reason);
+	std::optional<Expression> expect_expression_binop_l2(std::string_view reason);
+	std::optional<Expression> expect_expression_binop_l3(std::string_view reason);
 	std::optional<Expression> expect_expression(std::string_view reason);
 
 	std::optional<Statement> expect_statement(std::string_view reason);

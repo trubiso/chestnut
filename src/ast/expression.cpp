@@ -79,12 +79,24 @@ std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call)
 	return os << ')';
 }
 
+std::ostream& operator<<(std::ostream& os, Expression::If const& if_) {
+	return os
+	    << "(if ("
+	    << if_.condition->value
+	    << ") "
+	    << if_.true_->value
+	    << " else "
+	    << if_.false_->value
+	    << ")";
+}
+
 std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 	switch (expression.kind()) {
 	case Expression::Kind::Atom:            return os << expression.get_atom();
 	case Expression::Kind::UnaryOperation:  return os << expression.get_unary_operation();
 	case Expression::Kind::BinaryOperation: return os << expression.get_binary_operation();
 	case Expression::Kind::FunctionCall:    return os << expression.get_function_call();
+	case Expression::Kind::If:              return os << expression.get_if();
 	}
 	[[assume(false)]];
 }

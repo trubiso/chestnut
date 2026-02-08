@@ -468,7 +468,7 @@ std::optional<Expression> Parser::consume_expression_binop_l1() {
 	);
 }
 
-std::optional<Expression> Parser::consume_expression_binop_l0() {
+std::optional<Expression> Parser::consume_expression_binop_l2() {
 	// then +, -
 	return consume_generic_binop(
 		&Parser::consume_expression_binop_l1,
@@ -477,17 +477,44 @@ std::optional<Expression> Parser::consume_expression_binop_l0() {
 	);
 }
 
-std::optional<Expression> Parser::consume_expression() {
-	// lowest precedence: comparison <, >, <=, >=, ==, !=
+std::optional<Expression> Parser::consume_expression_binop_l3() {
+	// then comparison <, >, <=, >=, ==, !=
 	return consume_generic_binop(
-		&Parser::consume_expression_binop_l0,
-		&Parser::expect_expression_binop_l0,
+		&Parser::consume_expression_binop_l2,
+		&Parser::expect_expression_binop_l2,
 		{Token::Symbol::Lt,
 	         Token::Symbol::Gt,
 	         Token::Symbol::Le,
 	         Token::Symbol::Ge,
 	         Token::Symbol::EqEq,
 	         Token::Symbol::Ne}
+	);
+}
+
+std::optional<Expression> Parser::consume_expression() {
+	size_t index = tokens_.index();
+	if (!consume_keyword(Keyword::If)) return consume_expression_binop_l3();
+	if (!consume_symbol(Token::Symbol::LParen)) {
+		// we might have a variable called if
+		tokens_.set_index(index);
+		return consume_expression_binop_l3();
+	}
+	auto maybe_condition = SPANNED_REASON(expect_expression, "expected condition expression for if expression");
+	if (!maybe_condition.has_value()) return {};
+	expect_symbol("expected closing parenthesis after if expression condition expression", Token::Symbol::RParen);
+	auto maybe_true
+		= SPANNED_REASON(expect_expression, "expected expression after if expression condition expression");
+	if (!maybe_true.has_value()) {
+		// this could mean that there is a function called "if". in that case though , i'm sorry :/
+		return {};
+	}
+	expect_keyword("expected 'else' clause after 'if' clause in if expression", Keyword::Else);
+	auto maybe_false = SPANNED_REASON(expect_expression, "expected expression after else keyword in if expression");
+	if (!maybe_false.has_value()) return {};
+	return Expression::make_if(
+		std::make_unique<Spanned<Expression>>(std::move(maybe_condition.value())),
+		std::make_unique<Spanned<Expression>>(std::move(maybe_true.value())),
+		std::make_unique<Spanned<Expression>>(std::move(maybe_false.value()))
 	);
 }
 
@@ -713,23 +740,7 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	if (!maybe_token.has_value()) return false;
 	Token token = maybe_token.value();
 	if (!token.is_identifier()) return false;
-	switch (keyword) {
-	case Keyword::Def:    return token.get_identifier() == "def";
-	case Keyword::Import: return token.get_identifier() == "import";
-	case Keyword::Module: return token.get_identifier() == "module";
-	case Keyword::Export: return token.get_identifier() == "export";
-	case Keyword::Const:  return token.get_identifier() == "const";
-	case Keyword::Mut:    return token.get_identifier() == "mut";
-	case Keyword::Anon:   return token.get_identifier() == "anon";
-	case Keyword::Func:   return token.get_identifier() == "func";
-	case Keyword::Return: return token.get_identifier() == "return";
-	case Keyword::Goto:   return token.get_identifier() == "goto";
-	case Keyword::Branch: return token.get_identifier() == "branch";
-	case Keyword::If:     return token.get_identifier() == "if";
-	case Keyword::Else:   return token.get_identifier() == "else";
-	}
-	[[assume(false)]];
-	return false;
+	return token.get_identifier() == get_variant_name(keyword);
 }
 
 bool Parser::peek_unqualified_identifier() const {
@@ -772,10 +783,16 @@ void Parser::add_expected_diagnostic(std::string_view what, std::string_view why
 	diagnostics_.push_back(ExpectedDiagnostic {{{std::string(what), std::string(why)}}, last_token.span()});
 }
 
-// it's better to keep this one expanded because of how specific it is
+// it's better to keep these ones expanded because of how specific they are
+bool Parser::expect_keyword(std::string_view reason, Keyword keyword) {
+	if (consume_keyword(keyword)) return true;
+	add_expected_diagnostic(std::format("keyword '{}'", get_variant_name(keyword)), reason);
+	return false;
+}
+
 bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
 	if (consume_symbol(symbol)) return true;
-	add_expected_diagnostic(std::format("symbol '{}'", get_variant_name(symbol)), reason);
+	add_expected_diagnostic(std::format("symbol '{}'", ::get_variant_name(symbol)), reason);
 	return false;
 }
 
@@ -815,8 +832,12 @@ std::optional<Expression> Parser::expect_expression_binop_l1(std::string_view re
 	EXPECT(consume_expression_binop_l1, "expression");
 }
 
-std::optional<Expression> Parser::expect_expression_binop_l0(std::string_view reason) {
-	EXPECT(consume_expression_binop_l0, "expression");
+std::optional<Expression> Parser::expect_expression_binop_l2(std::string_view reason) {
+	EXPECT(consume_expression_binop_l2, "expression");
+}
+
+std::optional<Expression> Parser::expect_expression_binop_l3(std::string_view reason) {
+	EXPECT(consume_expression_binop_l3, "expression");
 }
 
 std::optional<Expression> Parser::expect_expression(std::string_view reason) {
@@ -829,6 +850,24 @@ std::optional<Statement> Parser::expect_statement(std::string_view reason) {
 
 std::optional<Scope> Parser::expect_scope(std::string_view reason) {
 	EXPECT(consume_scope, "scope");
+}
+
+char const* Parser::get_variant_name(Keyword keyword) {
+	switch (keyword) {
+	case Keyword::Def:    return "def";
+	case Keyword::Import: return "import";
+	case Keyword::Module: return "module";
+	case Keyword::Export: return "export";
+	case Keyword::Const:  return "const";
+	case Keyword::Mut:    return "mut";
+	case Keyword::Anon:   return "anon";
+	case Keyword::Func:   return "func";
+	case Keyword::Return: return "return";
+	case Keyword::Goto:   return "goto";
+	case Keyword::Branch: return "branch";
+	case Keyword::If:     return "if";
+	case Keyword::Else:   return "else";
+	}
 }
 
 void Parser::skip_semis() {
