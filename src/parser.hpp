@@ -60,6 +60,8 @@ private:
 		Return,
 		Goto,
 		Branch,
+		If,
+		Else,
 	};
 
 	FileContext   context_;
@@ -132,6 +134,7 @@ private:
 	std::optional<Statement> consume_statement_label();
 	std::optional<Statement> consume_statement_goto();
 	std::optional<Statement> consume_statement_branch();
+	std::optional<Statement> consume_statement_if();
 	std::optional<Statement> consume_statement();
 
 	std::optional<Scope> consume_scope();
@@ -169,6 +172,8 @@ private:
 	std::optional<Expression> expect_expression_binop_l1(std::string_view reason);
 	std::optional<Expression> expect_expression_binop_l0(std::string_view reason);
 	std::optional<Expression> expect_expression(std::string_view reason);
+
+	std::optional<Statement> expect_statement(std::string_view reason);
 
 	std::optional<Scope> expect_scope(std::string_view reason);
 

@@ -12,9 +12,10 @@
 namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
-#define SPANNED_REASON(fn, reason)                                                                                     \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
-		                                                                      this] { return (fn) (reason); })
+#define SPANNED_REASON(fn, reason)                                                               \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
+		return (fn) (reason);                                                            \
+	})
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -628,6 +629,40 @@ std::optional<Statement> Parser::consume_statement_branch() {
 	return Statement::make_branch(Statement::Branch {std::move(maybe_expression.value()), true_, false_});
 }
 
+std::optional<Statement> Parser::consume_statement_if() {
+	// "if" "(" <expr> ")" <true_stmt> ["else" <false_stmt>]
+
+	// we start after the "if" keyword
+	// TODO: should we be this liberal with the parentheses?
+	expect_symbol("expected opening parenthesis after if keyword", Token::Symbol::LParen);
+	auto maybe_expression = SPANNED_REASON(expect_expression, "expected condition expression for if statement");
+	if (!maybe_expression.has_value()) return {};
+	expect_symbol("expected closing parenthesis after if condition expression", Token::Symbol::RParen);
+	// if these stmts are scopes, they are flattened into the scope that we store in AST::Statement::If
+	auto maybe_true = SPANNED_REASON(expect_statement, "expected scope or statement after if condition expression");
+	if (!maybe_true.has_value()) return {};
+	std::optional<Spanned<AST::Statement>> maybe_false = std::nullopt;
+	if (consume_keyword(Keyword::Else)) {
+		maybe_false = SPANNED_REASON(expect_statement, "expected scope or statement after else keyword");
+		// we can survive if the user inputs else but not a statement
+	}
+	Spanned<Scope> true_scope {maybe_true.value().span, {}};
+	// we have to do it this way because the brace initializer list constructor for vectors copies
+	if (maybe_true.value().value.kind() == AST::Statement::Kind::Scope)
+		true_scope.value = std::move(maybe_true.value().value.get_scope());
+	else true_scope.value.push_back(std::move(maybe_true.value()));
+	std::optional<Spanned<Scope>> false_scope = std::nullopt;
+	if (maybe_false.has_value()) {
+		false_scope = {maybe_false.value().span, {}};
+		if (maybe_false.value().value.kind() == AST::Statement::Kind::Scope)
+			false_scope.value().value = std::move(maybe_false.value().value.get_scope());
+		else false_scope.value().value.push_back(std::move(maybe_false.value()));
+	}
+	return AST::Statement::make_if(
+		AST::Statement::If {std::move(maybe_expression.value()), std::move(true_scope), std::move(false_scope)}
+	);
+}
+
 std::optional<Statement> Parser::consume_statement() {
 	if (peek_symbol(Token::Symbol::LBrace)) return consume_statement_scope();
 
@@ -639,6 +674,7 @@ std::optional<Statement> Parser::consume_statement() {
 	if (consume_keyword(Keyword::Return)) return consume_statement_return();
 	if (consume_keyword(Keyword::Goto)) return consume_statement_goto();
 	if (consume_keyword(Keyword::Branch)) return consume_statement_branch();
+	if (consume_keyword(Keyword::If)) return consume_statement_if();
 
 	return consume_statement_set();
 }
@@ -689,6 +725,8 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	case Keyword::Return: return token.get_identifier() == "return";
 	case Keyword::Goto:   return token.get_identifier() == "goto";
 	case Keyword::Branch: return token.get_identifier() == "branch";
+	case Keyword::If:     return token.get_identifier() == "if";
+	case Keyword::Else:   return token.get_identifier() == "else";
 	}
 	[[assume(false)]];
 	return false;
@@ -783,6 +821,10 @@ std::optional<Expression> Parser::expect_expression_binop_l0(std::string_view re
 
 std::optional<Expression> Parser::expect_expression(std::string_view reason) {
 	EXPECT(consume_expression, "expression");
+}
+
+std::optional<Statement> Parser::expect_statement(std::string_view reason) {
+	EXPECT(consume_statement, "statement");
 }
 
 std::optional<Scope> Parser::expect_scope(std::string_view reason) {

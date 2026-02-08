@@ -50,6 +50,18 @@ func print_largest(anon x: uint64, anon y: uint64) {
 	return;
 }
 
+func print_largest_if(anon x: uint64, anon y: uint64) {
+	if (x > y) print_integer(x);
+	else if (x < y) print_integer(y);
+	else {
+		print_integer(x);
+		putchar(' ');
+		putchar('=');
+		putchar(' ');
+		print_integer(y);
+	}
+}
+
 func choose_char(a: char, b: char) char => a;
 
 @extern export func putchar(c: char) void;

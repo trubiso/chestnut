@@ -50,9 +50,15 @@ struct Statement {
 		std::optional<Spanned<Goto>> false_;
 	};
 
-	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto, Branch };
+	struct If {
+		Spanned<Expression>           condition;
+		Spanned<Scope>                true_;
+		std::optional<Spanned<Scope>> false_;
+	};
 
-	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto, Branch> value_t;
+	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If };
+
+	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If> value_t;
 
 	value_t value;
 
@@ -90,6 +96,10 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Branch>, std::move(branch)});
 	}
 
+	inline static Statement make_if(If&& if_) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::If>, std::move(if_)});
+	}
+
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Declare& get_declare() { return std::get<(size_t) Kind::Declare>(value); }
@@ -121,6 +131,8 @@ struct Statement {
 	inline Branch const& get_branch() const { return std::get<(size_t) Kind::Branch>(value); }
 
 	inline Branch& get_branch() { return std::get<(size_t) Kind::Branch>(value); }
+
+	inline If const& get_if() const { return std::get<(size_t) Kind::If>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
@@ -129,6 +141,7 @@ std::ostream& operator<<(std::ostream&, Statement::Return const&);
 std::ostream& operator<<(std::ostream&, Statement::Label const&);
 std::ostream& operator<<(std::ostream&, Statement::Goto const&);
 std::ostream& operator<<(std::ostream&, Statement::Branch const&);
+std::ostream& operator<<(std::ostream&, Statement::If const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
 
 }  // namespace AST
