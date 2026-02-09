@@ -1,3 +1,4 @@
+#include "ast/statement.hpp"
 #include "resolver.hpp"
 
 #include <variant>
@@ -41,6 +42,88 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 			= desugar_control_flow_expr(argument, label_counter, file_id);
 		std::move(extra_stmts.begin(), extra_stmts.end(), std::back_inserter(stmts));
 	}
+	return stmts;
+}
+
+std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
+	AST::Expression&           expression,
+	Span                       span,
+	AST::Statement::Label::ID& label_counter,
+	FileContext::ID            file_id
+) {
+	// FIXME: should we really be desugaring the expressions beforehand??
+	std::vector<Spanned<AST::Statement>> stmts
+		= desugar_control_flow_expr(expression.get_binary_operation(), label_counter, file_id);
+	// we only want a special case for logical operators
+	switch (expression.get_binary_operation().operation) {
+	case Token::Symbol::AmpAmp:
+	case Token::Symbol::BarBar: break;
+	default:                    return stmts;
+	}
+
+	auto binary_operation = std::move(expression.get_binary_operation());
+	bool is_or            = binary_operation.operation == Token::Symbol::BarBar;
+
+	// for logical operators, we want to create a variable, default it to true/false and then add a branch. that
+	// way, we only compute valuables whenever they are necessary.
+	// FIXME: these spans are not correct
+	Span stub_span = span;
+
+	AST::SymbolID new_id  = symbol_next();
+	TypeInfo::ID  type_id = register_type(TypeInfo::make_known_bool(), stub_span, file_id, new_id);
+	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, true, false, {}});
+	AST::Identifier new_var {
+		{stub_span, "_"}
+	};
+	new_var.id = {new_id};
+
+	AST::Expression value = AST::Expression::make_atom(AST::Expression::Atom::make_bool_literal(is_or));
+
+	// FIXME: i hate this var being mutable as well
+	stmts.emplace_back(
+		stub_span,
+		AST::Statement::make_declare(
+			AST::Statement::Declare {
+				{stub_span, new_var},
+				{{stub_span, AST::Type::make_atom(AST::Type::Atom::make_bool())}},
+				{{stub_span, std::move(value)}},
+				{stub_span, true},
+				false
+        }
+		)
+	);
+
+	AST::Identifier new_var1 = new_var;
+
+	AST::Expression new_var_expr
+		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var)));
+	AST::Expression new_var_expr1
+		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var1)));
+
+	AST::Statement::Label set_label {"set", label_counter++};
+	AST::Statement::Label cont_label {"cont", label_counter++};
+	AST::Statement::Goto  goto_set {set_label.name, set_label.id};
+	AST::Statement::Goto  goto_cont {cont_label.name, cont_label.id};
+
+	AST::Statement::Branch branch {
+		std::move(std::move(*binary_operation.lhs)),
+		{stub_span, is_or ? goto_cont : goto_set},
+		{{stub_span, is_or ? goto_set : goto_cont}}
+	};
+
+	AST::Statement::Set set {
+		{stub_span, std::move(new_var_expr1)},
+		std::move(*binary_operation.rhs)
+	};
+
+	stmts.emplace_back(stub_span, AST::Statement::make_branch(std::move(branch)));
+	stmts.emplace_back(stub_span, AST::Statement::make_label(std::move(set_label)));
+	stmts.emplace_back(stub_span, AST::Statement::make_set(std::move(set)));
+	stmts.emplace_back(stub_span, AST::Statement::make_label(std::move(cont_label)));
+
+	// and finally we can replace the expression
+	expression = std::move(new_var_expr);
+
 	return stmts;
 }
 
@@ -148,7 +231,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	case AST::Expression::Kind::UnaryOperation:
 		return desugar_control_flow_expr(expression.get_unary_operation(), label_counter, file_id);
 	case AST::Expression::Kind::BinaryOperation:
-		return desugar_control_flow_expr(expression.get_binary_operation(), label_counter, file_id);
+		return desugar_control_flow_expr_binop(expression, span, label_counter, file_id);
 	case AST::Expression::Kind::FunctionCall:
 		return desugar_control_flow_expr(expression.get_function_call(), span, label_counter, file_id);
 	case AST::Expression::Kind::If: return desugar_control_flow_expr_if(expression, span, label_counter, file_id);

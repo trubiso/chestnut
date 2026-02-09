@@ -100,7 +100,7 @@ func fibonacci(count: uint64) {
 
 func test_and(anon x: int64) {
 	if (!(0 <= x && x < 10)) putchar('n');
-	else if (x < 4 || x > 6) putchar('e');
+	else if (x < 4 || x > 6) putchar('d');
 	else putchar('a');
 }
 
@@ -133,5 +133,9 @@ def sum_numbers ::my_module::my_submodule::sum_numbers;
 	putchar('\n');
 	print_up_to(1000);
 	fibonacci(100);
+	test_and(5);
+	test_and(11);
+	test_and(8);
+	putchar('\n');
 	return 0;
 }

@@ -296,6 +296,7 @@ private:
 
 	// === DESUGAR ===
 
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr_binop(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr_if(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::UnaryOperation&, AST::Statement::Label::ID& label_counter, FileContext::ID);
