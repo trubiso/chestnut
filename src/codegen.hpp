@@ -15,7 +15,9 @@ public:
 		, builder_(context_)
 		, symbols_(symbols) {}
 
-	void process(std::vector<IR::Module> const&);
+	enum class Optimization { O0, O1, O2, O3 };
+
+	void process(std::vector<IR::Module> const&, std::string of, Optimization);
 
 private:
 	llvm::LLVMContext context_;
@@ -41,7 +43,7 @@ private:
 	void emit_statement(IR::Statement::Declare const&, llvm::BasicBlock*);
 	void emit_statement(IR::Statement::Set const&);
 	void emit_statement(IR::Statement const&, llvm::BasicBlock*);
-	
+
 	void emit_basic_block(IR::BasicBlock const&, llvm::BasicBlock*);
 	void emit_basic_block_jump(IR::BasicBlock const&, std::unordered_map<IR::BasicBlock::ID, llvm::BasicBlock*>);
 

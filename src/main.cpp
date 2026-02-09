@@ -120,16 +120,21 @@ bool run_tests() {
 static std::string compiler_name = "chc";
 
 struct Input {
-	bool                     run_compiler_tests;
-	std::vector<std::string> inputs;
+	bool                        run_compiler_tests;
+	CodeGenerator::Optimization optimization = CodeGenerator::Optimization::O0;
+	std::vector<std::string>    inputs;
+	std::string                 output;
 };
 
 Input get_input(int argc, char** argv) {
+	Input input;
 	try {
 		boost::program_options::options_description options("options");
-		options.add_options()("help,h", "show help message")(
-			"run-compiler-tests",
-			"run compiler-internal tests"
+		// TODO: add option for optimization level
+		options.add_options()("help,h", "show help message")("run-compiler-tests", "run compiler-internal tests")(
+			"output,o",
+			boost::program_options::value<std::string>(&input.output)->default_value("output.o"),
+			"output file"
 		);
 
 		boost::program_options::options_description hidden("");
@@ -161,14 +166,16 @@ Input get_input(int argc, char** argv) {
 			std::exit(0);
 		}
 
-		if (variables_map.count("run-compiler-tests")) { return Input {true, {}}; }
+		input.run_compiler_tests = variables_map.count("run-compiler-tests");
+		if (input.run_compiler_tests) return input;
 
 		if (!variables_map.count("inputs")) {
 			std::cerr << "error: no input files" << std::endl;
 			std::exit(1);
 		}
 
-		return Input {false, std::move(variables_map.at("inputs").as<std::vector<std::string>>())};
+		input.inputs = std::move(variables_map.at("inputs").as<std::vector<std::string>>());
+		return input;
 	} catch (boost::program_options::error const& error) {
 		std::cerr << "argument error: " << error.what() << std::endl;
 		std::exit(1);
@@ -229,5 +236,5 @@ int main(int argc, char** argv) {
 	}
 
 	CodeGenerator generator(resolver.export_symbols());
-	generator.process(modules);
+	generator.process(modules, input.output, input.optimization);
 }

@@ -17,7 +17,7 @@
 #include <llvm/TargetParser/Host.h>
 #include <llvm/Transforms/Utils/Mem2Reg.h>
 
-void CodeGenerator::process(std::vector<IR::Module> const& modules) {
+void CodeGenerator::process(std::vector<IR::Module> const& modules, std::string of, Optimization optimization) {
 	create_all_functions(modules);
 	emit_all_functions(modules);
 
@@ -59,7 +59,14 @@ void CodeGenerator::process(std::vector<IR::Module> const& modules) {
 	pb.registerLoopAnalyses(lam);
 	pb.crossRegisterProxies(lam, fam, cgam, mam);
 
-	llvm::ModulePassManager mpm = pb.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+	llvm::OptimizationLevel optimization_level = llvm::OptimizationLevel::O0;
+	switch (optimization) {
+	case Optimization::O0: optimization_level = llvm::OptimizationLevel::O0; break;
+	case Optimization::O1: optimization_level = llvm::OptimizationLevel::O1; break;
+	case Optimization::O2: optimization_level = llvm::OptimizationLevel::O2; break;
+	case Optimization::O3: optimization_level = llvm::OptimizationLevel::O3; break;
+	}
+	llvm::ModulePassManager mpm = pb.buildPerModuleDefaultPipeline(optimization_level);
 	// ensure we always run the alloca pass!
 	mpm.addPass(llvm::createModuleToFunctionPassAdaptor(llvm::PromotePass()));
 
@@ -67,10 +74,8 @@ void CodeGenerator::process(std::vector<IR::Module> const& modules) {
 
 	program_.print(llvm::outs(), nullptr);
 
-	auto filename = "output.o";
-
 	std::error_code      ec;
-	llvm::raw_fd_ostream dest(filename, ec, llvm::sys::fs::OF_None);
+	llvm::raw_fd_ostream dest(of, ec, llvm::sys::fs::OF_None);
 
 	if (ec) {
 		llvm::errs() << "Could not open file: " << ec.message();
@@ -384,6 +389,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression const& expression
 void CodeGenerator::emit_statement(IR::Statement::Declare const& declare, llvm::BasicBlock* block) {
 	llvm::Type*  type  = generate_type(declare.type);
 	llvm::Value* value = declare.value.has_value() ? generate_expression(declare.value.value().value) : nullptr;
+	// FIXME: we should probably create this variable in the entry of the function
 	variables_[declare.name.value]
 		= llvm::IRBuilder<>(block, block->begin()).CreateAlloca(type, nullptr, get_name(declare.name.value));
 	if (value) builder_.CreateStore(value, variables_[declare.name.value]);
