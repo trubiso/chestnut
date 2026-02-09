@@ -311,6 +311,8 @@ Token::Symbol Lexer::consume_symbol() {
 	if (!stream_.peek().has_value()) return partial_symbol;
 	char second_character = stream_.peek().value();
 	switch (partial_symbol) {
+	case Symbol::Amp:   TRANSFORM_IF('&', Symbol::AmpAmp);
+	case Symbol::Bar:   TRANSFORM_IF('|', Symbol::BarBar);
 	case Symbol::Eq:    TRANSFORM_IF2('=', Symbol::EqEq, '>', Symbol::FatArrow);
 	case Symbol::Lt:    TRANSFORM_IF3('=', Symbol::Le, '>', Symbol::LtGt, '-', Symbol::LeftArrow);
 	case Symbol::Gt:    TRANSFORM_IF('=', Symbol::Ge);

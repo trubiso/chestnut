@@ -34,6 +34,8 @@ size_t Token::size() const {
 		case Symbol::Comma:
 		case Symbol::Colon:
 		case Symbol::Semicolon:  return 1;
+		case Symbol::AmpAmp:
+		case Symbol::BarBar:
 		case Symbol::EqEq:
 		case Symbol::Le:
 		case Symbol::Ge:
@@ -79,7 +81,9 @@ char const* get_variant_name(Token::Symbol symbol) {
 	case Token::Symbol::Star:                  return "*";
 	case Token::Symbol::Div:                   return "/";
 	case Token::Symbol::Amp:                   return "&";
+	case Token::Symbol::AmpAmp:                return "&&";
 	case Token::Symbol::Bar:                   return "|";
+	case Token::Symbol::BarBar:                return "||";
 	case Token::Symbol::Xor:                   return "^";
 	case Token::Symbol::Tilde:                 return "~";
 	case Token::Symbol::Eq:                    return "=";
