@@ -51,18 +51,22 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 	AST::Statement::Label::ID& label_counter,
 	FileContext::ID            file_id
 ) {
-	// FIXME: should we really be desugaring the expressions beforehand??
-	std::vector<Spanned<AST::Statement>> stmts
-		= desugar_control_flow_expr(expression.get_binary_operation(), label_counter, file_id);
 	// we only want a special case for logical operators
 	switch (expression.get_binary_operation().operation) {
 	case Token::Symbol::AmpAmp:
 	case Token::Symbol::BarBar: break;
-	default:                    return stmts;
+	default:                    return desugar_control_flow_expr(expression.get_binary_operation(), label_counter, file_id);
 	}
+
+	std::vector<Spanned<AST::Statement>> stmts {};
 
 	auto binary_operation = std::move(expression.get_binary_operation());
 	bool is_or            = binary_operation.operation == Token::Symbol::BarBar;
+
+	std::vector<Spanned<AST::Statement>> lhs_stmts
+		= desugar_control_flow_expr(*binary_operation.lhs, label_counter, file_id);
+	std::vector<Spanned<AST::Statement>> rhs_stmts
+		= desugar_control_flow_expr(*binary_operation.rhs, label_counter, file_id);
 
 	// for logical operators, we want to create a variable, default it to true/false and then add a branch. that
 	// way, we only compute valuables whenever they are necessary.
@@ -116,8 +120,10 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 		std::move(*binary_operation.rhs)
 	};
 
+	std::move(lhs_stmts.begin(), lhs_stmts.end(), std::back_inserter(stmts));
 	stmts.emplace_back(stub_span, AST::Statement::make_branch(std::move(branch)));
 	stmts.emplace_back(stub_span, AST::Statement::make_label(std::move(set_label)));
+	std::move(rhs_stmts.begin(), rhs_stmts.end(), std::back_inserter(stmts));
 	stmts.emplace_back(stub_span, AST::Statement::make_set(std::move(set)));
 	stmts.emplace_back(stub_span, AST::Statement::make_label(std::move(cont_label)));
 
@@ -135,12 +141,9 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 ) {
 	AST::Expression::If                  if_   = std::move(expression.get_if());
 	std::vector<Spanned<AST::Statement>> stmts = desugar_control_flow_expr(*if_.condition, label_counter, file_id);
-	std::vector<Spanned<AST::Statement>> extra_stmts1
-		= desugar_control_flow_expr(*if_.true_, label_counter, file_id);
-	std::move(extra_stmts1.begin(), extra_stmts1.end(), std::back_inserter(stmts));
-	std::vector<Spanned<AST::Statement>> extra_stmts2
+	std::vector<Spanned<AST::Statement>> true_stmts = desugar_control_flow_expr(*if_.true_, label_counter, file_id);
+	std::vector<Spanned<AST::Statement>> false_stmts
 		= desugar_control_flow_expr(*if_.false_, label_counter, file_id);
-	std::move(extra_stmts2.begin(), extra_stmts2.end(), std::back_inserter(stmts));
 
 	// for if expressions, we want to declare a new anonymous variable, branch on the condition to set its value and
 	// then replace this expression with an identifier pointing to that variable.
@@ -207,9 +210,11 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 	// now we can just add the statements we want in order
 	stmts.emplace_back(stub_span, AST::Statement::make_branch(std::move(branch)));
 	stmts.emplace_back(stub_span, AST::Statement::make_label(std::move(true_label)));
+	std::move(true_stmts.begin(), true_stmts.end(), std::back_inserter(stmts));
 	stmts.emplace_back(stub_span, AST::Statement::make_set(std::move(set_true)));
 	stmts.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_cont)));
 	stmts.emplace_back(stub_span, AST::Statement::make_label(std::move(false_label)));
+	std::move(false_stmts.begin(), false_stmts.end(), std::back_inserter(stmts));
 	stmts.emplace_back(stub_span, AST::Statement::make_set(std::move(set_false)));
 	stmts.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_cont1)));
 	stmts.emplace_back(stub_span, AST::Statement::make_label(std::move(cont_label)));
