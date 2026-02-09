@@ -246,7 +246,11 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 
 	AST::Statement::Goto goto_cont {"cont", label_counter++};
 
-	AST::Statement::Branch branch {std::move(if_.condition), goto_true, goto_false};
+	AST::Statement::Branch branch {
+		std::move(if_.condition),
+		goto_true,
+		goto_false.has_value() ? goto_false.value() : Spanned {stub_span, goto_cont}
+	};
 
 	// now we need to create the branch, then true, then false, then cont label
 
