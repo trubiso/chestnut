@@ -232,7 +232,8 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 	AST::Statement::Label::ID& label_counter,
 	FileContext::ID            file_id
 ) {
-	std::vector<Spanned<AST::Statement>> stmts {};
+	Spanned<AST::Expression>             condition = std::move(if_.condition);
+	std::vector<Spanned<AST::Statement>> stmts     = desugar_control_flow_expr(condition, label_counter, file_id);
 	// FIXME: use the correct spans ("if" for the true case and mby the branch stmt, "else" for the
 	// false case)
 	Span stub_span = span;
@@ -247,7 +248,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 	AST::Statement::Goto goto_cont {"cont", label_counter++};
 
 	AST::Statement::Branch branch {
-		std::move(if_.condition),
+		std::move(condition),
 		goto_true,
 		goto_false.has_value() ? goto_false.value() : Spanned {stub_span, goto_cont}
 	};
