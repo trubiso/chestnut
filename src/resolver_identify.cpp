@@ -341,6 +341,8 @@ void Resolver::identify_populate_labels(
 	}
 
 	if (statement.value.kind() == AST::Statement::Kind::Label) {
+		// skip automatically generated labels with a valid ID
+		if (statement.value.get_label().id.has_value()) return;
 		std::string const& name = statement.value.get_label().name;
 		if (labels.contains(name)) {
 			parsed_files.at(file_id).diagnostics.push_back(
@@ -408,6 +410,8 @@ void Resolver::identify_labels(
 	}
 
 	if (statement.value.kind() == AST::Statement::Kind::Goto) {
+		// skip automatically generated gotos with a valid ID
+		if (statement.value.get_goto().destination_id.has_value()) return;
 		std::string const& destination = statement.value.get_goto().destination;
 		if (!labels.contains(destination)) {
 			identify_add_unknown_label_diagnostic(statement.span, file_id);
@@ -418,6 +422,9 @@ void Resolver::identify_labels(
 		statement.value.get_goto().destination_id = id;
 		return;
 	} else if (statement.value.kind() == AST::Statement::Kind::Branch) {
+		// skip automatically generated branches with valid IDs
+		if (statement.value.get_branch().true_.value.destination_id.has_value()) return;
+
 		AST::Statement::Branch& branch = statement.value.get_branch();
 
 		// resolve the true destination
@@ -444,17 +451,14 @@ void Resolver::identify_labels(AST::Function& function, FileContext::ID file_id)
 	if (!function.body.has_value()) return;
 	std::unordered_map<std::string, Spanned<AST::Statement::Label::ID>> labels {};
 
-	AST::Statement::Label::ID counter = 1;  // we save 0 for the entry
 	for (Spanned<AST::Statement>& statement : function.body.value()) {
-		identify_populate_labels(statement, labels, counter, file_id);
+		identify_populate_labels(statement, labels, function.label_counter, file_id);
 	}
 
 	// now that we have the label table, we can identify labels
 	for (Spanned<AST::Statement>& statement : function.body.value()) {
 		identify_labels(statement, labels, file_id);
 	}
-
-	function.label_counter = counter;
 }
 
 void Resolver::identify_labels(AST::Module& module, FileContext::ID file_id) {

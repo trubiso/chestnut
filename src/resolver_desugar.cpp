@@ -344,6 +344,8 @@ Resolver::desugar_control_flow(AST::Scope&& scope, AST::Statement::Label::ID& la
 
 void Resolver::desugar_control_flow(AST::Function& function, FileContext::ID file_id) {
 	if (!function.body.has_value()) return;
+	// we initialize the label counter for everyone else. we reserve 0 for the entry block
+	function.label_counter = 1;
 	function.body = desugar_control_flow(std::move(function.body.value()), function.label_counter, file_id);
 }
 
