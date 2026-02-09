@@ -276,6 +276,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 		switch (atom.type.get_atom().kind()) {
 		case IR::Type::Atom::Kind::Integer:
 			switch (atom.type.get_atom().get_integer().width_type()) {
+				// TODO: parse with the correct radix
 			case IR::Type::Atom::Integer::WidthType::Fixed:
 				return llvm::ConstantInt::get(
 					context_,

@@ -1,0 +1,36 @@
+@extern func open_input() uintptr;
+@extern func close_input(file: uintptr);
+@extern func get_line(file: uintptr) bool;
+@extern func get_direction() bool;
+@extern func get_rotation() uint32;
+@extern func print_output(anon x: uint64);
+
+@extern func main() int32 {
+	const file = open_input();
+	mut output: uint64 = 0;
+	mut angle: uint32 = 50;
+'loop:
+	branch (!get_line(file)) 'end;
+	mut rotation = get_rotation();
+	// we first normalize the rotation to [0, 99]
+	goto 'normalize_cond;
+'normalize_loop: rotation = rotation - 100;
+'normalize_cond: branch (rotation > 99) 'normalize_loop 'normalize_cont;
+'normalize_cont:
+	// now we apply the rotation
+	if (get_direction()) {
+		// right
+		if (angle + rotation > 99) angle = angle + rotation - 100;
+		else angle = angle + rotation;
+	} else {
+		// left
+		if (rotation > angle) angle = angle + 100 - rotation;
+		else angle = angle - rotation;
+	}
+	if (angle == 0) output = output + 1;
+	goto 'loop;
+'end:
+	print_output(output);
+	close_input(file);
+	return 0;
+}
