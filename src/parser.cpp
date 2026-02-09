@@ -491,13 +491,22 @@ std::optional<Expression> Parser::consume_expression_binop_l3() {
 	);
 }
 
+std::optional<Expression> Parser::consume_expression_binop_l4() {
+	// then logical &&, ||
+	return consume_generic_binop(
+		&Parser::consume_expression_binop_l3,
+		&Parser::expect_expression_binop_l3,
+		{Token::Symbol::AmpAmp, Token::Symbol::BarBar}
+	);
+}
+
 std::optional<Expression> Parser::consume_expression() {
 	size_t index = tokens_.index();
-	if (!consume_keyword(Keyword::If)) return consume_expression_binop_l3();
+	if (!consume_keyword(Keyword::If)) return consume_expression_binop_l4();
 	if (!consume_symbol(Token::Symbol::LParen)) {
 		// we might have a variable called if
 		tokens_.set_index(index);
-		return consume_expression_binop_l3();
+		return consume_expression_binop_l4();
 	}
 	auto maybe_condition = SPANNED_REASON(expect_expression, "expected condition expression for if expression");
 	if (!maybe_condition.has_value()) return {};
@@ -838,6 +847,10 @@ std::optional<Expression> Parser::expect_expression_binop_l2(std::string_view re
 
 std::optional<Expression> Parser::expect_expression_binop_l3(std::string_view reason) {
 	EXPECT(consume_expression_binop_l3, "expression");
+}
+
+std::optional<Expression> Parser::expect_expression_binop_l4(std::string_view reason) {
+	EXPECT(consume_expression_binop_l4, "expression");
 }
 
 std::optional<Expression> Parser::expect_expression(std::string_view reason) {

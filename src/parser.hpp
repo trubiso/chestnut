@@ -125,6 +125,7 @@ private:
 	std::optional<Expression>                         consume_expression_binop_l1();
 	std::optional<Expression>                         consume_expression_binop_l2();
 	std::optional<Expression>                         consume_expression_binop_l3();
+	std::optional<Expression>                         consume_expression_binop_l4();
 	std::optional<Expression>                         consume_expression();
 
 	std::optional<Statement> consume_statement_declare();
@@ -176,6 +177,7 @@ private:
 	std::optional<Expression> expect_expression_binop_l1(std::string_view reason);
 	std::optional<Expression> expect_expression_binop_l2(std::string_view reason);
 	std::optional<Expression> expect_expression_binop_l3(std::string_view reason);
+	std::optional<Expression> expect_expression_binop_l4(std::string_view reason);
 	std::optional<Expression> expect_expression(std::string_view reason);
 
 	std::optional<Statement> expect_statement(std::string_view reason);

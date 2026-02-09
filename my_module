@@ -98,6 +98,12 @@ func fibonacci(count: uint64) {
 	putchar('\n');
 }
 
+func test_and(anon x: int64) {
+	if (!(0 <= x && x < 10)) putchar('n');
+	else if (x < 4 || x > 6) putchar('e');
+	else putchar('a');
+}
+
 func choose_char(a: char, b: char) char => a;
 
 @extern export func putchar(c: char) void;
