@@ -194,11 +194,9 @@ std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>>
 Resolver::lower(Spanned<AST::Identifier> const& identifier, bool allow_functions) {
 	auto data = lower(identifier.value, allow_functions);
 	if (!data.has_value()) return std::nullopt;
-	auto [id, type] = data.value();
-	return std::tuple<Spanned<IR::Identifier>, IR::Type> {
-		{identifier.span, id},
-		type
-	};
+	auto [id, type] = std::move(data.value());
+	Spanned<IR::Identifier> resolved_identifier {identifier.span, id};
+	return std::tuple<Spanned<IR::Identifier>, IR::Type> {resolved_identifier, std::move(type)};
 }
 
 std::optional<std::tuple<IR::Identifier, IR::Type>>
@@ -230,14 +228,14 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 		span,
 		IR::Statement::make_declare(
 			IR::Statement::Declare {
-						name, type,
+						name, type.clone(),
 						lower(expression, span, basic_blocks, file_id),
 						Spanned<bool> {span, false}
 			}
 		)
 	};
-	basic_blocks.at(basic_blocks.size() - 1).statements.push_back(statement);
-	return {name.span, IR::Expression::Atom::make_identifier(std::move(name.value), type)};
+	basic_blocks.at(basic_blocks.size() - 1).statements.push_back(std::move(statement));
+	return {name.span, IR::Expression::Atom::make_identifier(std::move(name.value), std::move(type))};
 }
 
 Spanned<IR::Expression::Atom> Resolver::extract_expression(
@@ -304,8 +302,8 @@ Spanned<IR::Expression> Resolver::lower(
 	// only identifiers can be functions!
 	auto data = lower(atom.get_identifier(), allow_functions);
 	if (!data.has_value()) return {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
-	auto [identifier, type] = data.value();
-	return {span, IR::Expression::make_atom(IR::Expression::Atom::make_identifier(identifier, type))};
+	auto [identifier, type] = std::move(data.value());
+	return {span, IR::Expression::make_atom(IR::Expression::Atom::make_identifier(identifier, std::move(type)))};
 }
 
 Spanned<IR::Expression> Resolver::lower(
@@ -404,7 +402,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 ) {
 	auto data = lower(declare.name);
 	if (!data.has_value()) return {};
-	auto [name, type] = data.value();
+	auto [name, type] = std::move(data.value());
 
 	auto value = declare.value.transform([&basic_blocks, file_id, this](auto&& value) {
 		return lower(value, basic_blocks, file_id);
@@ -423,12 +421,12 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 					   IR::Expression::Atom::make_literal(
 						   IR::Expression::Atom::Literal::Kind::Number,
 						   "0",
-						   type
+						   type.clone()
 					   )
 				   )};
 			break;
 		case IR::Type::Atom::Kind::Bool:
-			value = {span, IR::Expression::make_atom(IR::Expression::Atom::make_bool(false, type))};
+			value = {span, IR::Expression::make_atom(IR::Expression::Atom::make_bool(false, type.clone()))};
 		case IR::Type::Atom::Kind::Void:  break;
 		case IR::Type::Atom::Kind::Error: break;
 		case IR::Type::Atom::Kind::Char:
@@ -444,7 +442,9 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 
 	return Spanned<IR::Statement> {
 		span,
-		IR::Statement::make_declare(IR::Statement::Declare {name, type, value, declare.mutable_})
+		IR::Statement::make_declare(
+			IR::Statement::Declare {name, std::move(type), std::move(value), declare.mutable_}
+		)
 	};
 }
 
@@ -483,7 +483,10 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	}
 	auto value = lower(set.rhs, basic_blocks, file_id);
 
-	return Spanned<IR::Statement> {span, IR::Statement::make_set(IR::Statement::Set {lhs_identifier, value})};
+	return Spanned<IR::Statement> {
+		span,
+		IR::Statement::make_set(IR::Statement::Set {lhs_identifier, std::move(value)})
+	};
 }
 
 std::optional<Spanned<IR::Statement>> Resolver::lower(
@@ -537,7 +540,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 			})
 		};
 		// we first compute it and then set it just in case a new basic block got created in the process
-		basic_blocks.at(basic_blocks.size() - 1).jump = return_;
+		basic_blocks.at(basic_blocks.size() - 1).jump = std::move(return_);
 		return {};
 	} else if (statement.value.kind() == AST::Statement::Kind::Goto) {
 		// goto statements are literally just jumps
@@ -551,16 +554,19 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 		// if we have a false branch, our job is done
 		if (branch.false_.has_value()) {
 			basic_blocks.at(basic_blocks.size() - 1).jump = IR::BasicBlock::Branch {
-				condition,
-				branch.true_.value.destination_id.value(),
+				std::move(condition),
+				std::move(branch.true_.value.destination_id.value()),
 				branch.false_.value().value.destination_id.value()
 			};
 			return {};
 		}
 		// if we don't, we have to manually create one
-		AST::Statement::Label::ID new_id = function.label_counter++;
-		basic_blocks.at(basic_blocks.size() - 1).jump
-			= IR::BasicBlock::Branch {condition, branch.true_.value.destination_id.value(), new_id};
+		AST::Statement::Label::ID new_id              = function.label_counter++;
+		basic_blocks.at(basic_blocks.size() - 1).jump = IR::BasicBlock::Branch {
+			std::move(condition),
+			std::move(branch.true_.value.destination_id.value()),
+			new_id
+		};
 		basic_blocks.push_back(IR::BasicBlock {new_id, {}, std::monostate {}});
 		return {};
 	}
@@ -588,7 +594,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 		return {};
 	}
 
-	return Spanned<IR::Statement> {expression.span, {expression.value.get_function_call()}};
+	return Spanned<IR::Statement> {expression.span, {std::move(expression.value.get_function_call())}};
 }
 
 void Resolver::lower(
@@ -600,7 +606,7 @@ void Resolver::lower(
 	for (Spanned<AST::Statement> const& statement : statements) {
 		std::optional<Spanned<IR::Statement>> ir_statement = lower(statement, function, basic_blocks, file_id);
 		if (ir_statement.has_value())
-			basic_blocks.at(basic_blocks.size() - 1).statements.push_back(ir_statement.value());
+			basic_blocks.at(basic_blocks.size() - 1).statements.push_back(std::move(ir_statement.value()));
 	}
 }
 
@@ -671,8 +677,8 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 	return IR::Function {
 		{function.name.span, function.name.value.id.value()[0]},
 		std::move(arguments),
-		return_type,
-		basic_blocks,
+		std::move(return_type),
+		std::move(basic_blocks),
 		false
 	};
 }
@@ -689,7 +695,7 @@ IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id
 			for (AST::Tag const& tag : std::get<std::vector<AST::Tag>>(item.value)) {
 				if (tag.identifier == "extern") lowered_function.extern_ = true;
 			}
-			get_single_symbol(function.name.value).item = lowered_function;
+			get_single_symbol(function.name.value).item = std::move(lowered_function);
 			module.items.push_back(function.name.value.id.value()[0]);
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			AST::Module& submodule                       = std::get<AST::Module>(value);

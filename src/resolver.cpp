@@ -34,10 +34,10 @@ std::ostream& Resolver::print(std::ostream& os, IR::Module const& module) const 
 	return os << "}";
 }
 
-std::vector<IR::Symbol> Resolver::export_symbols() const {
+std::vector<IR::Symbol> Resolver::export_symbols() {
 	std::vector<IR::Symbol> symbols {};
 	symbols.reserve(symbol_pool_.size());
-	for (Symbol const& symbol : symbol_pool_)
+	for (Symbol& symbol : symbol_pool_)
 		symbols.push_back(
 			IR::Symbol {
 				symbol.id,
@@ -47,7 +47,7 @@ std::vector<IR::Symbol> Resolver::export_symbols() const {
 				std::holds_alternative<IR::Module>(symbol.item)
 					? decltype(IR::Symbol::item) {std::get<IR::Module>(symbol.item)}
 				: std::holds_alternative<IR::Function>(symbol.item)
-					? decltype(IR::Symbol::item) {std::get<IR::Function>(symbol.item)}
+					? decltype(IR::Symbol::item) {std::move(std::get<IR::Function>(symbol.item))}
 				: std::holds_alternative<IR::BuiltInFunction>(symbol.item)
 					? decltype(IR::Symbol::item) {std::get<IR::BuiltInFunction>(symbol.item)}
 					: std::monostate {},

@@ -4,6 +4,21 @@
 
 namespace IR {
 
+Type Type::clone() const {
+	if (kind() == Type::Kind::Atom) {
+		Type::Atom atom = get_atom();
+		return Type::make_atom(std::move(atom));
+	}
+
+	Type::Pointer const& pointer = get_pointer();
+	return Type::make_pointer(
+		Type::Pointer {
+			std::make_unique<Spanned<Type>>(Spanned {pointer.type->span, pointer.type->value.clone()}),
+			pointer.mutable_
+		}
+	);
+}
+
 std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	switch (atom.kind()) {
 	case Type::Atom::Kind::Integer: break;
@@ -27,9 +42,14 @@ std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	[[assume(false)]];
 }
 
+std::ostream& operator<<(std::ostream& os, Type::Pointer const& pointer) {
+	return os << "(*" << (pointer.mutable_ ? "mut" : "const") << ' ' << pointer.type->value << ")";
+}
+
 std::ostream& operator<<(std::ostream& os, Type const& type) {
 	switch (type.kind()) {
-	case Type::Kind::Atom: return os << type.get_atom();
+	case Type::Kind::Atom:    return os << type.get_atom();
+	case Type::Kind::Pointer: return os << type.get_pointer();
 	}
 	[[assume(false)]];
 }

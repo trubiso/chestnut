@@ -30,7 +30,7 @@ public:
 	/// Resolves all names and types and lowers to IR.
 	std::vector<IR::Module> resolve();
 	/// Exports all symbols as IR symbols.
-	std::vector<IR::Symbol> export_symbols() const;
+	std::vector<IR::Symbol> export_symbols();
 	/// Prints a dump of all symbols and their corresponding types.
 	void dump() const;
 	/// Prints an IR module using the symbol table.

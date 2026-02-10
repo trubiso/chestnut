@@ -13,7 +13,7 @@ public:
 		: context_()
 		, program_("program", context_)
 		, builder_(context_)
-		, symbols_(symbols) {}
+		, symbols_(std::move(symbols)) {}
 
 	enum class Optimization { O0, O1, O2, O3 };
 

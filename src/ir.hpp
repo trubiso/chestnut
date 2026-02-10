@@ -2,6 +2,7 @@
 #include "ast/identifier.hpp"
 #include "diagnostic.hpp"
 
+#include <memory>
 #include <variant>
 #include <vector>
 
@@ -114,9 +115,14 @@ struct Type {
 		inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
 	};
 
-	enum class Kind { Atom };
+	struct Pointer {
+		std::unique_ptr<Spanned<Type>> type;
+		bool                           mutable_;
+	};
 
-	typedef std::variant<Atom> value_t;
+	enum class Kind { Atom, Pointer };
+
+	typedef std::variant<Atom, Pointer> value_t;
 
 	value_t value;
 
@@ -126,10 +132,19 @@ struct Type {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Atom>, atom});
 	}
 
+	inline static Type make_pointer(Pointer&& pointer) {
+		return Type(value_t {std::in_place_index<(size_t) Kind::Pointer>, std::move(pointer)});
+	}
+
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
+
+	inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
+
+	Type clone() const;
 };
 
 std::ostream& operator<<(std::ostream&, Type::Atom const&);
+std::ostream& operator<<(std::ostream&, Type::Pointer const&);
 std::ostream& operator<<(std::ostream&, Type const&);
 
 // TODO: deal with the partial ordering of floats
@@ -196,7 +211,10 @@ struct Expression {
 		inline constexpr Kind kind() const { return (Kind) value.index(); }
 
 		inline static Atom make_identifier(Identifier identifier, IR::Type type) {
-			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier}, type);
+			return Atom(
+				value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier},
+				std::move(type)
+			);
 		}
 
 		inline static Atom make_literal(Literal::Kind kind, std::string literal, IR::Type type) {
@@ -205,12 +223,12 @@ struct Expression {
 					std::in_place_index<(size_t) Kind::Literal>,
 					Literal {kind, literal}
                         },
-				type
+				std::move(type)
 			);
 		}
 
 		// TODO: the type should always be bool, idk if it's even worth having it as an arg
-		inline static Atom make_bool(bool value, IR::Type type) { return Atom {value, type}; }
+		inline static Atom make_bool(bool value, IR::Type type) { return Atom {value, std::move(type)}; }
 
 		inline static Atom make_error() {
 			return Atom {std::monostate {}, Type::make_atom(Type::Atom::make_error())};
