@@ -53,6 +53,11 @@ private:
 			std::vector<ID> ids;
 		};
 
+		struct Pointer {
+			ID   pointee;
+			bool mutable_;
+		};
+
 		struct KnownInteger {
 			/// This may not be of width type Any!
 			AST::Type::Atom::Integer integer;
@@ -77,10 +82,12 @@ private:
 			Bottom,
 			/// Represents a module. For now, it does not hold any extra information.
 			Module,
-			/// Represents a function. For now, it does not hold any extra information.
+			/// Represents a function.
 			Function,
 			/// The exact same as any of the specified candidates.
 			SameAs,
+			/// A pointer type.
+			Pointer,
 			/// Known to be the built-in type 'void'.
 			KnownVoid,
 			/// Known to be the built-in type 'char'.
@@ -103,6 +110,7 @@ private:
 			std::monostate,  // Module
 			Function,        // Function
 			SameAs,          // SameAs
+			Pointer,         // Pointer
 			std::monostate,  // KnownVoid
 			std::monostate,  // KnownChar
 			std::monostate,  // KnownBool
@@ -139,6 +147,10 @@ private:
 
 		inline static TypeInfo make_same_as(std::vector<ID>&& ids) {
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::SameAs>, SameAs {std::move(ids)}});
+		}
+		
+		inline static TypeInfo make_pointer(Pointer&& pointer) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Pointer>, std::move(pointer)});
 		}
 
 		inline static TypeInfo make_known_void() {
@@ -180,6 +192,10 @@ private:
 		inline Function& get_function() { return std::get<(size_t) Kind::Function>(value); }
 
 		inline SameAs const& get_same_as() const { return std::get<(size_t) Kind::SameAs>(value); }
+		
+		inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
+		
+		inline Pointer& get_pointer() { return std::get<(size_t) Kind::Pointer>(value); }
 
 		inline KnownInteger const& get_known_integer() const {
 			return std::get<(size_t) Kind::KnownInteger>(value);
@@ -194,12 +210,15 @@ private:
 		inline PartialInteger& get_partial_integer() { return std::get<(size_t) Kind::PartialInteger>(value); }
 
 		static TypeInfo from_type(AST::Type::Atom const&);
-		static TypeInfo from_type(AST::Type const&);
 
 		/// Returns whether this type pertains to something which could theoretically be callable.
 		bool is_callable(std::vector<TypeInfo> const&) const;
+		/// Returns whether this type pertains to something which could theoretically be dereferenceable.
+		bool is_pointer(std::vector<TypeInfo> const&) const;
 		/// Returns all callable subitems within this type.
 		std::vector<ID> get_callable_subitems(ID self_id, std::vector<TypeInfo> const&) const;
+		/// Returns the pointee for this pointer type (assumes is_pointer()).
+		ID get_pointee(ID self_id, std::vector<TypeInfo> const&) const;
 	};
 
 	struct Symbol {
@@ -266,6 +285,10 @@ private:
 	void identify_built_in_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
 	/// Identifies a built-in unary operator which returns the same type as it takes in.
 	void identify_built_in_unary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	/// Identifies a built-in deref operator which takes a pointer to the provided type and returns the provided type.
+	void identify_built_in_unary_deref_operator(IR::BuiltInFunction, TypeInfo&&);
+	/// Identifies a built-in address operator which takes the provided type and returns a pointer to the provided type.
+	void identify_built_in_unary_address_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
 	/// Identifies a built-in binary operator which returns the same type as it takes in.
 	void identify_built_in_binary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
 	/// Identifies a built-in binary comparison operator (returning a boolean value).
@@ -300,6 +323,7 @@ private:
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr_if(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::UnaryOperation&, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::AddressOperation&, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::BinaryOperation&, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::FunctionCall&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
@@ -359,6 +383,7 @@ private:
 	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
 	void resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
 	void resolve(AST::Expression::UnaryOperation&, Scope const&, FileContext::ID);
+	void resolve(AST::Expression::AddressOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::BinaryOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::FunctionCall&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression&, Span, Scope const&, FileContext::ID);
@@ -383,6 +408,9 @@ private:
 	std::vector<std::optional<AST::SymbolID>> type_symbol_mapping_;
 	/// Holds the type ID one above the last valid type ID.
 	TypeInfo::ID type_counter_ = 0;
+
+	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID);
+	TypeInfo from_type(AST::Type const&, FileContext::ID);
 
 	/// Returns the span for a given type ID.
 	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }
@@ -440,6 +468,14 @@ private:
 		TypeInfo::ID other_origin,
 		FileContext::ID
 	);
+	/// Unifies a pointer and another type.
+	void unify_pointers(
+		TypeInfo::ID pointer,
+		TypeInfo::ID other,
+		TypeInfo::ID pointer_origin,
+		TypeInfo::ID other_origin,
+		FileContext::ID
+	);
 	/// Equates two types and adds a diagnostic if it fails, specifying the original type IDs for diagnostics.
 	void unify(TypeInfo::ID a, TypeInfo::ID b, TypeInfo::ID a_origin, TypeInfo::ID b_origin, FileContext::ID);
 	/// Equates two types and adds a diagnostic if it fails.
@@ -452,6 +488,8 @@ private:
 	std::optional<bool> can_unify_basic_known(TypeInfo::Kind, TypeInfo const&, TypeInfo const&) const;
 	/// Returns whether a function and another type can be unified.
 	bool can_unify_functions(TypeInfo const& function, TypeInfo const&) const;
+	/// Returns whether a pointer and another type can be unified.
+	bool can_unify_pointers(TypeInfo const& pointer, TypeInfo const&) const;
 	/// Returns whether two types can be unified.
 	bool can_unify(TypeInfo::ID, TypeInfo::ID) const;
 	bool can_unify(TypeInfo const&, TypeInfo::ID) const;

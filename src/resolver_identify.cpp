@@ -42,7 +42,7 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 	for (auto& argument : function.arguments) {
 		identify(argument.name.value);
 		TypeInfo::ID type_id = register_type(
-			TypeInfo::from_type(argument.type.value),
+			from_type(argument.type.value, file_id),
 			argument.type.span,
 			file_id,
 			argument.name.value.id.value()[0]
@@ -64,7 +64,7 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 	}
 
 	TypeInfo::ID return_
-		= register_type(TypeInfo::from_type(function.return_type.value), function.return_type.span, file_id);
+		= register_type(from_type(function.return_type.value, file_id), function.return_type.span, file_id);
 
 	identify(function.name.value);
 	symbol_pool_.push_back(

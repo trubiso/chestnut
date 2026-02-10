@@ -35,7 +35,6 @@ void Resolver::add_unknown_symbol_diagnostic(
 	std::string       title = std::format("unknown symbol '{}'", symbol);
 	std::stringstream subtitle_stream {};
 	subtitle_stream << "could not find any symbol with that name in the " << scope_type << " scope";
-	std::unordered_set<std::string> symbol_set {};
 
 	std::vector<std::string_view> closest_symbols
 		= closest(symbol, possible_symbols, CLOSEST_THRESHOLD, CLOSEST_MAX);
@@ -268,6 +267,14 @@ void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope c
 }
 
 void Resolver::resolve(
+	AST::Expression::AddressOperation& address_operation,
+	Scope const&                       scope,
+	FileContext::ID                    file_id
+) {
+	resolve(*address_operation.operand, scope, file_id);
+}
+
+void Resolver::resolve(
 	AST::Expression::BinaryOperation& binary_operation,
 	Scope const&                      scope,
 	FileContext::ID                   file_id
@@ -285,7 +292,10 @@ void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const
 
 void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scope, FileContext::ID file_id) {
 	switch (expression.kind()) {
-	case AST::Expression::Kind::UnaryOperation:  resolve(expression.get_unary_operation(), scope, file_id); return;
+	case AST::Expression::Kind::UnaryOperation: resolve(expression.get_unary_operation(), scope, file_id); return;
+	case AST::Expression::Kind::AddressOperation:
+		resolve(expression.get_address_operation(), scope, file_id);
+		return;
 	case AST::Expression::Kind::BinaryOperation: resolve(expression.get_binary_operation(), scope, file_id); return;
 	case AST::Expression::Kind::FunctionCall:    resolve(expression.get_function_call(), scope, file_id); return;
 	case AST::Expression::Kind::Atom:            break;
@@ -321,7 +331,7 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileConte
 	                declare.name.value.name(),
 	                {},
 	                register_type(
-				declare.type.has_value() ? TypeInfo::from_type(declare.type.value().value)
+				declare.type.has_value() ? from_type(declare.type.value().value, file_id)
 							 : TypeInfo::make_unknown(),
 				declare.type.has_value() ? declare.type.value().span : declare.name.span,
 				file_id,

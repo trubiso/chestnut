@@ -12,6 +12,14 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 }
 
 std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
+	AST::Expression::AddressOperation& address_operation,
+	AST::Statement::Label::ID&         label_counter,
+	FileContext::ID                    file_id
+) {
+	return desugar_control_flow_expr(*address_operation.operand, label_counter, file_id);
+}
+
+std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	AST::Expression::BinaryOperation& binary_operation,
 	AST::Statement::Label::ID&        label_counter,
 	FileContext::ID                   file_id
@@ -235,6 +243,8 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	case AST::Expression::Kind::Atom: return {};
 	case AST::Expression::Kind::UnaryOperation:
 		return desugar_control_flow_expr(expression.get_unary_operation(), label_counter, file_id);
+	case AST::Expression::Kind::AddressOperation:
+		return desugar_control_flow_expr(expression.get_address_operation(), label_counter, file_id);
 	case AST::Expression::Kind::BinaryOperation:
 		return desugar_control_flow_expr_binop(expression, span, label_counter, file_id);
 	case AST::Expression::Kind::FunctionCall:
