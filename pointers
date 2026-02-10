@@ -1,0 +1,5 @@
+func main() void {
+	const var: uint8 = 19;
+	const mut_ptr: *mut uint8 = &mut var;
+	const const_ptr: *const uint8 = &const var;
+}

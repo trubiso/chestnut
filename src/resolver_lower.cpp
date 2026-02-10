@@ -607,11 +607,13 @@ void Resolver::lower(
 IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 	std::vector<IR::Function::Argument> arguments {};
 	arguments.reserve(function.arguments.size());
-	for (auto const& [name, type, _, mutable_] : function.arguments) {
+	for (auto& [name, type, _, mutable_] : function.arguments) {
 		// we don't need to push arguments as anonymous or mutable, we only cared during resolution and stuff
-		arguments.push_back(IR::Function::Argument {lower_identifier(name), lower_type(type, file_id)});
+		arguments.push_back(
+			IR::Function::Argument {lower_identifier(name), lower_type(std::move(type), file_id)}
+		);
 	}
-	Spanned<IR::Type> return_type = lower_type(function.return_type, file_id);
+	Spanned<IR::Type> return_type = lower_type(std::move(function.return_type), file_id);
 	// TODO: ensure that we have a return statement at the end, since basic blocks need to always jump
 	std::vector<IR::BasicBlock> basic_blocks {};
 	if (function.body.has_value()) {

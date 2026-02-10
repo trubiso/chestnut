@@ -55,6 +55,10 @@ std::ostream& operator<<(std::ostream& os, Expression::UnaryOperation const& ope
 	return os << '(' << operation.operation << operation.operand->value << ')';
 }
 
+std::ostream& operator<<(std::ostream& os, Expression::AddressOperation const& operation) {
+	return os << "(&" << (operation.mutable_ ? "mut" : "const") << ' ' << operation.operand->value << ')';
+}
+
 std::ostream& operator<<(std::ostream& os, Expression::BinaryOperation const& operation) {
 	return os << '(' << operation.lhs->value << ' ' << operation.operation << ' ' << operation.rhs->value << ')';
 }
@@ -92,11 +96,12 @@ std::ostream& operator<<(std::ostream& os, Expression::If const& if_) {
 
 std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 	switch (expression.kind()) {
-	case Expression::Kind::Atom:            return os << expression.get_atom();
-	case Expression::Kind::UnaryOperation:  return os << expression.get_unary_operation();
-	case Expression::Kind::BinaryOperation: return os << expression.get_binary_operation();
-	case Expression::Kind::FunctionCall:    return os << expression.get_function_call();
-	case Expression::Kind::If:              return os << expression.get_if();
+	case Expression::Kind::Atom:             return os << expression.get_atom();
+	case Expression::Kind::UnaryOperation:   return os << expression.get_unary_operation();
+	case Expression::Kind::AddressOperation: return os << expression.get_address_operation();
+	case Expression::Kind::BinaryOperation:  return os << expression.get_binary_operation();
+	case Expression::Kind::FunctionCall:     return os << expression.get_function_call();
+	case Expression::Kind::If:               return os << expression.get_if();
 	}
 	[[assume(false)]];
 }

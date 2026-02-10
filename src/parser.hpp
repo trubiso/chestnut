@@ -101,8 +101,8 @@ private:
 
 	std::optional<Tag> consume_tag();
 
-	std::optional<Type::Atom> consume_type_atom();
-	std::optional<Type>       consume_type();
+	std::optional<Type> consume_type_atom();
+	std::optional<Type> consume_type();
 
 	/// Generic function for binary operators.
 	std::optional<Expression> consume_generic_binop(
@@ -169,6 +169,7 @@ private:
 	std::optional<Identifier>  expect_unqualified_identifier(std::string_view reason);
 	std::optional<Identifier>  expect_identifier(std::string_view reason);
 
+	std::optional<Type> expect_type_atom(std::string_view reason);
 	std::optional<Type> expect_type(std::string_view reason);
 
 	std::optional<Expression> expect_expression_atom(std::string_view reason);

@@ -1,6 +1,9 @@
 #pragma once
+#include "../span.hpp"
+
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <variant>
 
@@ -116,9 +119,14 @@ struct Type {
 		inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
 	};
 
-	enum class Kind { Atom };
+	struct Pointer {
+		std::unique_ptr<Spanned<Type>> type;
+		bool                           mutable_;
+	};
 
-	typedef std::variant<Atom> value_t;
+	enum class Kind { Atom, Pointer };
+
+	typedef std::variant<Atom, Pointer> value_t;
 
 	value_t value;
 
@@ -128,10 +136,17 @@ struct Type {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Atom>, atom});
 	}
 
+	inline static Type make_pointer(Pointer&& pointer) {
+		return Type(value_t {std::in_place_index<(size_t) Kind::Pointer>, std::move(pointer)});
+	}
+
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
+
+	inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Type::Atom const&);
+std::ostream& operator<<(std::ostream&, Type::Pointer const&);
 std::ostream& operator<<(std::ostream&, Type const&);
 
 }  // namespace AST

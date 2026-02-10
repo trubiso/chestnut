@@ -26,9 +26,14 @@ std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	[[assume(false)]];
 }
 
+std::ostream& operator<<(std::ostream& os, Type::Pointer const& pointer) {
+	return os << "(*" << (pointer.mutable_ ? "mut" : "const") << ' ' << pointer.type->value << ")";
+}
+
 std::ostream& operator<<(std::ostream& os, Type const& type) {
 	switch (type.kind()) {
-	case Type::Kind::Atom: return os << type.get_atom();
+	case Type::Kind::Atom:    return os << type.get_atom();
+	case Type::Kind::Pointer: return os << type.get_pointer();
 	}
 	[[assume(false)]];
 }

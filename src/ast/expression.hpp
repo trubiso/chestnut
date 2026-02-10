@@ -118,6 +118,11 @@ struct Expression {
 		Token::Symbol                        operation;
 	};
 
+	struct AddressOperation {
+		std::unique_ptr<Spanned<Expression>> operand;
+		bool                                 mutable_;
+	};
+
 	struct BinaryOperation {
 		std::unique_ptr<Spanned<Expression>> lhs;
 		std::unique_ptr<Spanned<Expression>> rhs;
@@ -144,9 +149,9 @@ struct Expression {
 		std::unique_ptr<Spanned<Expression>> false_;
 	};
 
-	enum class Kind { Atom, UnaryOperation, BinaryOperation, FunctionCall, If };
+	enum class Kind { Atom, UnaryOperation, AddressOperation, BinaryOperation, FunctionCall, If };
 
-	typedef std::variant<Atom, UnaryOperation, BinaryOperation, FunctionCall, If> value_t;
+	typedef std::variant<Atom, UnaryOperation, AddressOperation, BinaryOperation, FunctionCall, If> value_t;
 
 	value_t value;
 	// TODO: move TypeInfo::ID elsewhere to have it here
@@ -164,6 +169,15 @@ struct Expression {
 			value_t {
 				std::in_place_index<(size_t) Kind::UnaryOperation>,
 				UnaryOperation {std::move(operand), operation}
+                }
+		);
+	}
+
+	inline static Expression make_address_operation(std::unique_ptr<Spanned<Expression>>&& operand, bool mutable_) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::AddressOperation>,
+				AddressOperation {std::move(operand), mutable_}
                 }
 		);
 	}
@@ -215,6 +229,12 @@ struct Expression {
 
 	inline UnaryOperation& get_unary_operation() { return std::get<(size_t) Kind::UnaryOperation>(value); }
 
+	inline AddressOperation const& get_address_operation() const {
+		return std::get<(size_t) Kind::AddressOperation>(value);
+	}
+
+	inline AddressOperation& get_address_operation() { return std::get<(size_t) Kind::AddressOperation>(value); }
+
 	inline BinaryOperation const& get_binary_operation() const {
 		return std::get<(size_t) Kind::BinaryOperation>(value);
 	}
@@ -237,6 +257,7 @@ std::ostream& operator<<(std::ostream&, Expression::Atom::StringLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom::CharLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::UnaryOperation const&);
+std::ostream& operator<<(std::ostream&, Expression::AddressOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::BinaryOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
 std::ostream& operator<<(std::ostream&, Expression::If const&);

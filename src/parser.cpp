@@ -12,10 +12,9 @@
 namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
-#define SPANNED_REASON(fn, reason)                                                               \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
-		return (fn) (reason);                                                            \
-	})
+#define SPANNED_REASON(fn, reason)                                                                                     \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
+		                                                                      this] { return (fn) (reason); })
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -158,7 +157,7 @@ std::optional<Tag> Parser::consume_tag() {
 	return Tag {name.value()};
 }
 
-std::optional<Type::Atom> Parser::consume_type_atom() {
+std::optional<Type> Parser::consume_type_atom() {
 	// in the future, this will require atoms and operators just like expression.
 	// for now, we're only doing built-in types, so it's much easier for us!
 	// that's also why we're so harsh on retroceding instead of expecting.
@@ -176,18 +175,18 @@ std::optional<Type::Atom> Parser::consume_type_atom() {
 	size_t                             base_length = 0;
 
 	// "easy" types
-	if (name == "void") return Type::Atom::make_void();
-	if (name == "char") return Type::Atom::make_char();
-	if (name == "bool") return Type::Atom::make_bool();
-	if (name == "_") return Type::Atom::make_inferred();
+	if (name == "void") return Type::make_atom(Type::Atom::make_void());
+	if (name == "char") return Type::make_atom(Type::Atom::make_char());
+	if (name == "bool") return Type::make_atom(Type::Atom::make_bool());
+	if (name == "_") return Type::make_atom(Type::Atom::make_inferred());
 
 	// float types (can be bruteforced)
 	if (name.starts_with("float")) {
 		// TODO: support arbitrary sized floats (should we?)
-		if (name == "float16") return Type::Atom::make_float(Type::Atom::Float::Width::F16);
-		if (name == "float32") return Type::Atom::make_float(Type::Atom::Float::Width::F32);
-		if (name == "float64") return Type::Atom::make_float(Type::Atom::Float::Width::F64);
-		if (name == "float128") return Type::Atom::make_float(Type::Atom::Float::Width::F128);
+		if (name == "float16") return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F16));
+		if (name == "float32") return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F32));
+		if (name == "float64") return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F64));
+		if (name == "float128") return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F128));
 		goto none_match;
 	}
 
@@ -197,17 +196,18 @@ std::optional<Type::Atom> Parser::consume_type_atom() {
 	if (!starts_with_u && !starts_with_i) goto none_match;
 	// get rid of the easy cases
 	base_length = starts_with_u ? 4 : 3;
-	if (name.length() == base_length) return Type::Atom::make_integer(Type::Atom::Integer::any(starts_with_i));
+	if (name.length() == base_length)
+		return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::any(starts_with_i)));
 	if (name.length() == base_length + 3 && name.ends_with("ptr"))
-		return Type::Atom::make_integer(Type::Atom::Integer::ptr(starts_with_i));
+		return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::ptr(starts_with_i)));
 	if (name.length() == base_length + 4 && name.ends_with("size"))
-		return Type::Atom::make_integer(Type::Atom::Integer::size(starts_with_i));
+		return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::size(starts_with_i)));
 	// we know the name is at least base_length long, so the following is valid
 	res = std::from_chars(name.data() + base_length, name.data() + name.size(), width);
 	if (res.ec != std::errc() || res.ptr != name.data() + name.size()) goto none_match;
 	int_ = Type::Atom::Integer::with_width(width, starts_with_i);
 	if (!int_.has_value()) goto none_match;
-	return Type::Atom::make_integer(std::move(int_.value()));
+	return Type::make_atom(Type::Atom::make_integer(std::move(int_.value())));
 
 none_match:
 	// we need to un-consume the identifier
@@ -216,7 +216,37 @@ none_match:
 }
 
 std::optional<Type> Parser::consume_type() {
-	return consume_type_atom().transform([](Type::Atom&& atom) { return Type::make_atom(std::move(atom)); });
+	// for now, we only have pointers, so let's deal with those
+	std::vector<Spanned<bool>> operations {};
+	while (peek_symbol(Token::Symbol::Star)) {
+		Span span = tokens_.peek().value().span();
+		tokens_.advance();
+		bool mutable_ = consume_keyword(Keyword::Mut);
+		if (!mutable_)
+			expect_keyword("expected mutability qualifier after pointer symbol in type", Keyword::Const);
+		operations.push_back({span, mutable_});
+	}
+
+	// if there are no operations, we just need to parse a consume instance
+	if (operations.empty()) return consume_type_atom();
+
+	// we must iterate over them in reverse order.
+	std::optional<Spanned<Type>> should_operand
+		= SPANNED_REASON(expect_type_atom, "expected type after pointer symbol");
+	if (!should_operand.has_value()) return {};
+	Spanned<Type> operand = std::move(should_operand.value());
+	for (size_t i = operations.size(); i > 0; --i) {
+		Spanned<bool> operation = std::move(operations.at(i - 1));
+
+		operand = Spanned<Type> {
+			Span(operation.span.start, operand.span.end),
+			Type::make_pointer(
+				Type::Pointer {std::make_unique<Spanned<Type>>(std::move(operand)), operation.value}
+			)
+		};
+	}
+
+	return std::move(operand.value);
 }
 
 std::optional<Expression> Parser::consume_expression_atom() {
@@ -419,12 +449,21 @@ std::optional<Expression> Parser::consume_generic_unop(
 	std::optional<Expression> (Parser::*expect)(std::string_view),
 	std::vector<Token::Symbol>&& operators
 ) {
-	std::vector<Spanned<Token::Symbol>> operations {};
-	std::optional<Token::Symbol>        operator_;
+	std::vector<std::variant<Spanned<Token::Symbol>, Spanned<bool>>> operations {};
+	std::optional<Token::Symbol>                                     operator_;
 	while ((operator_ = peek_symbols(operators)).has_value()) {
 		Span span = tokens_.peek().value().span();
-		operations.push_back({span, operator_.value()});
 		tokens_.advance();
+		if (operator_.value() == Token::Symbol::Amp) {
+			if (!tokens_.has_value()) return {};
+			span.end      = tokens_.peek().value().span().end;
+			bool mutable_ = consume_keyword(Keyword::Mut);
+			if (!mutable_)
+				expect_keyword("expected mutability qualifier after address operator", Keyword::Const);
+			operations.push_back(Spanned {span, mutable_});
+			continue;
+		}
+		operations.push_back(Spanned {span, operator_.value()});
 	}
 
 	// if there are no operations, we just need to parse a consume instance
@@ -436,7 +475,19 @@ std::optional<Expression> Parser::consume_generic_unop(
 	if (!should_operand.has_value()) return {};
 	Spanned<Expression> operand = std::move(should_operand.value());
 	for (size_t i = operations.size(); i > 0; --i) {
-		Spanned<Token::Symbol> const& operation = operations.at(i - 1);
+		if (std::holds_alternative<Spanned<bool>>(operations.at(i - 1))) {
+			Spanned<bool> operation = std::move(std::get<Spanned<bool>>(operations.at(i - 1)));
+			operand                 = Spanned<Expression> {
+                                Span(operation.span.start, operand.span.end),
+                                Expression::make_address_operation(
+                                        std::make_unique<Spanned<Expression>>(std::move(operand)),
+                                        operation.value
+                                )
+                        };
+			continue;
+		}
+
+		Spanned<Token::Symbol> operation = std::move(std::get<Spanned<Token::Symbol>>(operations.at(i - 1)));
 
 		operand = Spanned<Expression> {
 			Span(operation.span.start, operand.span.end),
@@ -451,11 +502,11 @@ std::optional<Expression> Parser::consume_generic_unop(
 }
 
 std::optional<Expression> Parser::consume_expression_unary_l1() {
-	// then, unary - and !
+	// then, unary -, !, & and *
 	return consume_generic_unop(
 		&Parser::consume_expression_function_call,
 		&Parser::expect_expression_function_call,
-		{Token::Symbol::Minus, Token::Symbol::Bang}
+		{Token::Symbol::Minus, Token::Symbol::Bang, Token::Symbol::Amp, Token::Symbol::Star}
 	);
 }
 
@@ -821,6 +872,10 @@ std::optional<Identifier> Parser::expect_identifier(std::string_view reason) {
 	EXPECT(consume_identifier, "(qualified) identifier");
 }
 
+std::optional<Type> Parser::expect_type_atom(std::string_view reason) {
+	EXPECT(consume_type_atom, "type");
+}
+
 std::optional<Type> Parser::expect_type(std::string_view reason) {
 	EXPECT(consume_type, "type");
 }
@@ -988,7 +1043,12 @@ std::optional<Function> Parser::parse_function() {
 			);
 		} else {
 			// we only push the argument if it's not duplicate to avoid confusing later stages
-			arguments.emplace_back(argument_name.value(), argument_type.value(), anonymous, mutable_);
+			arguments.emplace_back(
+				argument_name.value(),
+				std::move(argument_type.value()),
+				anonymous,
+				mutable_
+			);
 		}
 		if (!consume_single_comma_or_more()) break;
 	}
@@ -1023,7 +1083,7 @@ std::optional<Function> Parser::parse_function() {
 		if (!body.has_value()) expect_semicolon("expected semicolon after function declaration without body");
 	}
 
-	return Function {name.value(), arguments, return_type, std::move(body)};
+	return Function {name.value(), std::move(arguments), std::move(return_type), std::move(body)};
 }
 
 std::optional<Alias> Parser::parse_alias() {

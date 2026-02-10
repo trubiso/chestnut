@@ -98,9 +98,28 @@ func fibonacci(count: uint64) {
 	putchar('\n');
 }
 
+func trigger_side_effect(anon x: bool, anon id: uint64) bool {
+	putchar('S');
+	putchar('i');
+	putchar('d');
+	putchar('e');
+	putchar(' ');
+	putchar('e');
+	putchar('f');
+	putchar('f');
+	putchar('e');
+	putchar('c');
+	putchar('t');
+	putchar(' ');
+	print_integer(id);
+	putchar('!');
+	putchar('\n');
+	return x;
+}
+
 func test_and(anon x: int64) {
-	if (!(0 <= x && x < 10)) putchar('n');
-	else if (x < 4 || x > 6) putchar('d');
+	if (!(trigger_side_effect(0 <= x, 0) && trigger_side_effect(if (x < 10) trigger_side_effect(x < 10, 8) else trigger_side_effect(x < 10, 9), 1))) putchar('n');
+	else if (trigger_side_effect(x < 4, 2) || trigger_side_effect(x > 6, 3)) putchar('d');
 	else putchar('a');
 }
 
@@ -135,7 +154,9 @@ def sum_numbers ::my_module::my_submodule::sum_numbers;
 	fibonacci(100);
 	test_and(5);
 	test_and(11);
-	test_and(8);
+	const one: int64 = 1;
+	test_and(-one);
+	test_and(3);
 	putchar('\n');
 	return 0;
 }
