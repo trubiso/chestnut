@@ -46,11 +46,13 @@ lex_files(std::vector<std::string> const& sources, std::vector<std::string> cons
 	return outputs;
 }
 
-std::vector<Resolver::ParsedFile> parse_files(std::vector<std::tuple<Stream<Token>, FileContext>>&& lexed_files) {
+std::vector<Resolver::ParsedFile>
+parse_files(std::vector<std::tuple<Stream<Token>, FileContext>>&& lexed_files, bool print_ast) {
 	std::vector<Resolver::ParsedFile> parsed_files {};
 	for (auto&& [tokens, context] : std::move(lexed_files)) {
 		AST::Parser parser {context, std::move(tokens)};
 		AST::Module parsed = parser.parse_all(context.name);
+		if (print_ast) { std::cout << "=== " << context.name << " ===\n" << parsed << std::endl; }
 		for (auto const& diagnostic : parser.diagnostics()) {
 			diagnostic.print();
 
@@ -121,6 +123,7 @@ static std::string compiler_name = "chc";
 
 struct Input {
 	bool                        run_compiler_tests;
+	bool                        print_ast;
 	CodeGenerator::Optimization optimization = CodeGenerator::Optimization::O0;
 	std::vector<std::string>    inputs;
 	std::string                 output;
@@ -135,7 +138,7 @@ Input get_input(int argc, char** argv) {
 			"output,o",
 			boost::program_options::value<std::string>(&input.output)->default_value("output.o"),
 			"output file"
-		);
+		)("print-ast", "print AST and quit");
 
 		boost::program_options::options_description hidden("");
 		hidden.add_options()("inputs", boost::program_options::value<std::vector<std::string>>());
@@ -167,6 +170,7 @@ Input get_input(int argc, char** argv) {
 		}
 
 		input.run_compiler_tests = variables_map.count("run-compiler-tests");
+		input.print_ast          = variables_map.count("print-ast");
 		if (input.run_compiler_tests) return input;
 
 		if (!variables_map.count("inputs")) {
@@ -204,7 +208,9 @@ int main(int argc, char** argv) {
 
 	auto lexed_files = lex_files(sources, input.inputs);
 
-	std::vector<Resolver::ParsedFile> parsed_files = parse_files(std::move(lexed_files));
+	std::vector<Resolver::ParsedFile> parsed_files = parse_files(std::move(lexed_files), input.print_ast);
+
+	if (input.print_ast) std::exit(0);
 
 	Resolver                resolver {std::move(parsed_files)};
 	std::vector<IR::Module> modules = resolver.resolve();
