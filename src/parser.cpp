@@ -12,9 +12,10 @@
 namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
-#define SPANNED_REASON(fn, reason)                                                                                     \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
-		                                                                      this] { return (fn) (reason); })
+#define SPANNED_REASON(fn, reason)                                                               \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
+		return (fn) (reason);                                                            \
+	})
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -265,21 +266,27 @@ std::optional<Expression> Parser::consume_expression_atom() {
 	}
 
 	// since it's not an identifier, it has to be a literal
+	if (!tokens_.has_value()) return {};
+	// we only want to accept suffix literals if they're right beside the current token
+	Span                       current_span = tokens_.peek().value().span();
 	std::optional<std::string> sv;
 	std::optional<Identifier>  suffix;  // we always try to consume an extra suffix
 
 	if (sv = consume_number_literal(), sv.has_value()) {
-		suffix = consume_unqualified_identifier();
+		if (tokens_.peek().has_value() && tokens_.peek().value().span().start == current_span.end)
+			suffix = consume_unqualified_identifier();
 		return Expression::make_atom(Expression::Atom::make_number_literal(sv.value(), suffix));
 	}
 
 	if (sv = consume_string_literal(), sv.has_value()) {
-		suffix = consume_unqualified_identifier();
+		if (tokens_.peek().has_value() && tokens_.peek().value().span().start == current_span.end)
+			suffix = consume_unqualified_identifier();
 		return Expression::make_atom(Expression::Atom::make_string_literal(sv.value(), suffix));
 	}
 
 	if (sv = consume_char_literal(), sv.has_value()) {
-		suffix = consume_unqualified_identifier();
+		if (tokens_.peek().has_value() && tokens_.peek().value().span().start == current_span.end)
+			suffix = consume_unqualified_identifier();
 		return Expression::make_atom(Expression::Atom::make_char_literal(sv.value(), suffix));
 	}
 

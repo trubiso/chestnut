@@ -157,6 +157,7 @@ def sum_numbers ::my_module::my_submodule::sum_numbers;
 	const one: int64 = 1;
 	test_and(-one);
 	test_and(3);
+	print_integer(if (one > 2) 5 else 6);
 	putchar('\n');
 	return 0;
 }
