@@ -252,11 +252,12 @@ struct Expression {
 
 	struct Deref {
 		Spanned<Identifier> address;
+		Type                type;
 	};
 
 	struct Ref {
-		Spanned<Atom> value;
-		bool          mutable_;
+		Spanned<Identifier> value;
+		bool                mutable_;
 	};
 
 	// expressions must now be either atoms or function calls
@@ -282,11 +283,16 @@ struct Expression {
 		);
 	}
 
-	inline static Expression make_deref(Spanned<Identifier>&& address) {
-		return Expression(value_t {std::in_place_index<(size_t) Kind::Deref>, Deref {std::move(address)}});
+	inline static Expression make_deref(Spanned<Identifier>&& address, Type&& type) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::Deref>,
+				Deref {std::move(address), std::move(type)}
+                }
+		);
 	}
 
-	inline static Expression make_ref(Spanned<Atom>&& value, bool mutable_) {
+	inline static Expression make_ref(Spanned<Identifier>&& value, bool mutable_) {
 		return Expression(
 			value_t {
 				std::in_place_index<(size_t) Kind::Ref>,

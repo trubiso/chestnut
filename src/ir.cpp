@@ -134,7 +134,7 @@ std::ostream& operator<<(std::ostream& os, Expression::Deref const& deref) {
 }
 
 std::ostream& operator<<(std::ostream& os, Expression::Ref const& ref) {
-	return os << "(&" << (ref.mutable_ ? "mut" : "const") << " (" << ref.value.value << "))";
+	return os << "(&" << (ref.mutable_ ? "mut" : "const") << " (@" << ref.value.value << "))";
 }
 
 std::ostream& operator<<(std::ostream& os, Expression const& expression) {

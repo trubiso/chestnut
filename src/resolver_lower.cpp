@@ -402,15 +402,22 @@ Spanned<IR::Expression> Resolver::lower(
 		assert(operand.value.kind() == IR::Expression::Atom::Kind::Identifier);
 		return Spanned<IR::Expression> {
 			span,
-			IR::Expression::make_deref({operand.span, operand.value.get_identifier()})
+			IR::Expression::make_deref(
+				{operand.span, operand.value.get_identifier()},
+				std::move(operand.value.type)
+			)
 		};
 	}
 
 	if (expression.kind() == AST::Expression::Kind::AddressOperation) {
 		auto operand = extract_expression(*expression.get_address_operation().operand, basic_blocks, file_id);
+		assert(operand.value.kind() == IR::Expression::Atom::Kind::Identifier);
 		return Spanned<IR::Expression> {
 			span,
-			IR::Expression::make_ref(std::move(operand), expression.get_address_operation().mutable_)
+			IR::Expression::make_ref(
+				{operand.span, operand.value.get_identifier()},
+				expression.get_address_operation().mutable_
+			)
 		};
 	}
 	[[assume(false)]];

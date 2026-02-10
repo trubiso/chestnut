@@ -78,11 +78,11 @@ Resolver::TypeInfo::get_callable_subitems(TypeInfo::ID self_id, std::vector<Type
 	return ids;
 }
 
-Resolver::TypeInfo::ID Resolver::TypeInfo::get_pointee(ID self_id, std::vector<TypeInfo> const& pool) const {
+Resolver::TypeInfo::ID Resolver::TypeInfo::get_pointee(std::vector<TypeInfo> const& pool) const {
 	assert(is_pointer(pool));
 	switch (kind()) {
-	case Kind::Pointer: return self_id;
-	case Kind::SameAs:  return pool.at(get_same_as().ids.at(0)).get_pointee(get_same_as().ids.at(0), pool);
+	case Kind::Pointer: return get_pointer().pointee;
+	case Kind::SameAs:  return pool.at(get_same_as().ids.at(0)).get_pointee(pool);
 	default:            [[assume(false)]]; return {};
 	}
 }
@@ -1203,7 +1203,7 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, F
 				return expression.type.value();
 			}
 
-			expression.type = type_pool_.at(argument).get_pointee(argument, type_pool_);
+			expression.type = type_pool_.at(argument).get_pointee(type_pool_);
 		} else {
 			// TODO: get the operator span
 			Span operator_span = span;
