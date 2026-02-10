@@ -8,8 +8,11 @@ bool Expression::Atom::NumberLiteral::is_float() const {
 }
 
 bool Expression::can_be_lhs() const {
-	// TODO: change this once deref, member access exist
+	// TODO: change this once member access exists
 
+	// dereference is a valid lhs
+	if (kind() == Kind::UnaryOperation && get_unary_operation().operation == Token::Symbol::Star) return true;
+	// identifier is a valid lhs
 	if (kind() != Kind::Atom) return false;
 	return get_atom().kind() == Atom::Kind::Identifier;
 }

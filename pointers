@@ -3,5 +3,5 @@ func main() void {
 	const mut_ptr: *mut uint8 = &mut var;
 	const const_ptr: *const uint8 = &const var;
 	const deref_valid = *const_ptr;
-	const deref_invalid = *8;
+	*mut_ptr = 20;
 }
