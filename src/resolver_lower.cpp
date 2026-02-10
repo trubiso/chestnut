@@ -26,6 +26,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 	case TypeInfo::Kind::Module:
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::PartialInteger: break;
 	}
@@ -74,6 +75,16 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
+	} else if (type.kind() == TypeInfo::Kind::Pointer) {
+		return IR::Type::make_pointer(
+			IR::Type::Pointer {
+				std::make_unique<Spanned<IR::Type>>(Spanned {
+					get_type_span(type_id),
+					reconstruct_type(type.get_pointer().pointee, type_origin)
+				}),
+				type.get_pointer().mutable_
+			}
+		);
 	} else if (type.kind() == TypeInfo::Kind::KnownInteger) {
 		auto const& integer = type.get_known_integer().integer;
 		switch (integer.width_type()) {
@@ -380,9 +391,29 @@ Spanned<IR::Expression> Resolver::lower(
 	case AST::Expression::Kind::FunctionCall:
 		return lower(expression.get_function_call(), span, basic_blocks, file_id, allow_functions);
 	case AST::Expression::Kind::UnaryOperation:
+	case AST::Expression::Kind::AddressOperation: break;
 	case AST::Expression::Kind::BinaryOperation:
-	case AST::Expression::Kind::If:              [[assume(false)]];
+	case AST::Expression::Kind::If:               [[assume(false)]];
 	}
+
+	if (expression.kind() == AST::Expression::Kind::UnaryOperation) {
+		assert(expression.get_unary_operation().operation == Token::Symbol::Star);
+		auto operand = extract_expression(*expression.get_unary_operation().operand, basic_blocks, file_id);
+		assert(operand.value.kind() == IR::Expression::Atom::Kind::Identifier);
+		return Spanned<IR::Expression> {
+			span,
+			IR::Expression::make_deref({operand.span, operand.value.get_identifier()})
+		};
+	}
+
+	if (expression.kind() == AST::Expression::Kind::AddressOperation) {
+		auto operand = extract_expression(*expression.get_address_operation().operand, basic_blocks, file_id);
+		return Spanned<IR::Expression> {
+			span,
+			IR::Expression::make_ref(std::move(operand), expression.get_address_operation().mutable_)
+		};
+	}
+	[[assume(false)]];
 }
 
 Spanned<IR::Expression> Resolver::lower(

@@ -129,10 +129,20 @@ std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call)
 	return os << ')';
 }
 
+std::ostream& operator<<(std::ostream& os, Expression::Deref const& deref) {
+	return os << "(deref @" << deref.address.value << ')';
+}
+
+std::ostream& operator<<(std::ostream& os, Expression::Ref const& ref) {
+	return os << "(&" << (ref.mutable_ ? "mut" : "const") << " (" << ref.value.value << "))";
+}
+
 std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 	switch (expression.kind()) {
 	case Expression::Kind::Atom:         return os << expression.get_atom();
 	case Expression::Kind::FunctionCall: return os << expression.get_function_call();
+	case Expression::Kind::Deref:        return os << expression.get_deref();
+	case Expression::Kind::Ref:          return os << expression.get_ref();
 	}
 	[[assume(false)]];
 }

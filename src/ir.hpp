@@ -250,10 +250,19 @@ struct Expression {
 		std::vector<Spanned<Atom>> arguments;
 	};
 
-	// expressions must now be either atoms or function calls
-	enum class Kind { Atom, FunctionCall };
+	struct Deref {
+		Spanned<Identifier> address;
+	};
 
-	typedef std::variant<Atom, FunctionCall> value_t;
+	struct Ref {
+		Spanned<Atom> value;
+		bool          mutable_;
+	};
+
+	// expressions must now be either atoms or function calls
+	enum class Kind { Atom, FunctionCall, Deref, Ref };
+
+	typedef std::variant<Atom, FunctionCall, Deref, Ref> value_t;
 
 	value_t value;
 
@@ -273,6 +282,19 @@ struct Expression {
 		);
 	}
 
+	inline static Expression make_deref(Spanned<Identifier>&& address) {
+		return Expression(value_t {std::in_place_index<(size_t) Kind::Deref>, Deref {std::move(address)}});
+	}
+
+	inline static Expression make_ref(Spanned<Atom>&& value, bool mutable_) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::Ref>,
+				Ref {std::move(value), mutable_}
+                }
+		);
+	}
+
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 
 	inline Atom& get_atom() { return std::get<(size_t) Kind::Atom>(value); }
@@ -280,11 +302,21 @@ struct Expression {
 	inline FunctionCall const& get_function_call() const { return std::get<(size_t) Kind::FunctionCall>(value); }
 
 	inline FunctionCall& get_function_call() { return std::get<(size_t) Kind::FunctionCall>(value); }
+
+	inline Deref const& get_deref() const { return std::get<(size_t) Kind::Deref>(value); }
+
+	inline Deref& get_deref() { return std::get<(size_t) Kind::Deref>(value); }
+
+	inline Ref const& get_ref() const { return std::get<(size_t) Kind::Ref>(value); }
+
+	inline Ref& get_ref() { return std::get<(size_t) Kind::Ref>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Expression::Atom::Literal const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
+std::ostream& operator<<(std::ostream&, Expression::Deref const&);
+std::ostream& operator<<(std::ostream&, Expression::Ref const&);
 std::ostream& operator<<(std::ostream&, Expression const&);
 
 struct Statement;

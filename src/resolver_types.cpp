@@ -1267,13 +1267,16 @@ void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 				<< std::endl;
 			return;
 		}
+		TypeInfo::ID lhs_type = infer(set.lhs.value, set.lhs.span, file_id);
+		unify(lhs_type, rhs_type, file_id);
 	} else if (set.lhs.value.kind() == AST::Expression::Kind::UnaryOperation) {
 		// derefs
 		if (set.lhs.value.get_unary_operation().operation != Token::Symbol::Star) return;
+		TypeInfo::ID lhs_type = infer(set.lhs.value, set.lhs.span, file_id);
+		if (type_pool_.at(lhs_type).kind() != TypeInfo::Kind::Pointer) return;
+		TypeInfo::Pointer const& pointer = type_pool_.at(lhs_type).get_pointer();
+		unify(pointer.pointee, rhs_type, lhs_type, rhs_type, file_id);
 	}
-	// in any case, this is what we want to do
-	TypeInfo::ID lhs_type = infer(set.lhs.value, set.lhs.span, file_id);
-	unify(lhs_type, rhs_type, file_id);
 }
 
 void Resolver::infer(AST::Statement::Return& return_, Span span, AST::SymbolID function, FileContext::ID file_id) {
