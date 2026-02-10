@@ -32,16 +32,20 @@ private:
 	std::string get_name(IR::Identifier) const;
 	std::string get_block_name(IR::BasicBlock::ID) const;
 
+	llvm::Type* generate_type(IR::Type::Atom const&);
 	llvm::Type* generate_type(IR::Type const&);
 
 	llvm::Value* call_built_in(IR::BuiltInFunction, std::vector<Spanned<IR::Expression::Atom>> const& arguments);
 
 	llvm::Value* generate_expression(IR::Expression::Atom const&);
 	llvm::Value* generate_expression(IR::Expression::FunctionCall const&);
+	llvm::Value* generate_expression(IR::Expression::Deref const&);
+	llvm::Value* generate_expression(IR::Expression::Ref const&);
 	llvm::Value* generate_expression(IR::Expression const&);
 
 	void emit_statement(IR::Statement::Declare const&, llvm::BasicBlock*);
 	void emit_statement(IR::Statement::Set const&);
+	void emit_statement(IR::Statement::Write const&);
 	void emit_statement(IR::Statement const&, llvm::BasicBlock*);
 
 	void emit_basic_block(IR::BasicBlock const&, llvm::BasicBlock*);

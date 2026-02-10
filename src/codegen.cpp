@@ -103,12 +103,7 @@ std::string CodeGenerator::get_block_name(IR::BasicBlock::ID id) const {
 	return std::format("_{}b", id);
 }
 
-llvm::Type* CodeGenerator::generate_type(IR::Type const& type) {
-	if (type.kind() != IR::Type::Kind::Atom) {
-		std::cout << "non-atoms cannot yet be lowered" << std::endl;
-		std::exit(0);
-	}
-	IR::Type::Atom const& atom = type.get_atom();
+llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom) {
 	switch (atom.kind()) {
 	case IR::Type::Atom::Kind::Void:  return builder_.getVoidTy();
 	case IR::Type::Atom::Kind::Char:  return builder_.getInt8Ty();
@@ -132,6 +127,13 @@ llvm::Type* CodeGenerator::generate_type(IR::Type const& type) {
 			return program_.getDataLayout().getIndexType(context_, 0);
 		}
 		[[assume(false)]];
+	}
+}
+
+llvm::Type* CodeGenerator::generate_type(IR::Type const& type) {
+	switch (type.kind()) {
+	case IR::Type::Kind::Atom:    return generate_type(type.get_atom());
+	case IR::Type::Kind::Pointer: return builder_.getPtrTy();
 	}
 }
 
@@ -270,6 +272,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 		return builder_.CreateLoad(generate_type(atom.type), variables_[atom.get_identifier()]);
 	case IR::Expression::Atom::Kind::Literal: break;
 	case IR::Expression::Atom::Kind::Bool:    return builder_.getInt1(atom.get_bool());
+	case IR::Expression::Atom::Kind::Error:   [[assume(false)]];
 	}
 
 	// literals vary depending on their type
@@ -379,10 +382,20 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::FunctionCall con
 	return builder_.CreateCall(callee, arguments);
 }
 
+llvm::Value* CodeGenerator::generate_expression(IR::Expression::Deref const& deref) {
+	return builder_.CreateLoad(generate_type(deref.type), variables_[deref.address.value]);
+}
+
+llvm::Value* CodeGenerator::generate_expression(IR::Expression::Ref const& deref) {
+	return variables_[deref.value.value];
+}
+
 llvm::Value* CodeGenerator::generate_expression(IR::Expression const& expression) {
 	switch (expression.kind()) {
 	case IR::Expression::Kind::Atom:         return generate_expression(expression.get_atom());
 	case IR::Expression::Kind::FunctionCall: return generate_expression(expression.get_function_call());
+	case IR::Expression::Kind::Deref:        return generate_expression(expression.get_deref());
+	case IR::Expression::Kind::Ref:          return generate_expression(expression.get_ref());
 	}
 }
 
@@ -400,11 +413,17 @@ void CodeGenerator::emit_statement(IR::Statement::Set const& set) {
 	builder_.CreateStore(value, variables_[set.name.value]);
 }
 
+void CodeGenerator::emit_statement(IR::Statement::Write const& write) {
+	llvm::Value* value = generate_expression(write.value.value);
+	builder_.CreateStore(value, builder_.CreateLoad(builder_.getPtrTy(), variables_[write.address.value]));
+}
+
 void CodeGenerator::emit_statement(IR::Statement const& statement, llvm::BasicBlock* block) {
 	switch (statement.kind()) {
 	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare(), block);
 	case IR::Statement::Kind::Set:     return emit_statement(statement.get_set());
 	case IR::Statement::Kind::Call:    generate_expression(statement.get_call()); return;
+	case IR::Statement::Kind::Write:   return emit_statement(statement.get_write());
 	}
 }
 
