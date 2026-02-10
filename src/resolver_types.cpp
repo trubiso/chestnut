@@ -87,6 +87,15 @@ Resolver::TypeInfo::ID Resolver::TypeInfo::get_pointee(ID self_id, std::vector<T
 	}
 }
 
+bool Resolver::TypeInfo::get_pointer_mutable(std::vector<TypeInfo> const& pool) const {
+	assert(is_pointer(pool));
+	switch (kind()) {
+	case Kind::Pointer: return get_pointer().mutable_;
+	case Kind::SameAs:  return pool.at(get_same_as().ids.at(0)).get_pointer_mutable(pool);
+	default:            [[assume(false)]]; return {};
+	}
+}
+
 void Resolver::debug_print_type(TypeInfo::ID id) const {
 	std::cout << "$" << id << " ";
 	debug_print_type(type_pool_.at(id));

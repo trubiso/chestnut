@@ -161,12 +161,19 @@ std::ostream& operator<<(std::ostream& os, Statement::Set const& set) {
 	return os << ";]";
 }
 
+std::ostream& operator<<(std::ostream& os, Statement::Write const& write) {
+	os << "[write stmt: ";
+	os << "*@" << write.address.value << " = " << write.value.value;
+	return os << ";]";
+}
+
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	switch (statement.kind()) {
 	case Statement::Kind::Declare: return os << statement.get_declare();
 	case Statement::Kind::Set:     return os << statement.get_set();
 	case Statement::Kind::Call:    return os << "[call stmt: " << statement.get_call() << ";]";
+	case Statement::Kind::Write:   return os << statement.get_write();
 	}
 }
 

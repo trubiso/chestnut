@@ -338,10 +338,16 @@ struct Statement {
 		Spanned<Expression> value;
 	};
 
-	// expression statements are now calls and scope statements are resolved now anyways
-	enum class Kind { Declare, Set, Call };
+	// writing to an address
+	struct Write {
+		Spanned<Identifier> address;
+		Spanned<Expression> value;
+	};
 
-	typedef std::variant<Declare, Set, Expression::FunctionCall> value_t;
+	// expression statements are now calls and scope statements are resolved now anyways
+	enum class Kind { Declare, Set, Call, Write };
+
+	typedef std::variant<Declare, Set, Expression::FunctionCall, Write> value_t;
 
 	value_t value;
 
@@ -359,6 +365,10 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Call>, std::move(call)});
 	}
 
+	inline static Statement make_write(Write&& write) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Write>, std::move(write)});
+	}
+
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Declare& get_declare() { return std::get<(size_t) Kind::Declare>(value); }
@@ -370,10 +380,15 @@ struct Statement {
 	inline Expression::FunctionCall const& get_call() const { return std::get<(size_t) Kind::Call>(value); }
 
 	inline Expression::FunctionCall& get_call() { return std::get<(size_t) Kind::Call>(value); }
+
+	inline Write const& get_write() const { return std::get<(size_t) Kind::Write>(value); }
+
+	inline Write& get_write() { return std::get<(size_t) Kind::Write>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
 std::ostream& operator<<(std::ostream&, Statement::Set const&);
+std::ostream& operator<<(std::ostream&, Statement::Write const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
 
 struct BasicBlock {

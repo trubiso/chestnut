@@ -219,6 +219,8 @@ private:
 		std::vector<ID> get_callable_subitems(ID self_id, std::vector<TypeInfo> const&) const;
 		/// Returns the pointee for this pointer type (assumes is_pointer()).
 		ID get_pointee(ID self_id, std::vector<TypeInfo> const&) const;
+		/// Returns whether this pointer is mutable (assumes is_pointer()).
+		bool get_pointer_mutable(std::vector<TypeInfo> const&) const;
 	};
 
 	struct Symbol {

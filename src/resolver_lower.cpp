@@ -487,8 +487,30 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 ) {
 	// skip invalid lhs
 	if (!set.lhs.value.can_be_lhs()) return {};
-	// TODO: in the future, once we do derefs, this will look different
-	auto lhs            = lower(set.lhs, basic_blocks, file_id);
+	auto lhs   = lower(set.lhs, basic_blocks, file_id);
+	auto value = lower(set.rhs, basic_blocks, file_id);
+
+	if (lhs.value.kind() == IR::Expression::Kind::Deref) {
+		auto        written_to      = lhs.value.get_deref().address;
+		auto const& symbol          = symbol_pool_.at(written_to.value);
+		auto        written_to_type = symbol.type;
+		if (!type_pool_.at(written_to_type).is_pointer(type_pool_)) return {};
+		if (!type_pool_.at(written_to_type).get_pointer_mutable(type_pool_)) {
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"tried to mutate value pointed to by constant pointer",
+					{get_type_sample(written_to_type, OutFmt::Color::Red)}
+				)
+			);
+		}
+
+		return Spanned<IR::Statement> {
+			span,
+			IR::Statement::make_write(IR::Statement::Write {written_to, std::move(value)})
+		};
+	}
+
+	assert(lhs.value.kind() == IR::Expression::Kind::Atom);
 	auto lhs_identifier = Spanned<IR::Identifier> {lhs.span, lhs.value.get_atom().get_identifier()};
 	// check that we're setting an actually mutable variable
 	if (!symbol_pool_.at(lhs_identifier.value).mutable_) {
@@ -512,7 +534,6 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 			)
 		);
 	}
-	auto value = lower(set.rhs, basic_blocks, file_id);
 
 	return Spanned<IR::Statement> {
 		span,
