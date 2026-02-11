@@ -411,6 +411,21 @@ private:
 	/// Holds the type ID one above the last valid type ID.
 	TypeInfo::ID type_counter_ = 0;
 
+	struct UndecidedOverload {
+		TypeInfo::ID                    expr_type;
+		std::optional<AST::Identifier*> identifier;
+
+		struct Candidate {
+			TypeInfo::ID function;
+			TypeInfo call_type;
+		};
+
+		std::vector<Candidate>          candidates;
+		std::vector<Diagnostic::Sample> rejections;
+		Span                            span;
+		FileContext::ID                 file_id;
+	};
+
 	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID);
 	TypeInfo from_type(AST::Type const&, FileContext::ID);
 
@@ -497,6 +512,10 @@ private:
 	bool can_unify(TypeInfo const&, TypeInfo::ID) const;
 	bool can_unify(TypeInfo::ID, TypeInfo const&) const;
 	bool can_unify(TypeInfo const&, TypeInfo const&) const;
+
+	/// Tries to decide an undecided overload. Returns whether the overload was successfully decided (that
+	/// includes the case in which it is determined that no function meets the constraints!)
+	bool try_decide(UndecidedOverload&);
 
 	TypeInfo::ID infer(AST::Expression::Atom const&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::FunctionCall&, Span, FileContext::ID);

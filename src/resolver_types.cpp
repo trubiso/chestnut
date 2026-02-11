@@ -857,6 +857,80 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	}
 }
 
+bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
+	// filter the candidates
+	std::vector<UndecidedOverload::Candidate> new_candidates {};
+	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
+		if (can_unify(candidate.call_type, candidate.function)) {
+			new_candidates.push_back(std::move(candidate));
+		} else {
+			// TODO: specify how it is incompatible?
+			std::stringstream text {};
+			text
+				<< "function signature ("
+				<< get_type_name(candidate.function)
+				<< ") is incompatible with the function call signature ("
+				<< get_type_name(candidate.call_type)
+				<< ")";
+			undecided_overload.rejections.push_back(
+				Diagnostic::Sample(
+					get_context(get_type_file_id(candidate.function)),
+					{Diagnostic::Sample::Label(
+						get_type_span(candidate.function),
+						text.str(),
+						OutFmt::Color::Magenta
+					)}
+				)
+			);
+		}
+	}
+	undecided_overload.candidates = std::move(new_candidates);
+
+	// if no candidates are unifiable, it's unresolved.
+	if (undecided_overload.candidates.empty()) {
+		parsed_files.at(undecided_overload.file_id)
+			.diagnostics.push_back(
+				Diagnostic::error(
+					"could not resolve function overload",
+					"no function matched the constraints imposed by the function call",
+					std::move(undecided_overload.rejections)
+				)
+			);
+
+		// we need to "unresolve" the callee identifier just in case
+		if (undecided_overload.identifier.has_value()) undecided_overload.identifier.value()->id = {};
+
+		return true;
+	}
+
+	// if too many candidates are unifiable, we fail to decide.
+	if (undecided_overload.candidates.size() > 1) { return false; }
+
+	// if only one is unifiable, we've finally found the one and only function
+	assert(undecided_overload.candidates.size() == 1);
+	TypeInfo::ID call_id = register_type(
+		std::move(undecided_overload.candidates.at(0).call_type),
+		undecided_overload.span,
+		undecided_overload.file_id
+	);
+	unify(call_id, undecided_overload.candidates.at(0).function, undecided_overload.file_id);
+
+	// if we're calling an identifier, let's finish resolving it
+	if (undecided_overload.identifier.has_value()) {
+		if (!type_symbol_mapping_.at(undecided_overload.candidates.at(0).function).has_value()) {
+			// TODO: think about when this would ever happen
+			std::cout << "error: there is no value for this call ID: ";
+			debug_print_type(undecided_overload.candidates.at(0).function);
+			std::cout << std::endl;
+		} else {
+			undecided_overload.identifier.value()->id
+				= {type_symbol_mapping_.at(undecided_overload.candidates.at(0).function).value()};
+		}
+	}
+
+	return true;
+}
+
 Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom const& atom, Span span, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
@@ -1037,11 +1111,11 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		labeled_arguments.emplace(identifier.value.name(), infer(value.value, value.span, file_id));
 	}
 
-	TypeInfo::ID return_ = register_type(TypeInfo::make_unknown(), span, file_id);
+	TypeInfo::ID expr_type = register_type(TypeInfo::make_unknown(), span, file_id);
 
-	// we will filter the functions based on whether they are unifiable
-	std::vector<TypeInfo::ID> found_functions {};
-	std::vector<TypeInfo>     function_call_types {};
+	// let's store all of the candidates
+	std::vector<UndecidedOverload::Candidate> candidates {};
+	candidates.reserve(callable_filtered.size());
 	for (TypeInfo::ID callable_id : callable_filtered) {
 		assert(type_pool_.at(callable_id).kind() == TypeInfo::Kind::Function);
 		// now we must create the function call type according to the function (due to labeled
@@ -1063,105 +1137,25 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			arguments.push_back({name, labeled_arguments.at(name.value())});
 		}
 
+		// we store the expression type as the return type so it automatically gets inferred!
 		// TODO: once we have generics, we need to instantiate a copy of the function with unknowns
 		TypeInfo function_call_type
-			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), return_});
-		if (can_unify(function_call_type, callable_id)) {
-			found_functions.push_back(callable_id);
-			function_call_types.push_back(function_call_type);
-		} else {
-			// TODO: specify how it is incompatible?
-			std::stringstream text {};
-			text
-				<< "function signature ("
-				<< get_type_name(callable_id)
-				<< ") is incompatible with the function call signature ("
-				<< get_type_name(function_call_type)
-				<< ")";
-			rejections.push_back(
-				Diagnostic::Sample(
-					get_context(get_type_file_id(callable_id)),
-					{Diagnostic::Sample::Label(
-						get_type_span(callable_id),
-						text.str(),
-						OutFmt::Color::Magenta
-					)}
-				)
-			);
-		}
+			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), expr_type});
+		UndecidedOverload::Candidate candidate {callable_id, function_call_type};
+		candidates.push_back(std::move(candidate));
 	}
 
-	// now, we only have unifiable functions left. if none are unifiable, it's unresolved.
-	if (found_functions.empty()) {
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"could not resolve function overload",
-				"no function matched the constraints imposed by the function call",
-				std::move(rejections)
-			)
-		);
-		// we need to "unresolve" the callee identifier just in case
-		if (function_call.callee->value.kind() == AST::Expression::Kind::Atom
-		    || function_call.callee->value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier) {
-			function_call.callee->value.get_atom().get_identifier().id = {};
-		}
-		return register_type(TypeInfo::make_bottom(), span, file_id);
-	}
+	std::optional<AST::Identifier*> identifier = std::nullopt;
 
-	// if too many are unifiable, we unify with none and throw a diagnostic. it is more sensible to do it this way
-	// than to unify with the first one we see!
-	if (found_functions.size() > 1) {
-		std::vector<Diagnostic::Sample> samples = {rejections.at(0)};
-
-		size_t count = 0;
-		std::transform(
-			found_functions.cbegin(),
-			found_functions.cend(),
-			std::back_inserter(samples),
-			[this, &count](TypeInfo::ID id) {
-				return Diagnostic::Sample(
-					get_context(get_type_file_id(id)),
-					std::format("candidate #{}", ++count),
-					{Diagnostic::Sample::Label(get_type_span(id), OutFmt::Color::Cyan)}
-				);
-			}
-		);
-
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"could not resolve function overload",
-				"more than one function matches the function call, so it must be manually disambiguated",
-				std::move(samples)
-			)
-		);
-		// we need to "unresolve" the callee identifier just in case
-		if (function_call.callee->value.kind() == AST::Expression::Kind::Atom
-		    || function_call.callee->value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier) {
-			function_call.callee->value.get_atom().get_identifier().id = {};
-		}
-		return register_type(TypeInfo::make_bottom(), span, file_id);
-	}
-
-	// if only one is unifiable, we've finally found the one and only function
-	assert(found_functions.size() == 1 && function_call_types.size() == 1);
-	TypeInfo::ID call_id = register_type(std::move(function_call_types.at(0)), span, file_id);
-	unify(call_id, found_functions.at(0), file_id);
-
-	// if we're calling an identifier, let's finish resolving it
 	if (function_call.callee->value.kind() == AST::Expression::Kind::Atom
-	    || function_call.callee->value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier) {
-		if (!type_symbol_mapping_.at(found_functions[0]).has_value()) {
-			// TODO: think about when this would ever happen
-			std::cout << "there is no value for this call id what?: ";
-			debug_print_type(found_functions[0]);
-			std::cout << std::endl;
-		} else {
-			function_call.callee->value.get_atom().get_identifier().id
-				= {type_symbol_mapping_.at(found_functions[0]).value()};
-		}
-	}
+	    || function_call.callee->value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier)
+		identifier = &function_call.callee->value.get_atom().get_identifier();
 
-	return register_type(TypeInfo::make_same_as(type_pool_.at(call_id).get_function().return_), span, file_id);
+	UndecidedOverload overload {expr_type, identifier, std::move(candidates), std::move(rejections), span, file_id};
+
+	try_decide(overload);
+
+	return expr_type;
 }
 
 Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, FileContext::ID file_id) {
