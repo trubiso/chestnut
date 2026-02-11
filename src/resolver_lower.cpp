@@ -239,6 +239,16 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	FileContext::ID              file_id,
 	bool                         allow_functions
 ) {
+	if (expression.kind() == AST::Expression::Kind::Atom)
+		return {span,
+		        lower_atom(
+				expression.get_atom(),
+				expression.type.value(),
+				span,
+				basic_blocks,
+				file_id,
+				allow_functions
+			)};
 	AST::SymbolID id = symbol_next();
 	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, expression.type.value(), false, false, {}});
 	Spanned<IR::Identifier> name {span, id};
@@ -268,7 +278,7 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	return extract_expression(expression.value, expression.span, basic_blocks, file_id, allow_functions);
 }
 
-Spanned<IR::Expression> Resolver::lower(
+IR::Expression::Atom Resolver::lower_atom(
 	AST::Expression::Atom const& atom,
 	TypeInfo::ID                 type_id,
 	Span                         span,
@@ -278,53 +288,47 @@ Spanned<IR::Expression> Resolver::lower(
 ) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
-		return {span,
-		        IR::Expression::make_atom(
-				IR::Expression::Atom::make_literal(
-					IR::Expression::Atom::Literal::Kind::Number,
-					atom.get_number_literal().literal,
-					reconstruct_type(type_id)
-				)
-			)};
+		return IR::Expression::Atom::make_literal(
+			IR::Expression::Atom::Literal::Kind::Number,
+			atom.get_number_literal().literal,
+			reconstruct_type(type_id)
+		);
 	case AST::Expression::Atom::Kind::StringLiteral:
-		return {span,
-		        IR::Expression::make_atom(
-				IR::Expression::Atom::make_literal(
-					IR::Expression::Atom::Literal::Kind::String,
-					atom.get_string_literal().literal,
-					reconstruct_type(type_id)
-				)
-			)};
+		return IR::Expression::Atom::make_literal(
+			IR::Expression::Atom::Literal::Kind::String,
+			atom.get_string_literal().literal,
+			reconstruct_type(type_id)
+		);
 	case AST::Expression::Atom::Kind::CharLiteral:
-		return {span,
-		        IR::Expression::make_atom(
-				IR::Expression::Atom::make_literal(
-					IR::Expression::Atom::Literal::Kind::Char,
-					atom.get_char_literal().literal,
-					reconstruct_type(type_id)
-				)
-			)};
+		return IR::Expression::Atom::make_literal(
+			IR::Expression::Atom::Literal::Kind::Char,
+			atom.get_char_literal().literal,
+			reconstruct_type(type_id)
+		);
 	case AST::Expression::Atom::Kind::BoolLiteral:
-		return {span,
-		        IR::Expression::make_atom(
-				IR::Expression::Atom::make_bool(
-					atom.get_bool_literal().value,
-					reconstruct_type(type_id)
-				)
-			)};
+		return IR::Expression::Atom::make_bool(atom.get_bool_literal().value, reconstruct_type(type_id));
 	case AST::Expression::Atom::Kind::Expression:
-		return {span,
-		        IR::Expression::make_atom(
-				extract_expression(*atom.get_expression(), span, basic_blocks, file_id).value
-			)};
+		return extract_expression(*atom.get_expression(), span, basic_blocks, file_id).value;
 	case AST::Expression::Atom::Kind::Identifier: break;
 	}
 	// for identifiers, we need to extract the type as well.
 	// only identifiers can be functions!
 	auto data = lower(atom.get_identifier(), allow_functions);
-	if (!data.has_value()) return {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
+	if (!data.has_value()) return IR::Expression::Atom::make_error();
 	auto [identifier, type] = std::move(data.value());
-	return {span, IR::Expression::make_atom(IR::Expression::Atom::make_identifier(identifier, std::move(type)))};
+	return IR::Expression::Atom::make_identifier(identifier, std::move(type));
+}
+
+Spanned<IR::Expression> Resolver::lower(
+	AST::Expression::Atom const& atom,
+	TypeInfo::ID                 type_id,
+	Span                         span,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id,
+	bool                         allow_functions
+) {
+	return {span,
+	        IR::Expression::make_atom(lower_atom(atom, type_id, span, basic_blocks, file_id, allow_functions))};
 }
 
 Spanned<IR::Expression> Resolver::lower(
