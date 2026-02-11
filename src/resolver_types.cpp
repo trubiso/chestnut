@@ -1349,6 +1349,15 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 void Resolver::infer_types() {
 	for (ParsedFile& file : parsed_files) { infer(file.module, file.file_id); }
 
+	while (!undecided_overloads.empty()) {
+		std::vector<UndecidedOverload> remaining_overloads {};
+		for (UndecidedOverload& undecided_overload : undecided_overloads)
+			if (!try_decide(undecided_overload))
+				remaining_overloads.push_back(std::move(undecided_overload));
+		if (remaining_overloads.size() == undecided_overloads.size()) break;
+		undecided_overloads = std::move(remaining_overloads);
+	}
+
 	// if we did not manage to decide some of the overloads, we gotta throw diagnostics!
 	if (!undecided_overloads.empty()) {
 		for (UndecidedOverload const& undecided_overload : undecided_overloads) {

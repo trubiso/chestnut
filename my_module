@@ -7,7 +7,7 @@ export module my_submodule {
 }
 
 export func do_stuff(c: char) void {
-	const a: uint64 = 2;
+	const a = 2;
 	::my_module::my_submodule::sum_numbers(a, 3);
 	::my_module::my_submodule::sum_numbers(20.34134, 30.2185);
 }
@@ -67,7 +67,7 @@ func print_largest_expr(anon x: uint64, anon y: uint64) {
 }
 
 func print_up_to(limit: uint64) {
-	mut x: uint64 = 0;
+	mut x = 0;
 'loop:
 	if (x > limit) goto 'end;
 	if (x < 10) print_integer(0);
@@ -82,9 +82,9 @@ func print_up_to(limit: uint64) {
 }
 
 func fibonacci(count: uint64) {
-	mut a: uint64 = 0;
-	mut b: uint64 = 1;
-	mut i: uint64 = 0;
+	mut a = 0;
+	mut b = 1;
+	mut i = 0;
 'loop:
 	i = i + 1;
 	print_integer(a);
@@ -144,19 +144,16 @@ def sum_numbers ::my_module::my_submodule::sum_numbers;
 	putchar('d');
 	putchar('!');
 	putchar(' ');
-	const a: uint64 = 42;
-	const b = 69;
-	print_largest(a, b);
-	const f = 2.3298412390;
-	print_float(f);
+	print_largest(42, 69);
+	print_float(2.3298412390);
 	putchar('\n');
 	print_up_to(1000);
 	fibonacci(100);
 	test_and(5);
 	test_and(11);
-	const one: int64 = 1;
-	test_and(-one);
+	test_and(-1);
 	test_and(3);
+	const one: int64 = 1;
 	print_integer(if (one > 2) 5 else 6);
 	putchar('\n');
 	return 0;
