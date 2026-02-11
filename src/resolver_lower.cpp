@@ -107,7 +107,8 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 		case AST::Type::Atom::Integer::WidthType::Any: [[assume(false)]]; break;
 		}
 	} else if (type.kind() == TypeInfo::Kind::PartialInteger) {
-		bool        signed_ = false;
+		// default is signed!
+		bool        signed_ = true;
 		auto const& integer = type.get_partial_integer().integer;
 		if (type.get_partial_integer().signed_is_known) signed_ = integer.is_signed();
 		switch (integer.width_type()) {

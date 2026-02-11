@@ -1349,16 +1349,83 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 void Resolver::infer_types() {
 	for (ParsedFile& file : parsed_files) { infer(file.module, file.file_id); }
 
+	// we try to resolve overloads now that the entire program is known
 	while (!undecided_overloads.empty()) {
 		std::vector<UndecidedOverload> remaining_overloads {};
 		for (UndecidedOverload& undecided_overload : undecided_overloads)
 			if (!try_decide(undecided_overload))
 				remaining_overloads.push_back(std::move(undecided_overload));
-		if (remaining_overloads.size() == undecided_overloads.size()) break;
+		size_t old_size     = undecided_overloads.size();
 		undecided_overloads = std::move(remaining_overloads);
+		if (old_size == undecided_overloads.size()) break;
 	}
 
-	// if we did not manage to decide some of the overloads, we gotta throw diagnostics!
+	// we will try a more destructive approach now: we will fill in all partial numeric types and try to decide.
+	// this doesn't really have an effect if it doesn't work, because the lowering phase would have done this
+	// anyway!
+	bool changes_made = false;
+	for (UndecidedOverload& undecided_overload : undecided_overloads) {
+		for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
+			for (auto& [_, id] : candidate.call_type.get_function().arguments) {
+				auto& type = type_pool_.at(id);
+				if (type.kind() == TypeInfo::Kind::PartialInteger) {
+					auto& partial_integer = type.get_partial_integer();
+					// we will fill in to a signed integer of default width
+					bool signed_ = partial_integer.signed_is_known
+					                     ? partial_integer.integer.is_signed()
+					                     : true;
+					std::optional<AST::Type::Atom::Integer> full_integer = std::nullopt;
+					switch (partial_integer.integer.width_type()) {
+					case AST::Type::Atom::Integer::WidthType::Fixed:
+						full_integer = AST::Type::Atom::Integer::with_width(
+								       partial_integer.integer.bit_width().value(),
+								       signed_
+						)
+						                       .value();
+						break;
+					case AST::Type::Atom::Integer::WidthType::Any:
+						full_integer = AST::Type::Atom::Integer::with_width(
+							IR::DEFAULT_INTEGER_WIDTH,
+							signed_
+						);
+						break;
+					case AST::Type::Atom::Integer::WidthType::Ptr:
+						full_integer = AST::Type::Atom::Integer::ptr(signed_);
+						break;
+					case AST::Type::Atom::Integer::WidthType::Size:
+						full_integer = AST::Type::Atom::Integer::size(signed_);
+						break;
+					}
+					type = TypeInfo::make_known_integer(
+						TypeInfo::KnownInteger {std::move(full_integer.value())}
+					);
+					changes_made = true;
+				} else if (type.kind() == TypeInfo::Kind::PartialFloat) {
+					type = TypeInfo::make_known_float(
+						TypeInfo::KnownFloat {
+							(AST::Type::Atom::Float::Width) IR::DEFAULT_FLOAT_WIDTH
+						}
+					);
+					changes_made = true;
+				}
+			}
+		}
+	}
+
+	// if any type was filled in, let's try again!
+	if (changes_made)
+		while (!undecided_overloads.empty()) {
+			std::vector<UndecidedOverload> remaining_overloads {};
+			for (UndecidedOverload& undecided_overload : undecided_overloads)
+				if (!try_decide(undecided_overload))
+					remaining_overloads.push_back(std::move(undecided_overload));
+			size_t old_size     = undecided_overloads.size();
+			undecided_overloads = std::move(remaining_overloads);
+			if (old_size == undecided_overloads.size()) break;
+		}
+
+	// if we did not manage to decide any overload, we gotta throw diagnostics (we literally tried everything we can
+	// at this point :P)
 	if (!undecided_overloads.empty()) {
 		for (UndecidedOverload const& undecided_overload : undecided_overloads) {
 			std::vector<Diagnostic::Sample> samples = {undecided_overload.rejections.at(0)};
