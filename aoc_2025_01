@@ -1,6 +1,6 @@
-@extern func open_input() uintptr;
-@extern func close_input(file: uintptr);
-@extern func get_line(file: uintptr) bool;
+@extern func open_input() *mut void;
+@extern func close_input(file: *mut void);
+@extern func get_line(file: *mut void) bool;
 @extern func get_direction() bool;
 @extern func get_rotation() uint32;
 @extern func print_output(anon x: uint64);
