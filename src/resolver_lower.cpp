@@ -6,9 +6,6 @@
 #include <sstream>
 #include <variant>
 
-uint32_t const                     DEFAULT_INTEGER_WIDTH = 32;
-IR::Type::Atom::Float::Width const DEFAULT_FLOAT_WIDTH   = IR::Type::Atom::Float::Width::F32;
-
 IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_origin, bool allow_functions) {
 	TypeInfo const& type = type_pool_.at(type_id);
 	switch (type.kind()) {
@@ -21,7 +18,8 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 		return IR::Type::make_atom(
 			IR::Type::Atom::make_float((IR::Type::Atom::Float::Width) type.get_known_float().width)
 		);
-	case TypeInfo::Kind::PartialFloat:   return IR::Type::make_atom(IR::Type::Atom::make_float(DEFAULT_FLOAT_WIDTH));
+	case TypeInfo::Kind::PartialFloat:
+		return IR::Type::make_atom(IR::Type::Atom::make_float(IR::DEFAULT_FLOAT_WIDTH));
 	case TypeInfo::Kind::Unknown:
 	case TypeInfo::Kind::Module:
 	case TypeInfo::Kind::Function:
@@ -119,7 +117,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 				IR::Type::Atom::make_integer(
 					IR::Type::Atom::Integer::with_width(
 						integer.width_type() == AST::Type::Atom::Integer::WidthType::Any
-							? DEFAULT_INTEGER_WIDTH
+							? IR::DEFAULT_INTEGER_WIDTH
 							: integer.bit_width().value(),
 						signed_
 					)
@@ -164,7 +162,7 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom atom, Span span, FileCont
 					IR::Type::Atom::make_integer(
 						IR::Type::Atom::Integer::with_width(
 							integer.width_type() == AST::Type::Atom::Integer::WidthType::Any
-								? DEFAULT_INTEGER_WIDTH
+								? IR::DEFAULT_INTEGER_WIDTH
 								: integer.bit_width().value(),
 							integer.is_signed()
 						)

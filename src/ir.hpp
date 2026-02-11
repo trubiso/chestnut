@@ -143,6 +143,9 @@ struct Type {
 	Type clone() const;
 };
 
+uint32_t const                 DEFAULT_INTEGER_WIDTH = 32;
+Type::Atom::Float::Width const DEFAULT_FLOAT_WIDTH   = Type::Atom::Float::Width::F32;
+
 std::ostream& operator<<(std::ostream&, Type::Atom const&);
 std::ostream& operator<<(std::ostream&, Type::Pointer const&);
 std::ostream& operator<<(std::ostream&, Type const&);
