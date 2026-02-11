@@ -1,3 +1,5 @@
+struct Info { direction: bool; rotation: bool }
+
 @extern func open_input() *mut void;
 @extern func close_input(file: *mut void);
 @extern func get_line(file: *mut void) bool;

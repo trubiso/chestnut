@@ -4,6 +4,7 @@
 #include "ast/identifier.hpp"
 #include "ast/module.hpp"
 #include "ast/statement.hpp"
+#include "ast/struct.hpp"
 #include "ast/tag.hpp"
 #include "ast/type.hpp"
 #include "lexer.hpp"
@@ -62,6 +63,7 @@ private:
 		Branch,
 		If,
 		Else,
+		Struct,
 	};
 
 	FileContext   context_;
@@ -188,12 +190,14 @@ private:
 	// skip semicolons
 	void skip_semis();
 
-	std::optional<Function>     parse_function();
-	std::optional<Alias>        parse_alias();
-	std::optional<Import>       parse_import();
-	std::optional<Module>       parse_module();
-	std::optional<Module::Item> parse_module_item();
-	std::optional<Module::Body> parse_module_body(bool bare = false);
+	std::optional<Struct::Field> parse_struct_field();
+	std::optional<Struct>        parse_struct();
+	std::optional<Function>      parse_function();
+	std::optional<Alias>         parse_alias();
+	std::optional<Import>        parse_import();
+	std::optional<Module>        parse_module();
+	std::optional<Module::Item>  parse_module_item();
+	std::optional<Module::Body>  parse_module_body(bool bare = false);
 };
 
 }  // namespace AST

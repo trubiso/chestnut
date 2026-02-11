@@ -942,6 +942,7 @@ char const* Parser::get_variant_name(Keyword keyword) {
 	case Keyword::Branch: return "branch";
 	case Keyword::If:     return "if";
 	case Keyword::Else:   return "else";
+	case Keyword::Struct: return "struct";
 	}
 }
 
@@ -949,6 +950,34 @@ void Parser::skip_semis() {
 	tokens_.consume_while([](Token token) {
 		return token.is_symbol() && token.get_symbol() == Token::Symbol::Semicolon;
 	});
+}
+
+std::optional<Struct::Field> Parser::parse_struct_field() {
+	auto name = SPANNED(consume_identifier);
+	if (!name.has_value()) return {};
+	if (!expect_symbol("expected ':' to specify field type", Token::Symbol::Colon)) return {};
+	auto type = SPANNED_REASON(expect_type, "expected field type");
+	if (!type.has_value()) return {};
+
+	return Struct::Field {std::move(name.value()), std::move(type.value())};
+}
+
+std::optional<Struct> Parser::parse_struct() {
+	if (!consume_keyword(Keyword::Struct)) return {};
+	auto name = SPANNED_REASON(expect_identifier, "expected struct name");
+	if (!name.has_value()) return {};
+
+	if (!expect_symbol("expected opening brace to begin struct body", Token::Symbol::LBrace)) return {};
+	skip_semis();
+	std::vector<Struct::Field> fields {};
+	for (auto item = parse_struct_field(); item.has_value(); item = parse_struct_field()) {
+		fields.push_back(std::move(item.value()));
+		skip_semis();
+	}
+	skip_semis();
+	expect_symbol("expected closing brace to end struct body", Token::Symbol::RBrace);
+
+	return Struct {std::move(name.value()), std::move(fields)};
 }
 
 std::optional<Function> Parser::parse_function() {
@@ -1176,6 +1205,11 @@ std::optional<Module::Item> Parser::parse_module_item() {
 				);
 			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
+	} else if (peek_keyword(Keyword::Struct)) {
+		// TODO: actually store as a module item
+		auto struct_ = parse_struct();
+		if (struct_.has_value()) std::cout << struct_.value() << std::endl;
+		return parse_module_item();
 	}
 
 	return item;
