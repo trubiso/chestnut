@@ -12,10 +12,9 @@
 namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
-#define SPANNED_REASON(fn, reason)                                                               \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
-		return (fn) (reason);                                                            \
-	})
+#define SPANNED_REASON(fn, reason)                                                                                     \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
+		                                                                      this] { return (fn) (reason); })
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -1206,10 +1205,9 @@ std::optional<Module::Item> Parser::parse_module_item() {
 			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
 	} else if (peek_keyword(Keyword::Struct)) {
-		// TODO: actually store as a module item
-		auto struct_ = parse_struct();
-		if (struct_.has_value()) std::cout << struct_.value() << std::endl;
-		return parse_module_item();
+		item = parse_struct().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
+		});
 	}
 
 	return item;

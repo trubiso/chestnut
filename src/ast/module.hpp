@@ -2,6 +2,7 @@
 #include "../span.hpp"
 #include "function.hpp"
 #include "identifier.hpp"
+#include "struct.hpp"
 #include "tag.hpp"
 
 #include <variant>
@@ -27,7 +28,7 @@ struct Module {
 	// know this will be on the heap anyways).
 	// the vector of tags stores all tags that modify this module item.
 	// the boolean is whether this item is exported or not.
-	typedef std::variant<Function, Module, Alias, Import> InnerItem;
+	typedef std::variant<Function, Module, Alias, Import, Struct> InnerItem;
 
 	static std::string const& get_name(InnerItem const& inner_item);
 
