@@ -61,6 +61,7 @@ struct Statement {
 	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If> value_t;
 
 	value_t value;
+	bool    is_auto_generated = false;
 
 	inline constexpr Kind kind() const { return (Kind) value.index(); }
 
@@ -88,8 +89,11 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Label>, std::move(label)});
 	}
 
-	inline static Statement make_goto(Goto&& goto_) {
-		return Statement(value_t {std::in_place_index<(size_t) Kind::Goto>, std::move(goto_)});
+	inline static Statement make_goto(Goto&& goto_, bool auto_generated = false) {
+		return Statement {
+			value_t {std::in_place_index<(size_t) Kind::Goto>, std::move(goto_)},
+			auto_generated
+		};
 	}
 
 	inline static Statement make_branch(Branch&& branch) {

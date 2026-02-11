@@ -567,13 +567,19 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	// if we already have a jump and this is not a label, it has to be dead code
 	if (!std::holds_alternative<std::monostate>(basic_blocks.at(basic_blocks.size() - 1).jump)
 	    && statement.value.kind() != AST::Statement::Kind::Label) {
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::warning(
-				"dead code",
-				"this statement will never get executed",
-				{Diagnostic::Sample(get_context(file_id), statement.span, OutFmt::Color::Yellow)}
-			)
-		);
+		// do not push diagnostics for automatically generated statements
+		if (!statement.value.is_auto_generated)
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::warning(
+					"dead code",
+					"this statement will never get executed",
+					{Diagnostic::Sample(
+						get_context(file_id),
+						statement.span,
+						OutFmt::Color::Yellow
+					)}
+				)
+			);
 		return {};
 	}
 

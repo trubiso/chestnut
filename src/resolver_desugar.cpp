@@ -365,9 +365,8 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 		if_.true_.span,
 		AST::Statement::make_scope(desugar_control_flow(std::move(if_.true_.value), label_counter, file_id))
 	);
-	// TODO: don't add these post-gotos if the scope ends on a branch/goto
 	auto goto_1 = goto_cont;
-	stmts.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_1)));
+	stmts.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_1), true));
 
 	// false
 	if (goto_false.has_value()) {
@@ -385,7 +384,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 		);
 		// TODO: don't add these post-gotos if the scope ends on a branch/goto
 		auto goto_2 = goto_cont;
-		stmts.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_2)));
+		stmts.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_2), true));
 	}
 
 	// cont
