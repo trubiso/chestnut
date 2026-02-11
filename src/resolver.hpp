@@ -426,6 +426,8 @@ private:
 		FileContext::ID                 file_id;
 	};
 
+	std::vector<UndecidedOverload> undecided_overloads {};
+
 	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID);
 	TypeInfo from_type(AST::Type const&, FileContext::ID);
 

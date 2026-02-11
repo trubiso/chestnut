@@ -1153,7 +1153,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 	UndecidedOverload overload {expr_type, identifier, std::move(candidates), std::move(rejections), span, file_id};
 
-	try_decide(overload);
+	if (!try_decide(overload)) undecided_overloads.push_back(std::move(overload));
 
 	return expr_type;
 }
@@ -1348,4 +1348,40 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 
 void Resolver::infer_types() {
 	for (ParsedFile& file : parsed_files) { infer(file.module, file.file_id); }
+
+	// if we did not manage to decide some of the overloads, we gotta throw diagnostics!
+	if (!undecided_overloads.empty()) {
+		for (UndecidedOverload const& undecided_overload : undecided_overloads) {
+			std::vector<Diagnostic::Sample> samples = {undecided_overload.rejections.at(0)};
+
+			size_t count = 0;
+			std::transform(
+				undecided_overload.candidates.cbegin(),
+				undecided_overload.candidates.cend(),
+				std::back_inserter(samples),
+				[this, &count](UndecidedOverload::Candidate const& candidate) {
+					return Diagnostic::Sample(
+						get_context(get_type_file_id(candidate.function)),
+						std::format("candidate #{}", ++count),
+						{Diagnostic::Sample::Label(
+							get_type_span(candidate.function),
+							OutFmt::Color::Cyan
+						)}
+					);
+				}
+			);
+
+			parsed_files.at(undecided_overload.file_id)
+				.diagnostics.push_back(
+					Diagnostic::error(
+						"could not resolve function overload",
+						"more than one function matches the function call, so it must be manually disambiguated",
+						std::move(samples)
+					)
+				);
+
+			// we need to "unresolve" the callee identifier just in case
+			if (undecided_overload.identifier.has_value()) undecided_overload.identifier.value()->id = {};
+		}
+	}
 }
