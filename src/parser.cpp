@@ -12,9 +12,10 @@
 namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
-#define SPANNED_REASON(fn, reason)                                                                                     \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
-		                                                                      this] { return (fn) (reason); })
+#define SPANNED_REASON(fn, reason)                                                               \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
+		return (fn) (reason);                                                            \
+	})
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -158,14 +159,16 @@ std::optional<Tag> Parser::consume_tag() {
 }
 
 std::optional<Type> Parser::consume_type_atom() {
-	// in the future, this will require atoms and operators just like expression.
-	// for now, we're only doing built-in types, so it's much easier for us!
-	// that's also why we're so harsh on retroceding instead of expecting.
-
-	std::optional<std::string_view> maybe_name
-		= consume_bare_unqualified_identifier();  // all built-ins are just identifiers
+	std::optional<Identifier> maybe_name = consume_identifier();
 	if (!maybe_name.has_value()) return {};
-	std::string_view name = maybe_name.value();
+
+	// if it's a qualified identifier, it's definitely named
+	if (!maybe_name.value().is_unqualified()) {
+		return Type::make_atom(Type::Atom::make_named(std::move(maybe_name.value())));
+	}
+
+	// if it's not a qualified identifier, it's a built-in or a named one in scope
+	std::string name = maybe_name.value().name();
 
 	// variables have to declared at the top so c++ won't wail
 	bool                               starts_with_u, starts_with_i;
@@ -210,9 +213,8 @@ std::optional<Type> Parser::consume_type_atom() {
 	return Type::make_atom(Type::Atom::make_integer(std::move(int_.value())));
 
 none_match:
-	// we need to un-consume the identifier
-	tokens_.retreat();
-	return {};
+	// if none match, it's once more a named type
+	return Type::make_atom(Type::Atom::make_named(std::move(maybe_name.value())));
 }
 
 std::optional<Type> Parser::consume_type() {

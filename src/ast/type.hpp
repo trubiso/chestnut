@@ -1,5 +1,6 @@
 #pragma once
 #include "../span.hpp"
+#include "identifier.hpp"
 
 #include <cstdint>
 #include <iostream>
@@ -79,9 +80,16 @@ struct Type {
 			}
 		};
 
-		enum class Kind { Integer, Float, Void, Char, Bool, Inferred };
+		enum class Kind { Integer, Float, Void, Char, Bool, Named, Inferred };
 
-		typedef std::variant<Integer, Float, std::monostate, std::monostate, std::monostate, std::monostate>
+		typedef std::variant<
+			Integer,
+			Float,
+			std::monostate,
+			std::monostate,
+			std::monostate,
+			Identifier,
+			std::monostate>
 			value_t;
 
 		value_t value;
@@ -110,6 +118,10 @@ struct Type {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Bool>, std::monostate {}});
 		}
 
+		inline static Atom make_named(AST::Identifier&& name) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Named>, std::move(name)});
+		}
+
 		inline static Atom make_inferred() {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Inferred>, std::monostate {}});
 		}
@@ -117,6 +129,10 @@ struct Type {
 		inline Integer const& get_integer() const { return std::get<(size_t) Kind::Integer>(value); }
 
 		inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
+
+		inline AST::Identifier const& get_named() const { return std::get<(size_t) Kind::Named>(value); }
+
+		inline AST::Identifier& get_named() { return std::get<(size_t) Kind::Named>(value); }
 	};
 
 	struct Pointer {

@@ -9,6 +9,7 @@ std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	case Type::Atom::Kind::Void:     return os << "void";
 	case Type::Atom::Kind::Char:     return os << "char";
 	case Type::Atom::Kind::Bool:     return os << "bool";
+	case Type::Atom::Kind::Named:    return os << atom.get_named();
 	case Type::Atom::Kind::Inferred: return os << "(inferred)";
 	}
 
