@@ -11,6 +11,8 @@
 struct FileContext {
 	typedef uint32_t ID;
 
+	static constexpr ID BUILT_IN_ID = UINT32_MAX;
+
 	std::string name;
 
 	ID file_id;

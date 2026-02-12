@@ -129,6 +129,7 @@ void print_label_text(
 }
 
 void Diagnostic::Sample::print() const {
+	if (context.file_id == FileContext::BUILT_IN_ID) return;
 	assert(!context.loc.empty());
 	Span total_span = span();
 

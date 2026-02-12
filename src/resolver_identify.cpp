@@ -90,9 +90,8 @@ void Resolver::identify_module_items() {
 }
 
 void Resolver::identify_built_in_operator(IR::BuiltInFunction function, Token::Symbol operator_, TypeInfo&& type) {
-	// TODO: have designated sentinel values for these
-	Span            span    = Span(0);
-	FileContext::ID file_id = 42;
+	Span            span    = Span::zero();
+	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
 	AST::SymbolID id = symbol_next();
 
@@ -114,9 +113,8 @@ void Resolver::identify_built_in_unary_operator(
 	Token::Symbol       operator_,
 	TypeInfo&&          type
 ) {
-	// TODO: have designated sentinel values for these
-	Span            span    = Span(0);
-	FileContext::ID file_id = 42;
+	Span            span    = Span::zero();
+	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
 	TypeInfo::ID type_id       = register_type(std::move(type), span, file_id);
 	TypeInfo     function_type = TypeInfo::make_function(TypeInfo::Function {{{std::nullopt, type_id}}, type_id});
@@ -128,9 +126,8 @@ void Resolver::identify_built_in_binary_operator(
 	Token::Symbol       operator_,
 	TypeInfo&&          type
 ) {
-	// TODO: have designated sentinel values for these
-	Span            span    = Span(0);
-	FileContext::ID file_id = 42;
+	Span            span    = Span::zero();
+	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
 	TypeInfo::ID type_id       = register_type(std::move(type), span, file_id);
 	TypeInfo     function_type = TypeInfo::make_function(
@@ -147,9 +144,8 @@ void Resolver::identify_built_in_binary_comparison_operator(
 	Token::Symbol       operator_,
 	TypeInfo&&          type
 ) {
-	// TODO: have designated sentinel values for these
-	Span            span    = Span(0);
-	FileContext::ID file_id = 42;
+	Span            span    = Span::zero();
+	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
 	TypeInfo::ID type_id       = register_type(std::move(type), span, file_id);
 	TypeInfo::ID return_id     = register_type(TypeInfo::make_known_bool(), span, file_id);

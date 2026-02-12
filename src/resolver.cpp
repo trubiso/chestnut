@@ -69,8 +69,7 @@ void Resolver::dump() const {
 }
 
 FileContext Resolver::get_context(FileContext::ID file_id) const {
-	// TODO: don't do this
-	if (file_id == 42) file_id = 0;
+	if (file_id == FileContext::BUILT_IN_ID) return FileContext {"", file_id, {}, ""};
 	return FileContext {
 		parsed_files.at(file_id).name,
 		file_id,

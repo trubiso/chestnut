@@ -9,6 +9,8 @@ struct Span {
 
 	explicit Span(size_t pos) : start(pos), end(pos + 1) {}
 
+	static Span zero() { return Span(0); }
+
 	bool operator==(Span const& other) const = default;
 };
 
