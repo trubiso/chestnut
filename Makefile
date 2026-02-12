@@ -44,4 +44,4 @@ cleancallgrind:
 	rm -f vgcore.* callgrind.*
 
 callgrind: ./chc cleancallgrind
-	valgrind --dump-instr=yes --tool=callgrind ./chc
+	valgrind --dump-instr=yes --tool=callgrind ./chc my_module
