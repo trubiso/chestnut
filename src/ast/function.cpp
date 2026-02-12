@@ -11,7 +11,8 @@ std::ostream& operator<<(std::ostream& os, Function const& function) {
 		os << ": " << arg.type.value;
 		if (++count < function.arguments.size()) os << ", ";
 	}
-	os << ")";
+	os << ") -> ";
+	os << function.return_type.value;
 	if (function.body.has_value()) {
 		Scope const& scope = function.body.value();
 		os << ": ";

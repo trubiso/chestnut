@@ -15,6 +15,7 @@ std::ostream& operator<<(std::ostream& os, Module::InnerItem const& item) {
 	else if (std::holds_alternative<Module>(item)) return os << std::get<Module>(item);
 	else if (std::holds_alternative<Alias>(item)) return os << std::get<Alias>(item);
 	else if (std::holds_alternative<Import>(item)) return os << std::get<Import>(item);
+	else if (std::holds_alternative<Struct>(item)) return os << std::get<Struct>(item);
 	[[assume(false)]];
 }
 
