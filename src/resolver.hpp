@@ -187,6 +187,32 @@ private:
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::PartialFloat>, std::monostate {}});
 		}
 
+		inline bool is_unknown() const { return kind() == Kind::Unknown; }
+
+		inline bool is_bottom() const { return kind() == Kind::Bottom; }
+
+		inline bool is_module() const { return kind() == Kind::Module; }
+
+		inline bool is_function() const { return kind() == Kind::Function; }
+
+		inline bool is_same_as() const { return kind() == Kind::SameAs; }
+
+		inline bool is_pointer() const { return kind() == Kind::Pointer; }
+
+		inline bool is_known_void() const { return kind() == Kind::KnownVoid; }
+
+		inline bool is_known_char() const { return kind() == Kind::KnownChar; }
+
+		inline bool is_known_bool() const { return kind() == Kind::KnownBool; }
+
+		inline bool is_known_integer() const { return kind() == Kind::KnownInteger; }
+
+		inline bool is_known_float() const { return kind() == Kind::KnownFloat; }
+
+		inline bool is_partial_integer() const { return kind() == Kind::PartialInteger; }
+
+		inline bool is_partial_float() const { return kind() == Kind::PartialFloat; }
+
 		inline Function const& get_function() const { return std::get<(size_t) Kind::Function>(value); }
 
 		inline Function& get_function() { return std::get<(size_t) Kind::Function>(value); }

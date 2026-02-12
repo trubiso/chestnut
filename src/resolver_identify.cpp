@@ -340,7 +340,7 @@ void Resolver::identify_populate_labels(
 	case AST::Statement::Kind::If: return;
 	}
 
-	if (statement.value.kind() == AST::Statement::Kind::Label) {
+	if (statement.value.is_label()) {
 		// skip automatically generated labels with a valid ID
 		if (statement.value.get_label().id.has_value()) return;
 		std::string const& name = statement.value.get_label().name;
@@ -409,7 +409,7 @@ void Resolver::identify_labels(
 	case AST::Statement::Kind::If: return;
 	}
 
-	if (statement.value.kind() == AST::Statement::Kind::Goto) {
+	if (statement.value.is_goto()) {
 		// skip automatically generated gotos with a valid ID
 		if (statement.value.get_goto().destination_id.has_value()) return;
 		std::string const& destination = statement.value.get_goto().destination;
@@ -421,7 +421,7 @@ void Resolver::identify_labels(
 
 		statement.value.get_goto().destination_id = id;
 		return;
-	} else if (statement.value.kind() == AST::Statement::Kind::Branch) {
+	} else if (statement.value.is_branch()) {
 		// skip automatically generated branches with valid IDs
 		if (statement.value.get_branch().true_.value.destination_id.has_value()) return;
 

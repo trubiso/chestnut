@@ -304,10 +304,10 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 
 	// atom resolution (better to do it here directly)
 	AST::Expression::Atom& atom = expression.get_atom();
-	if (atom.kind() == AST::Expression::Atom::Kind::Identifier) {
+	if (atom.is_identifier()) {
 		// identifiers need to be resolved
 		resolve(atom.get_identifier(), span, scope, file_id);
-	} else if (atom.kind() == AST::Expression::Atom::Kind::Expression) {
+	} else if (atom.is_expression()) {
 		// for subexpressions, we just recurse
 		resolve(*atom.get_expression(), span, scope, file_id);
 	}

@@ -126,6 +126,20 @@ struct Type {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Inferred>, std::monostate {}});
 		}
 
+		inline bool is_integer() const { return kind() == Kind::Integer; }
+
+		inline bool is_float() const { return kind() == Kind::Float; }
+
+		inline bool is_void() const { return kind() == Kind::Void; }
+
+		inline bool is_char() const { return kind() == Kind::Char; }
+
+		inline bool is_bool() const { return kind() == Kind::Bool; }
+
+		inline bool is_named() const { return kind() == Kind::Named; }
+
+		inline bool is_inferred() const { return kind() == Kind::Inferred; }
+
 		inline Integer const& get_integer() const { return std::get<(size_t) Kind::Integer>(value); }
 
 		inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }

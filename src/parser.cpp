@@ -314,8 +314,8 @@ std::optional<Expression::FunctionCall::Argument> Parser::consume_expression_fun
 	std::optional<Spanned<Expression>> argument_lhs = SPANNED(consume_expression);
 	if (!argument_lhs.has_value()) return {};
 	// check if it's a bare unqualified identifier followed by a colon
-	if (argument_lhs.value().value.kind() == Expression::Kind::Atom
-	    && argument_lhs.value().value.get_atom().kind() == Expression::Atom::Kind::Identifier
+	if (argument_lhs.value().value.is_atom()
+	    && argument_lhs.value().value.get_atom().is_identifier()
 	    && argument_lhs.value().value.get_atom().get_identifier().is_unqualified()
 	    && consume_symbol(Token::Symbol::Colon)) {
 		// then, the bare unqualified identifier is the label
@@ -618,8 +618,8 @@ std::optional<Statement> Parser::consume_statement_declare() {
 		);
 		// if the value is just "undefined", this corresponds to the undefined case
 		if (value.has_value()
-		    && value.value().value.kind() == AST::Expression::Kind::Atom
-		    && value.value().value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier
+		    && value.value().value.is_atom()
+		    && value.value().value.get_atom().is_identifier()
 		    && value.value().value.get_atom().get_identifier().is_unqualified()
 		    && value.value().value.get_atom().get_identifier().name() == "undefined") {
 			value        = {};
@@ -743,13 +743,12 @@ std::optional<Statement> Parser::consume_statement_if() {
 	}
 	Spanned<Scope> true_scope {maybe_true.value().span, {}};
 	// we have to do it this way because the brace initializer list constructor for vectors copies
-	if (maybe_true.value().value.kind() == AST::Statement::Kind::Scope)
-		true_scope.value = std::move(maybe_true.value().value.get_scope());
+	if (maybe_true.value().value.is_scope()) true_scope.value = std::move(maybe_true.value().value.get_scope());
 	else true_scope.value.push_back(std::move(maybe_true.value()));
 	std::optional<Spanned<Scope>> false_scope = std::nullopt;
 	if (maybe_false.has_value()) {
 		false_scope = {maybe_false.value().span, {}};
-		if (maybe_false.value().value.kind() == AST::Statement::Kind::Scope)
+		if (maybe_false.value().value.is_scope())
 			false_scope.value().value = std::move(maybe_false.value().value.get_scope());
 		else false_scope.value().value.push_back(std::move(maybe_false.value()));
 	}

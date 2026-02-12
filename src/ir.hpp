@@ -86,6 +86,18 @@ struct Type {
 
 		inline constexpr Kind kind() const { return (Kind) value.index(); }
 
+		inline bool is_integer() const { return kind() == Kind::Integer; }
+
+		inline bool is_float() const { return kind() == Kind::Float; }
+
+		inline bool is_void() const { return kind() == Kind::Void; }
+
+		inline bool is_char() const { return kind() == Kind::Char; }
+
+		inline bool is_bool() const { return kind() == Kind::Bool; }
+
+		inline bool is_error() const { return kind() == Kind::Error; }
+
 		inline static Atom make_integer(Integer&& integer) {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Integer>, integer});
 		}
@@ -135,6 +147,10 @@ struct Type {
 	inline static Type make_pointer(Pointer&& pointer) {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Pointer>, std::move(pointer)});
 	}
+
+	inline bool is_atom() const { return kind() == Kind::Atom; }
+
+	inline bool is_pointer() const { return kind() == Kind::Pointer; }
 
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 
@@ -237,6 +253,14 @@ struct Expression {
 			return Atom {std::monostate {}, Type::make_atom(Type::Atom::make_error())};
 		}
 
+		inline bool is_identifier() const { return kind() == Kind::Identifier; }
+
+		inline bool is_literal() const { return kind() == Kind::Literal; }
+
+		inline bool is_bool() const { return kind() == Kind::Bool; }
+
+		inline bool is_error() const { return kind() == Kind::Error; }
+
 		inline Identifier get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline Identifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
@@ -303,6 +327,14 @@ struct Expression {
                 }
 		);
 	}
+
+	inline bool is_atom() const { return kind() == Kind::Atom; }
+
+	inline bool is_function_call() const { return kind() == Kind::FunctionCall; }
+
+	inline bool is_deref() const { return kind() == Kind::Deref; }
+
+	inline bool is_ref() const { return kind() == Kind::Ref; }
 
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 

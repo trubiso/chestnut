@@ -31,7 +31,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 
 	// FIXME: we throw a million diagnostics when there are resolved type cycles
 	auto [span, file_id] = type_span_pool_.at(type_origin);
-	if (type.kind() == TypeInfo::Kind::Unknown) {
+	if (type.is_unknown()) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"unknown type",
@@ -40,7 +40,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.kind() == TypeInfo::Kind::Module) {
+	} else if (type.is_module()) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"invalid type",
@@ -49,7 +49,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.kind() == TypeInfo::Kind::Function) {
+	} else if (type.is_function()) {
 		if (!allow_functions)
 			parsed_files.at(file_id).diagnostics.push_back(
 				Diagnostic::error(
@@ -60,7 +60,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			);
 		// even if we allow functions, we don't have a type for them :P
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.kind() == TypeInfo::Kind::SameAs) {
+	} else if (type.is_same_as()) {
 		TypeInfo::SameAs const& same_as = type.get_same_as();
 		// we should never reach this case
 		assert(!same_as.ids.empty());
@@ -73,7 +73,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.kind() == TypeInfo::Kind::Pointer) {
+	} else if (type.is_pointer()) {
 		return IR::Type::make_pointer(
 			IR::Type::Pointer {
 				std::make_unique<Spanned<IR::Type>>(Spanned {
@@ -83,7 +83,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 				type.get_pointer().mutable_
 			}
 		);
-	} else if (type.kind() == TypeInfo::Kind::KnownInteger) {
+	} else if (type.is_known_integer()) {
 		auto const& integer = type.get_known_integer().integer;
 		switch (integer.width_type()) {
 		case AST::Type::Atom::Integer::WidthType::Fixed:
@@ -106,7 +106,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			);
 		case AST::Type::Atom::Integer::WidthType::Any: [[assume(false)]]; break;
 		}
-	} else if (type.kind() == TypeInfo::Kind::PartialInteger) {
+	} else if (type.is_partial_integer()) {
 		// default is signed!
 		bool        signed_ = true;
 		auto const& integer = type.get_partial_integer().integer;
@@ -153,7 +153,7 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom atom, Span span, FileCont
 	case AST::Type::Atom::Kind::Inferred: break;
 	}
 
-	if (atom.kind() == AST::Type::Atom::Kind::Integer) {
+	if (atom.is_integer()) {
 		auto const& integer = atom.get_integer();
 		switch (integer.width_type()) {
 		case AST::Type::Atom::Integer::WidthType::Any:
@@ -181,7 +181,7 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom atom, Span span, FileCont
 					IR::Type::Atom::make_integer(IR::Type::Atom::Integer::size(integer.is_signed()))
 				)};
 		}
-	} else if (atom.kind() == AST::Type::Atom::Kind::Inferred) {
+	} else if (atom.is_inferred()) {
 		// this is invalid!! top level types must not be inferred
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
@@ -239,7 +239,7 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	FileContext::ID              file_id,
 	bool                         allow_functions
 ) {
-	if (expression.kind() == AST::Expression::Kind::Atom)
+	if (expression.is_atom())
 		return {span,
 		        lower_atom(
 				expression.get_atom(),
@@ -342,15 +342,13 @@ Spanned<IR::Expression> Resolver::lower(
 		= Spanned<IR::Expression> {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
 	auto callee = lower(*function_call.callee, basic_blocks, file_id, true);
 	// if the callee is not valid, we've already thrown diagnostics about it
-	if (callee.value.kind() != IR::Expression::Kind::Atom
-	    || callee.value.get_atom().kind() != IR::Expression::Atom::Kind::Identifier)
-		return error_expression;
+	if (!callee.value.is_atom() || !callee.value.get_atom().is_identifier()) return error_expression;
 	Spanned<IR::Identifier> callee_identifier {callee.span, callee.value.get_atom().get_identifier()};
 
 	// now we need to reconstruct the argument order from the type
 	// these assertions shouldn't fail if we've successfully resolved, but you never know!
 	TypeInfo::ID function_id = symbol_pool_.at(callee_identifier.value).type;
-	if (type_pool_.at(function_id).kind() != TypeInfo::Kind::Function) return error_expression;
+	if (!type_pool_.at(function_id).is_function()) return error_expression;
 	TypeInfo::Function const& function = type_pool_.at(function_id).get_function();
 	size_t argument_count = function_call.arguments.ordered.size() + function_call.arguments.labeled.size();
 	assert(function.arguments.size() == argument_count);
@@ -410,10 +408,10 @@ Spanned<IR::Expression> Resolver::lower(
 	case AST::Expression::Kind::If:               [[assume(false)]];
 	}
 
-	if (expression.kind() == AST::Expression::Kind::UnaryOperation) {
+	if (expression.is_unary_operation()) {
 		assert(expression.get_unary_operation().operation == Token::Symbol::Star);
 		auto operand = extract_expression(*expression.get_unary_operation().operand, basic_blocks, file_id);
-		assert(operand.value.kind() == IR::Expression::Atom::Kind::Identifier);
+		assert(operand.value.is_identifier());
 		return Spanned<IR::Expression> {
 			span,
 			IR::Expression::make_deref(
@@ -423,9 +421,9 @@ Spanned<IR::Expression> Resolver::lower(
 		};
 	}
 
-	if (expression.kind() == AST::Expression::Kind::AddressOperation) {
+	if (expression.is_address_operation()) {
 		auto operand = extract_expression(*expression.get_address_operation().operand, basic_blocks, file_id);
-		assert(operand.value.kind() == IR::Expression::Atom::Kind::Identifier);
+		assert(operand.value.is_identifier());
 		return Spanned<IR::Expression> {
 			span,
 			IR::Expression::make_ref(
@@ -511,7 +509,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	auto lhs   = lower(set.lhs, basic_blocks, file_id);
 	auto value = lower(set.rhs, basic_blocks, file_id);
 
-	if (lhs.value.kind() == IR::Expression::Kind::Deref) {
+	if (lhs.value.is_deref()) {
 		auto        written_to      = lhs.value.get_deref().address;
 		auto const& symbol          = symbol_pool_.at(written_to.value);
 		auto        written_to_type = symbol.type;
@@ -531,7 +529,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 		};
 	}
 
-	assert(lhs.value.kind() == IR::Expression::Kind::Atom);
+	assert(lhs.value.is_atom());
 	auto lhs_identifier = Spanned<IR::Identifier> {lhs.span, lhs.value.get_atom().get_identifier()};
 	// check that we're setting an actually mutable variable
 	if (!symbol_pool_.at(lhs_identifier.value).mutable_) {
@@ -570,7 +568,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 ) {
 	// if we already have a jump and this is not a label, it has to be dead code
 	if (!std::holds_alternative<std::monostate>(basic_blocks.at(basic_blocks.size() - 1).jump)
-	    && statement.value.kind() != AST::Statement::Kind::Label) {
+	    && !statement.value.is_label()) {
 		// do not push diagnostics for automatically generated statements
 		if (!statement.value.is_auto_generated)
 			parsed_files.at(file_id).diagnostics.push_back(
@@ -603,7 +601,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	}
 
 	// TODO: somehow have a way to insert drop statements before gotos
-	if (statement.value.kind() == AST::Statement::Kind::Label) {
+	if (statement.value.is_label()) {
 		// for labels, we end the current basic block and create a new one for this id
 		IR::BasicBlock::ID new_id = statement.value.get_label().id.value();
 		// only replace the jump if we need to
@@ -611,7 +609,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 			basic_blocks.at(basic_blocks.size() - 1).jump = IR::BasicBlock::Goto {new_id};
 		basic_blocks.push_back(IR::BasicBlock {new_id, {}, std::monostate {}});
 		return {};
-	} else if (statement.value.kind() == AST::Statement::Kind::Return) {
+	} else if (statement.value.is_return()) {
 		// for return statements, we set it as our jump
 		IR::BasicBlock::Return return_ {
 			statement.value.get_return().value.transform([&basic_blocks, file_id, this](auto&& value) {
@@ -621,12 +619,12 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 		// we first compute it and then set it just in case a new basic block got created in the process
 		basic_blocks.at(basic_blocks.size() - 1).jump = std::move(return_);
 		return {};
-	} else if (statement.value.kind() == AST::Statement::Kind::Goto) {
+	} else if (statement.value.is_goto()) {
 		// goto statements are literally just jumps
 		basic_blocks.at(basic_blocks.size() - 1).jump
 			= IR::BasicBlock::Goto {statement.value.get_goto().destination_id.value()};
 		return {};
-	} else if (statement.value.kind() == AST::Statement::Kind::Branch) {
+	} else if (statement.value.is_branch()) {
 		// branch statements take a bit more effort
 		AST::Statement::Branch const& branch = statement.value.get_branch();
 		IR::Expression::Atom condition = extract_expression(branch.condition, basic_blocks, file_id).value;
@@ -652,9 +650,9 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 
 	// for expressions, it's a special case because we only care about function calls
 	// however, when we resolve expressions, we do extract all potential inner function calls
-	if (type_pool_.at(statement.value.get_expression().type.value()).kind() == TypeInfo::Kind::Bottom) return {};
+	if (type_pool_.at(statement.value.get_expression().type.value()).is_bottom()) return {};
 	auto expression = lower(statement.value.get_expression(), statement.span, basic_blocks, file_id);
-	if (expression.value.kind() != IR::Expression::Kind::FunctionCall) {
+	if (!expression.value.is_function_call()) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::warning(
 				"expression statement is not a function call",
@@ -712,7 +710,7 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 				     return std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump);
 			     }
 		     ),
-		     needs_to_return = return_type.value.get_atom().kind() != IR::Type::Atom::Kind::Void;
+		     needs_to_return = !return_type.value.get_atom().is_void();
 		if (!returns) {
 			// if it doesn't need to return, we can add the return manually
 			if (!needs_to_return) {

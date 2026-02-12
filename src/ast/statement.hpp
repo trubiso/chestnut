@@ -104,6 +104,24 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::If>, std::move(if_)});
 	}
 
+	inline bool is_declare() const { return kind() == Kind::Declare; }
+
+	inline bool is_set() const { return kind() == Kind::Set; }
+
+	inline bool is_expression() const { return kind() == Kind::Expression; }
+
+	inline bool is_return() const { return kind() == Kind::Return; }
+
+	inline bool is_scope() const { return kind() == Kind::Scope; }
+
+	inline bool is_label() const { return kind() == Kind::Label; }
+
+	inline bool is_goto() const { return kind() == Kind::Goto; }
+
+	inline bool is_branch() const { return kind() == Kind::Branch; }
+
+	inline bool is_if() const { return kind() == Kind::If; }
+
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Declare& get_declare() { return std::get<(size_t) Kind::Declare>(value); }

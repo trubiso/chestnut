@@ -11,10 +11,10 @@ bool Expression::can_be_lhs() const {
 	// TODO: change this once member access exists
 
 	// dereference is a valid lhs
-	if (kind() == Kind::UnaryOperation && get_unary_operation().operation == Token::Symbol::Star) return true;
+	if (is_unary_operation() && get_unary_operation().operation == Token::Symbol::Star) return true;
 	// identifier is a valid lhs
-	if (kind() != Kind::Atom) return false;
-	return get_atom().kind() == Atom::Kind::Identifier;
+	if (!is_atom()) return false;
+	return get_atom().is_identifier();
 }
 
 std::ostream& operator<<(std::ostream& os, Expression::Atom::NumberLiteral const& literal) {

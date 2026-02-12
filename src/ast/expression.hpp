@@ -86,6 +86,18 @@ struct Expression {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
 		}
 
+		inline bool is_identifier() const { return kind() == Kind::Identifier; }
+
+		inline bool is_number_literal() const { return kind() == Kind::NumberLiteral; }
+
+		inline bool is_string_literal() const { return kind() == Kind::StringLiteral; }
+
+		inline bool is_char_literal() const { return kind() == Kind::CharLiteral; }
+
+		inline bool is_bool_literal() const { return kind() == Kind::BoolLiteral; }
+
+		inline bool is_expression() const { return kind() == Kind::Expression; }
+
 		inline Identifier const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline Identifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
@@ -112,6 +124,8 @@ struct Expression {
 			return std::get<(size_t) Kind::Expression>(value);
 		}
 	};
+
+	// TODO: change these token symbol operations to be a restricted subset maybe
 
 	struct UnaryOperation {
 		std::unique_ptr<Spanned<Expression>> operand;
@@ -218,6 +232,18 @@ struct Expression {
                 }
 		);
 	}
+
+	inline bool is_atom() const { return kind() == Kind::Atom; }
+
+	inline bool is_unary_operation() const { return kind() == Kind::UnaryOperation; }
+
+	inline bool is_address_operation() const { return kind() == Kind::AddressOperation; }
+
+	inline bool is_binary_operation() const { return kind() == Kind::BinaryOperation; }
+
+	inline bool is_function_call() const { return kind() == Kind::FunctionCall; }
+
+	inline bool is_if() const { return kind() == Kind::If; }
 
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 

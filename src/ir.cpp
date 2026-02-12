@@ -5,7 +5,7 @@
 namespace IR {
 
 Type Type::clone() const {
-	if (kind() == Type::Kind::Atom) {
+	if (is_atom()) {
 		Type::Atom atom = get_atom();
 		return Type::make_atom(std::move(atom));
 	}

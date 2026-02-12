@@ -118,7 +118,7 @@ void Resolver::debug_print_type(TypeInfo type) const {
 	case TypeInfo::Kind::PartialInteger: break;
 	}
 
-	if (type.kind() == TypeInfo::Kind::Function) {
+	if (type.is_function()) {
 		TypeInfo::Function const& function = type.get_function();
 		std::cout << "(function with args (";
 		size_t count = 0;
@@ -130,7 +130,7 @@ void Resolver::debug_print_type(TypeInfo type) const {
 		std::cout << ") and return type ";
 		debug_print_type(function.return_);
 		std::cout << ")";
-	} else if (type.kind() == TypeInfo::Kind::SameAs) {
+	} else if (type.is_same_as()) {
 		std::cout << "=(";
 		size_t count = 0;
 		for (TypeInfo::ID subid : type.get_same_as().ids) {
@@ -138,17 +138,17 @@ void Resolver::debug_print_type(TypeInfo type) const {
 			if (++count < type.get_same_as().ids.size()) std::cout << " | ";
 		}
 		std::cout << ")";
-	} else if (type.kind() == TypeInfo::Kind::Pointer) {
+	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		std::cout << "(*" << (pointer.mutable_ ? "mut" : "const") << " ";
 		debug_print_type(pointer.pointee);
 		std::cout << ")";
-	} else if (type.kind() == TypeInfo::Kind::KnownInteger) {
+	} else if (type.is_known_integer()) {
 		AST::Type::Atom::Integer integer = type.get_known_integer().integer;
 		std::cout << AST::Type::Atom::make_integer(std::move(integer));
-	} else if (type.kind() == TypeInfo::Kind::KnownFloat) {
+	} else if (type.is_known_float()) {
 		std::cout << AST::Type::Atom::make_float(type.get_known_float().width);
-	} else if (type.kind() == TypeInfo::Kind::PartialInteger) {
+	} else if (type.is_partial_integer()) {
 		AST::Type::Atom::Integer integer = type.get_partial_integer().integer;
 
 		bool signed_is_known = type.get_partial_integer().signed_is_known;
@@ -181,7 +181,7 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	}
 
 	std::stringstream output {};
-	if (type.kind() == TypeInfo::Kind::Function) {
+	if (type.is_function()) {
 		TypeInfo::Function const& function = type.get_function();
 		output << "func(";
 		size_t count = 0;
@@ -191,7 +191,7 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 			if (++count < function.arguments.size()) output << ", ";
 		}
 		output << ") " << get_type_name(function.return_) << "";
-	} else if (type.kind() == TypeInfo::Kind::SameAs) {
+	} else if (type.is_same_as()) {
 		if (type.get_same_as().ids.size() > 1) output << '(';
 		size_t count = 0;
 		for (TypeInfo::ID subid : type.get_same_as().ids) {
@@ -199,15 +199,15 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 			if (++count < type.get_same_as().ids.size()) output << " | ";
 		}
 		if (type.get_same_as().ids.size() > 1) output << ')';
-	} else if (type.kind() == TypeInfo::Kind::Pointer) {
+	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		output << "*" << (pointer.mutable_ ? "mut" : "const") << " " << get_type_name(pointer.pointee);
-	} else if (type.kind() == TypeInfo::Kind::KnownInteger) {
+	} else if (type.is_known_integer()) {
 		AST::Type::Atom::Integer integer = type.get_known_integer().integer;
 		output << AST::Type::Atom::make_integer(std::move(integer));
-	} else if (type.kind() == TypeInfo::Kind::KnownFloat) {
+	} else if (type.is_known_float()) {
 		output << AST::Type::Atom::make_float(type.get_known_float().width);
-	} else if (type.kind() == TypeInfo::Kind::PartialInteger) {
+	} else if (type.is_partial_integer()) {
 		AST::Type::Atom::Integer integer = type.get_partial_integer().integer;
 
 		bool signed_is_known = type.get_partial_integer().signed_is_known;
@@ -257,7 +257,7 @@ std::vector<AST::SymbolID> Resolver::get_operator_candidates(Token::Symbol opera
 		// we store operators with the name of the symbol for now (this will most likely change)
 		if (symbol.name != get_variant_name(operator_)) continue;
 		// this should never fail
-		if (type_pool_.at(symbol.type).kind() != TypeInfo::Kind::Function) continue;
+		if (!type_pool_.at(symbol.type).is_function()) continue;
 		if (type_pool_.at(symbol.type).get_function().arguments.size() != (binary ? 2 : 1)) continue;
 		symbols.push_back(symbol.id);
 	}
@@ -268,7 +268,7 @@ void Resolver::set_same_as(TypeInfo::ID to, TypeInfo::ID from) {
 	// set_same_as(a, a) is a noop
 	if (to == from) return;
 	// the normal case works as always
-	if (type_pool_.at(from).kind() != TypeInfo::Kind::SameAs) {
+	if (!type_pool_.at(from).is_same_as()) {
 		type_pool_.at(to) = TypeInfo::make_same_as(from);
 		return;
 	}
@@ -289,7 +289,7 @@ Resolver::TypeInfo Resolver::unify_follow_references(
 	TypeInfo::ID    other_origin,
 	FileContext::ID file_id
 ) {
-	assert(type_pool_.at(same_as).kind() == TypeInfo::Kind::SameAs);
+	assert(type_pool_.at(same_as).is_same_as());
 	std::vector<TypeInfo::ID> const& ids = type_pool_.at(same_as).get_same_as().ids;
 
 	// if we have a single id, unify it as normal
@@ -370,8 +370,8 @@ void Resolver::unify_functions(
 	FileContext::ID file_id
 ) {
 	// ensure they're both functions
-	assert(type_pool_.at(function).kind() == TypeInfo::Kind::Function);
-	if (type_pool_.at(other).kind() != TypeInfo::Kind::Function) {
+	assert(type_pool_.at(function).is_function());
+	if (!type_pool_.at(other).is_function()) {
 		std::stringstream subtitle_stream {};
 		subtitle_stream << "expected both types to be functions; got " << get_type_name(other);
 		parsed_files.at(file_id).diagnostics.push_back(
@@ -441,8 +441,8 @@ void Resolver::unify_pointers(
 	TypeInfo::ID    other_origin,
 	FileContext::ID file_id
 ) {
-	assert(type_pool_.at(pointer).kind() == TypeInfo::Kind::Pointer);
-	if (type_pool_.at(other).kind() != TypeInfo::Kind::Pointer) {
+	assert(type_pool_.at(pointer).is_pointer());
+	if (!type_pool_.at(other).is_pointer()) {
 		std::stringstream subtitle_stream {};
 		subtitle_stream << "expected both types to be pointers; got " << get_type_name(other);
 		parsed_files.at(file_id).diagnostics.push_back(
@@ -486,24 +486,24 @@ void Resolver::unify(
 	TypeInfo &a = type_pool_.at(a_id), &b = type_pool_.at(b_id);
 
 	// follow references
-	if (a.kind() == TypeInfo::Kind::SameAs) {
+	if (a.is_same_as()) {
 		a = unify_follow_references(a_id, b_id, a_origin, b_origin, file_id);
 		return;
 	}
-	if (b.kind() == TypeInfo::Kind::SameAs) {
+	if (b.is_same_as()) {
 		b = unify_follow_references(b_id, a_id, b_origin, a_origin, file_id);
 		return;
 	}
 
 	// bottoms don't participate in unification
-	if (a.kind() == TypeInfo::Kind::Bottom || b.kind() == TypeInfo::Kind::Bottom) return;
+	if (a.is_bottom() || b.is_bottom()) return;
 
 	// make unknowns known
-	if (a.kind() == TypeInfo::Kind::Unknown) {
+	if (a.is_unknown()) {
 		set_same_as(a_id, b_id);
 		return;
 	}
-	if (b.kind() == TypeInfo::Kind::Unknown) {
+	if (b.is_unknown()) {
 		set_same_as(b_id, a_id);
 		return;
 	}
@@ -518,18 +518,16 @@ void Resolver::unify(
 	if (unify_basic_known(TypeInfo::Kind::Module, a_id, b_id, a_origin, b_origin, file_id)) return;
 
 	// functions
-	if (a.kind() == TypeInfo::Kind::Function) return unify_functions(a_id, b_id, a_origin, b_origin, file_id);
-	if (b.kind() == TypeInfo::Kind::Function) return unify_functions(b_id, a_id, b_origin, a_origin, file_id);
+	if (a.is_function()) return unify_functions(a_id, b_id, a_origin, b_origin, file_id);
+	if (b.is_function()) return unify_functions(b_id, a_id, b_origin, a_origin, file_id);
 
 	// pointers
-	if (a.kind() == TypeInfo::Kind::Pointer) return unify_pointers(a_id, b_id, a_origin, b_origin, file_id);
-	if (b.kind() == TypeInfo::Kind::Pointer) return unify_pointers(b_id, a_id, b_origin, a_origin, file_id);
+	if (a.is_pointer()) return unify_pointers(a_id, b_id, a_origin, b_origin, file_id);
+	if (b.is_pointer()) return unify_pointers(b_id, a_id, b_origin, a_origin, file_id);
 
 	// now only numeric types are left ([Known/Partial][Integer/Float])
-	bool a_known = a.kind() == TypeInfo::Kind::KnownInteger || a.kind() == TypeInfo::Kind::KnownFloat,
-	     b_known = b.kind() == TypeInfo::Kind::KnownInteger || b.kind() == TypeInfo::Kind::KnownFloat;
-	bool a_float = a.kind() == TypeInfo::Kind::KnownFloat || a.kind() == TypeInfo::Kind::PartialFloat,
-	     b_float = b.kind() == TypeInfo::Kind::KnownFloat || b.kind() == TypeInfo::Kind::PartialFloat;
+	bool a_known = a.is_known_integer() || a.is_known_float(), b_known = b.is_known_integer() || b.is_known_float();
+	bool a_float = a.is_known_float() || a.is_partial_float(), b_float = b.is_known_float() || b.is_partial_float();
 
 	// both must be either floats or integers
 	if (a_float != b_float) {
@@ -700,7 +698,7 @@ void Resolver::unify(TypeInfo::ID a_id, TypeInfo::ID b_id, FileContext::ID file_
 }
 
 bool Resolver::can_unify_follow_references(TypeInfo const& same_as, TypeInfo const& other) const {
-	assert(same_as.kind() == TypeInfo::Kind::SameAs);
+	assert(same_as.is_same_as());
 	std::vector<TypeInfo::ID> const& ids = same_as.get_same_as().ids;
 	return std::any_of(ids.cbegin(), ids.cend(), [this, other](TypeInfo::ID id) { return can_unify(id, other); });
 }
@@ -714,8 +712,8 @@ std::optional<bool> Resolver::can_unify_basic_known(TypeInfo::Kind kind, TypeInf
 
 bool Resolver::can_unify_functions(TypeInfo const& function, TypeInfo const& other) const {
 	// ensure they're both functions
-	assert(function.kind() == TypeInfo::Kind::Function);
-	if (other.kind() != TypeInfo::Kind::Function) { return false; }
+	assert(function.is_function());
+	if (!other.is_function()) { return false; }
 
 	TypeInfo::Function const &a_function = function.get_function(), &b_function = other.get_function();
 
@@ -736,8 +734,8 @@ bool Resolver::can_unify_functions(TypeInfo const& function, TypeInfo const& oth
 
 bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other) const {
 	// ensure they're both functions
-	assert(pointer.kind() == TypeInfo::Kind::Pointer);
-	if (other.kind() != TypeInfo::Kind::Pointer) { return false; }
+	assert(pointer.is_pointer());
+	if (!other.is_pointer()) { return false; }
 
 	TypeInfo::Pointer const &a_pointer = pointer.get_pointer(), &b_pointer = other.get_pointer();
 
@@ -762,15 +760,15 @@ bool Resolver::can_unify(TypeInfo::ID a, TypeInfo const& b) const {
 
 bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	// follow references
-	if (a.kind() == TypeInfo::Kind::SameAs) return can_unify_follow_references(a, b);
-	if (b.kind() == TypeInfo::Kind::SameAs) return can_unify_follow_references(b, a);
+	if (a.is_same_as()) return can_unify_follow_references(a, b);
+	if (b.is_same_as()) return can_unify_follow_references(b, a);
 
 	// bottoms don't participate in unification
-	if (a.kind() == TypeInfo::Kind::Bottom || b.kind() == TypeInfo::Kind::Bottom) return true;
+	if (a.is_bottom() || b.is_bottom()) return true;
 
 	// make unknowns known
-	if (a.kind() == TypeInfo::Kind::Unknown) return true;
-	if (b.kind() == TypeInfo::Kind::Unknown) return true;
+	if (a.is_unknown()) return true;
+	if (b.is_unknown()) return true;
 
 	// if any of them is a basic Known type, the other must be exactly the same
 	std::optional<bool> attempt;
@@ -787,18 +785,16 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	if (attempt.has_value()) return attempt.value();
 
 	// functions
-	if (a.kind() == TypeInfo::Kind::Function) return can_unify_functions(a, b);
-	if (b.kind() == TypeInfo::Kind::Function) return can_unify_functions(b, a);
+	if (a.is_function()) return can_unify_functions(a, b);
+	if (b.is_function()) return can_unify_functions(b, a);
 
 	// pointers
-	if (a.kind() == TypeInfo::Kind::Pointer) return can_unify_pointers(a, b);
-	if (b.kind() == TypeInfo::Kind::Pointer) return can_unify_pointers(b, a);
+	if (a.is_pointer()) return can_unify_pointers(a, b);
+	if (b.is_pointer()) return can_unify_pointers(b, a);
 
 	// now only numeric types are left ([Known/Partial][Integer/Float])
-	bool a_known = a.kind() == TypeInfo::Kind::KnownInteger || a.kind() == TypeInfo::Kind::KnownFloat,
-	     b_known = b.kind() == TypeInfo::Kind::KnownInteger || b.kind() == TypeInfo::Kind::KnownFloat;
-	bool a_float = a.kind() == TypeInfo::Kind::KnownFloat || a.kind() == TypeInfo::Kind::PartialFloat,
-	     b_float = b.kind() == TypeInfo::Kind::KnownFloat || b.kind() == TypeInfo::Kind::PartialFloat;
+	bool a_known = a.is_known_integer() || a.is_known_float(), b_known = b.is_known_integer() || b.is_known_float();
+	bool a_float = a.is_known_float() || a.is_partial_float(), b_float = b.is_known_float() || b.is_partial_float();
 
 	// both must be either floats or integers
 	if (a_float != b_float) return false;
@@ -983,7 +979,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 	// first, we ensure that there is at least one callable item
 	if (!type_pool_.at(callee_id).is_callable(type_pool_)) {
-		if (type_pool_.at(callee_id).kind() != TypeInfo::Kind::Bottom)
+		if (!type_pool_.at(callee_id).is_bottom())
 			parsed_files.at(file_id).diagnostics.push_back(
 				Diagnostic::error(
 					"type mismatch",
@@ -1013,7 +1009,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		)
 	);
 	for (TypeInfo::ID callable_id : callable) {
-		assert(type_pool_.at(callable_id).kind() == TypeInfo::Kind::Function);
+		assert(type_pool_.at(callable_id).is_function());
 		auto const& function_arguments     = type_pool_.at(callable_id).get_function().arguments;
 		bool        argument_count_matches = function_arguments.size() == provided_arguments;
 		if (!argument_count_matches) {
@@ -1087,11 +1083,11 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 				std::move(rejections)
 			)
 		);
+
 		// we need to "unresolve" the callee identifier just in case
-		if (function_call.callee->value.kind() == AST::Expression::Kind::Atom
-		    || function_call.callee->value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier) {
+		if (function_call.callee->value.is_atom() || function_call.callee->value.get_atom().is_identifier())
 			function_call.callee->value.get_atom().get_identifier().id = {};
-		}
+
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
@@ -1117,7 +1113,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	std::vector<UndecidedOverload::Candidate> candidates {};
 	candidates.reserve(callable_filtered.size());
 	for (TypeInfo::ID callable_id : callable_filtered) {
-		assert(type_pool_.at(callable_id).kind() == TypeInfo::Kind::Function);
+		assert(type_pool_.at(callable_id).is_function());
 		// now we must create the function call type according to the function (due to labeled
 		// arguments)
 		auto const& function_arguments = type_pool_.at(callable_id).get_function().arguments;
@@ -1147,8 +1143,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 	std::optional<AST::Identifier*> identifier = std::nullopt;
 
-	if (function_call.callee->value.kind() == AST::Expression::Kind::Atom
-	    || function_call.callee->value.get_atom().kind() == AST::Expression::Atom::Kind::Identifier)
+	if (function_call.callee->value.is_atom() || function_call.callee->value.get_atom().is_identifier())
 		identifier = &function_call.callee->value.get_atom().get_identifier();
 
 	UndecidedOverload overload {expr_type, identifier, std::move(candidates), std::move(rejections), span, file_id};
@@ -1171,9 +1166,8 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, F
 	}
 
 	// for operations, we turn them into function calls and then resolve them
-	if (expression.kind() == AST::Expression::Kind::UnaryOperation
-	    || expression.kind() == AST::Expression::Kind::BinaryOperation) {
-		bool is_unary = expression.kind() == AST::Expression::Kind::UnaryOperation;
+	if (expression.is_unary_operation() || expression.is_binary_operation()) {
+		bool is_unary = expression.is_unary_operation();
 
 		Token::Symbol operator_ = is_unary ? expression.get_unary_operation().operation
 		                                   : expression.get_binary_operation().operation;
@@ -1230,7 +1224,7 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, F
 
 	// for address operations, we infer the inner type and deduce the type from there (no overloads are supported
 	// for these)
-	if (expression.kind() == AST::Expression::Kind::AddressOperation) {
+	if (expression.is_address_operation()) {
 		TypeInfo::ID inner
 			= infer(expression.get_address_operation().operand->value,
 		                expression.get_address_operation().operand->span,
@@ -1257,9 +1251,9 @@ void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 	TypeInfo::ID rhs_type = infer(set.rhs.value, set.rhs.span, file_id);
 	// skip all invalid LHS
 	if (!set.lhs.value.can_be_lhs()) return;
-	if (set.lhs.value.kind() == AST::Expression::Kind::Atom) {
+	if (set.lhs.value.is_atom()) {
 		// identifiers
-		if (set.lhs.value.get_atom().kind() != AST::Expression::Atom::Kind::Identifier) return;
+		if (!set.lhs.value.get_atom().is_identifier()) return;
 		// if name resolution failed, we must move on
 		if (!set.lhs.value.get_atom().get_identifier().id.has_value()) return;
 		if (set.lhs.value.get_atom().get_identifier().id.value().empty()) return;
@@ -1272,11 +1266,11 @@ void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 		}
 		TypeInfo::ID lhs_type = infer(set.lhs.value, set.lhs.span, file_id);
 		unify(lhs_type, rhs_type, file_id);
-	} else if (set.lhs.value.kind() == AST::Expression::Kind::UnaryOperation) {
+	} else if (set.lhs.value.is_unary_operation()) {
 		// derefs
 		if (set.lhs.value.get_unary_operation().operation != Token::Symbol::Star) return;
 		TypeInfo::ID lhs_type = infer(set.lhs.value, set.lhs.span, file_id);
-		if (type_pool_.at(lhs_type).kind() != TypeInfo::Kind::Pointer) return;
+		if (!type_pool_.at(lhs_type).is_pointer()) return;
 		TypeInfo::Pointer const& pointer = type_pool_.at(lhs_type).get_pointer();
 		unify(pointer.pointee, rhs_type, lhs_type, rhs_type, file_id);
 	}
@@ -1318,7 +1312,7 @@ void Resolver::infer(Spanned<AST::Statement>& statement, AST::SymbolID function,
 
 	// for expression statements, we want to throw a warning if it results in a non-void result
 	TypeInfo::ID type_id = infer(statement.value.get_expression(), statement.span, file_id);
-	if (type_pool_.at(type_id).kind() == TypeInfo::Kind::Bottom) return;  // skip bottoms
+	if (type_pool_.at(type_id).is_bottom()) return;  // skip bottoms
 	if (!can_unify(type_id, TypeInfo::make_known_void())) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::warning(
@@ -1368,7 +1362,7 @@ void Resolver::infer_types() {
 		for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
 			for (auto& [_, id] : candidate.call_type.get_function().arguments) {
 				auto& type = type_pool_.at(id);
-				if (type.kind() == TypeInfo::Kind::PartialInteger) {
+				if (type.is_partial_integer()) {
 					auto& partial_integer = type.get_partial_integer();
 					// we will fill in to a signed integer of default width
 					bool signed_ = partial_integer.signed_is_known
@@ -1400,7 +1394,7 @@ void Resolver::infer_types() {
 						TypeInfo::KnownInteger {std::move(full_integer.value())}
 					);
 					changes_made = true;
-				} else if (type.kind() == TypeInfo::Kind::PartialFloat) {
+				} else if (type.is_partial_float()) {
 					type = TypeInfo::make_known_float(
 						TypeInfo::KnownFloat {
 							(AST::Type::Atom::Float::Width) IR::DEFAULT_FLOAT_WIDTH
