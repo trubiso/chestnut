@@ -13,6 +13,7 @@ Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom) {
 	case AST::Type::Atom::Kind::Void:     return make_known_void();
 	case AST::Type::Atom::Kind::Char:     return make_known_char();
 	case AST::Type::Atom::Kind::Bool:     return make_known_bool();
+	case AST::Type::Atom::Kind::Named:    return make_bottom();  // TODO: handle named types
 	case AST::Type::Atom::Kind::Inferred: return make_unknown();
 	case AST::Type::Atom::Kind::Integer:  break;
 	}

@@ -259,6 +259,7 @@ private:
 		std::variant<
 			AST::Module*,
 			AST::Function*,
+			AST::Struct*,
 			IR::Module,
 			IR::Function,
 			IR::BuiltInFunction,
@@ -305,6 +306,8 @@ private:
 	void identify(AST::Identifier&);
 	/// Identifies the module with an ID and its non-alias items.
 	void identify(AST::Module&, bool exported, FileContext::ID);
+	/// Identifies the struct with an ID.
+	void identify(AST::Struct&, bool exported, FileContext::ID);
 	/// Identifies the function with an ID.
 	void identify(AST::Function&, bool exported, FileContext::ID);
 	/// Identifies all module items with an ID, but does not resolve aliases.

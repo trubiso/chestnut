@@ -32,7 +32,25 @@ void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file
 			identify(std::get<AST::Function>(value), std::get<bool>(item.value), file_id);
 		else if (std::holds_alternative<AST::Module>(value))
 			identify(std::get<AST::Module>(value), std::get<bool>(item.value), file_id);
+		else if (std::holds_alternative<AST::Struct>(value))
+			identify(std::get<AST::Struct>(value), std::get<bool>(item.value), file_id);
 	}
+}
+
+void Resolver::identify(AST::Struct& struct_, bool exported, FileContext::ID file_id) {
+	identify(struct_.name.value);
+	symbol_pool_.push_back(
+		Symbol {struct_.name.value.id.value()[0],
+	                file_id,
+	                struct_.name.span,
+	                struct_.name.value.name(),
+	                &struct_,
+	                // TODO: register struct type
+	                0,
+	                false,
+	                exported,
+	                {}}
+	);
 }
 
 void Resolver::identify(AST::Function& function, bool exported, FileContext::ID file_id) {
