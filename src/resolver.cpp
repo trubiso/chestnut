@@ -27,6 +27,8 @@ std::ostream& Resolver::print(std::ostream& os, IR::Module const& module) const 
 			print(os, std::get<IR::Module>(symbol_pool_.at(item).item));
 		else if (std::holds_alternative<IR::Function>(symbol_pool_.at(item).item))
 			os << std::get<IR::Function>(symbol_pool_.at(item).item);
+		else if (std::holds_alternative<IR::Struct>(symbol_pool_.at(item).item))
+			os << std::get<IR::Struct>(symbol_pool_.at(item).item);
 		os << '\n';
 	}
 	os.iword(0)--;

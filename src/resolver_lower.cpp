@@ -24,6 +24,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 	case TypeInfo::Kind::Module:
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::Named:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::PartialInteger: break;
@@ -73,6 +74,11 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
+	} else if (type.is_named()) {
+		// the resolver will already have thrown diagnostics, so let's error
+		if (!type.get_named()->id.has_value() || type.get_named()->id.value().empty())
+			return IR::Type::make_atom(IR::Type::Atom::make_error());
+		return IR::Type::make_atom(IR::Type::Atom::make_named(type.get_named()->id.value()[0]));
 	} else if (type.is_pointer()) {
 		return IR::Type::make_pointer(
 			IR::Type::Pointer {
@@ -150,6 +156,7 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom atom, Span span, FileCont
 	case AST::Type::Atom::Kind::Char:     return {span, IR::Type::make_atom(IR::Type::Atom::make_char())};
 	case AST::Type::Atom::Kind::Bool:     return {span, IR::Type::make_atom(IR::Type::Atom::make_bool())};
 	case AST::Type::Atom::Kind::Integer:
+	case AST::Type::Atom::Kind::Named:
 	case AST::Type::Atom::Kind::Inferred: break;
 	}
 
@@ -181,6 +188,11 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom atom, Span span, FileCont
 					IR::Type::Atom::make_integer(IR::Type::Atom::Integer::size(integer.is_signed()))
 				)};
 		}
+	} else if (atom.is_named()) {
+		// the resolver will already have thrown diagnostics, so let's error
+		if (!atom.get_named().id.has_value() || atom.get_named().id.value().empty())
+			return {span, IR::Type::make_atom(IR::Type::Atom::make_error())};
+		return {span, IR::Type::make_atom(IR::Type::Atom::make_named(atom.get_named().id.value()[0]))};
 	} else if (atom.is_inferred()) {
 		// this is invalid!! top level types must not be inferred
 		parsed_files.at(file_id).diagnostics.push_back(
@@ -480,6 +492,8 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 		case IR::Type::Atom::Kind::Void:  break;
 		case IR::Type::Atom::Kind::Error: break;
 		case IR::Type::Atom::Kind::Char:
+		// TODO: default values for structs (for now, just default value for each field)
+		case IR::Type::Atom::Kind::Named:
 			parsed_files.at(file_id).diagnostics.push_back(
 				Diagnostic::error(
 					"no default value",
@@ -760,6 +774,24 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 	};
 }
 
+IR::Struct Resolver::lower(AST::Struct& struct_, FileContext::ID file_id) {
+	std::vector<IR::Struct::Field> fields {};
+	fields.reserve(struct_.fields.size());
+	std::transform(
+		struct_.fields.begin(),
+		struct_.fields.end(),
+		std::back_inserter(fields),
+		[&](AST::Struct::Field& field) {
+			return IR::Struct::Field {
+				Spanned {field.name.span, field.name.value.name()},
+				lower_type(std::move(field.type), file_id)
+			};
+		}
+	);
+
+	return IR::Struct {lower_identifier(struct_.name), std::move(fields)};
+}
+
 IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id) {
 	IR::Module module {lower_identifier(original_module.name), {}};
 	// we don't need aliases anymore, those are purely for name resolution
@@ -778,6 +810,11 @@ IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id
 			AST::Module& submodule                       = std::get<AST::Module>(value);
 			get_single_symbol(submodule.name.value).item = lower(submodule, file_id);
 			module.items.push_back(submodule.name.value.id.value()[0]);
+		} else if (std::holds_alternative<AST::Struct>(value)) {
+			AST::Struct& struct_                       = std::get<AST::Struct>(value);
+			IR::Struct   lowered_struct_               = lower(struct_, file_id);
+			get_single_symbol(struct_.name.value).item = std::move(lowered_struct_);
+			module.items.push_back(struct_.name.value.id.value()[0]);
 		}
 	}
 	return module;

@@ -274,6 +274,7 @@ private:
 			IR::Module,
 			IR::Function,
 			IR::BuiltInFunction,
+			IR::Struct,
 			std::monostate>
 			item;
 
@@ -619,8 +620,10 @@ private:
 	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Set const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID);
 	std::optional<Spanned<IR::Statement>> lower(Spanned<AST::Statement> const&, AST::Function&, std::vector<IR::BasicBlock>&, FileContext::ID);
 	void                                  lower(std::vector<Spanned<AST::Statement>> const&, AST::Function&, std::vector<IR::BasicBlock>&, FileContext::ID);
-	IR::Function                          lower(AST::Function&, FileContext::ID);
-	IR::Module                            lower(AST::Module&, FileContext::ID);
+
+	IR::Function lower(AST::Function&, FileContext::ID);
+	IR::Struct   lower(AST::Struct&, FileContext::ID);
+	IR::Module   lower(AST::Module&, FileContext::ID);
 	/// Lowers all files into IR modules.
 	std::vector<IR::Module> lower();
 };

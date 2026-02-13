@@ -26,6 +26,7 @@ std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	case Type::Atom::Kind::Void:    return os << "void";
 	case Type::Atom::Kind::Char:    return os << "char";
 	case Type::Atom::Kind::Bool:    return os << "bool";
+	case Type::Atom::Kind::Named:   return os << '@' << atom.get_named();
 	case Type::Atom::Kind::Error:   return os << "(error)";
 	}
 
@@ -206,7 +207,7 @@ std::ostream& operator<<(std::ostream& os, Function const& function) {
 		os << '@' << arg.name.value << ": " << arg.type.value;
 		if (++count < function.arguments.size()) os << ", ";
 	}
-	os << "): ";
+	os << ") -> " << function.return_type.value << ": ";
 	if (function.body.empty()) return os << "(empty body)";
 	os.iword(0)++;
 	for (BasicBlock const& basic_block : function.body) {
@@ -216,6 +217,18 @@ std::ostream& operator<<(std::ostream& os, Function const& function) {
 	}
 	os.iword(0)--;
 	return os << '\n';
+}
+
+std::ostream& operator<<(std::ostream& os, Struct const& struct_) {
+	os << "declare struct @" << struct_.name.value << " w/ fields: {\n";
+	os.iword(0)++;
+	for (Struct::Field const& field : struct_.fields) {
+		for (long i = 0; i < os.iword(0); ++i) os << "    ";
+		std::cout << field.name.value << ": " << field.type.value << "\n";
+	}
+	os.iword(0)--;
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
+	return os << "}";
 }
 
 }  // namespace IR

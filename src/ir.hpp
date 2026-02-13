@@ -77,9 +77,16 @@ struct Type {
 			}
 		};
 
-		enum class Kind { Integer, Float, Void, Char, Bool, Error };
+		enum class Kind { Integer, Float, Void, Char, Bool, Named, Error };
 
-		typedef std::variant<Integer, Float, std::monostate, std::monostate, std::monostate, std::monostate>
+		typedef std::variant<
+			Integer,
+			Float,
+			std::monostate,
+			std::monostate,
+			std::monostate,
+			Identifier,
+			std::monostate>
 			value_t;
 
 		value_t value;
@@ -95,6 +102,8 @@ struct Type {
 		inline bool is_char() const { return kind() == Kind::Char; }
 
 		inline bool is_bool() const { return kind() == Kind::Bool; }
+
+		inline bool is_named() const { return kind() == Kind::Named; }
 
 		inline bool is_error() const { return kind() == Kind::Error; }
 
@@ -118,6 +127,10 @@ struct Type {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Bool>, std::monostate {}});
 		}
 
+		inline static Atom make_named(Identifier id) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Named>, id});
+		}
+
 		inline static Atom make_error() {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Error>, std::monostate {}});
 		}
@@ -125,6 +138,8 @@ struct Type {
 		inline Integer const& get_integer() const { return std::get<(size_t) Kind::Integer>(value); }
 
 		inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
+
+		inline Identifier const& get_named() const { return std::get<(size_t) Kind::Named>(value); }
 	};
 
 	struct Pointer {
@@ -475,6 +490,19 @@ struct Function {
 };
 
 std::ostream& operator<<(std::ostream&, Function const&);
+
+struct Struct {
+	Spanned<Identifier> name;
+
+	struct Field {
+		Spanned<std::string> name;
+		Spanned<Type>        type;
+	};
+
+	std::vector<Field> fields;
+};
+
+std::ostream& operator<<(std::ostream&, Struct const&);
 
 struct Module {
 	Spanned<Identifier>     name;
