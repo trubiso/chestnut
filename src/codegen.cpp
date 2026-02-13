@@ -18,8 +18,8 @@
 #include <llvm/Transforms/Utils/Mem2Reg.h>
 
 void CodeGenerator::process(std::vector<IR::Module> const& modules, std::string of, Optimization optimization) {
-	create_all_functions(modules);
-	emit_all_functions(modules);
+	create_all(modules);
+	emit_all(modules);
 
 	// TODO: move all of this to main and make this more sophisticated
 	auto target_triple = llvm::sys::getDefaultTargetTriple();
@@ -127,6 +127,7 @@ llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom) {
 			return program_.getDataLayout().getIndexType(context_, 0);
 		}
 		[[assume(false)]];
+	case IR::Type::Atom::Kind::Named: return llvm::StructType::getTypeByName(context_, get_name(atom.get_named()));
 	}
 }
 
@@ -340,6 +341,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 		case IR::Type::Atom::Kind::Void:
 		case IR::Type::Atom::Kind::Char:
 		case IR::Type::Atom::Kind::Bool:
+		case IR::Type::Atom::Kind::Named:
 		case IR::Type::Atom::Kind::Error:
 			std::cout << "genuinely what are you doing" << std::endl;
 			std::exit(0);
@@ -499,6 +501,21 @@ void CodeGenerator::emit_function(IR::Function const& ir_function) {
 	llvm::verifyFunction(*function, &llvm::errs());
 }
 
+void CodeGenerator::emit_struct(IR::Struct const& struct_) {
+	llvm::StructType* struct_type = llvm::StructType::getTypeByName(context_, get_name(struct_.name.value));
+
+	std::vector<llvm::Type*> field_types {};
+	field_types.reserve(struct_.fields.size());
+	std::transform(
+		struct_.fields.cbegin(),
+		struct_.fields.cend(),
+		std::back_inserter(field_types),
+		[this](IR::Struct::Field const& field) { return generate_type(field.type.value); }
+	);
+
+	struct_type->setBody(field_types);
+}
+
 void CodeGenerator::create_function(IR::Function const& function) {
 	std::vector<llvm::Type*> argument_types {};
 	std::transform(
@@ -558,29 +575,37 @@ void CodeGenerator::create_function(IR::Function const& function) {
 	);
 }
 
-void CodeGenerator::create_all_functions(IR::Module const& module) {
+void CodeGenerator::create_struct(IR::Struct const& struct_) {
+	llvm::StructType::create(context_, get_name(struct_.name.value));
+}
+
+void CodeGenerator::create_all(IR::Module const& module) {
 	for (AST::SymbolID item : module.items) {
 		if (std::holds_alternative<IR::Module>(symbols_.at(item).item))
-			create_all_functions(std::get<IR::Module>(symbols_.at(item).item));
+			create_all(std::get<IR::Module>(symbols_.at(item).item));
 		else if (std::holds_alternative<IR::Function>(symbols_.at(item).item))
 			create_function(std::get<IR::Function>(symbols_.at(item).item));
+		else if (std::holds_alternative<IR::Struct>(symbols_.at(item).item))
+			create_struct(std::get<IR::Struct>(symbols_.at(item).item));
 	}
 }
 
-void CodeGenerator::create_all_functions(std::vector<IR::Module> const& modules) {
-	for (IR::Module const& module : modules) { create_all_functions(module); }
+void CodeGenerator::create_all(std::vector<IR::Module> const& modules) {
+	for (IR::Module const& module : modules) { create_all(module); }
 }
 
-void CodeGenerator::emit_all_functions(IR::Module const& module) {
+void CodeGenerator::emit_all(IR::Module const& module) {
 	for (AST::SymbolID item : module.items) {
 		if (std::holds_alternative<IR::Module>(symbols_.at(item).item))
-			emit_all_functions(std::get<IR::Module>(symbols_.at(item).item));
+			emit_all(std::get<IR::Module>(symbols_.at(item).item));
 		else if (std::holds_alternative<IR::Function>(symbols_.at(item).item))
 			emit_function(std::get<IR::Function>(symbols_.at(item).item));
+		else if (std::holds_alternative<IR::Struct>(symbols_.at(item).item))
+			emit_struct(std::get<IR::Struct>(symbols_.at(item).item));
 	}
 }
 
-void CodeGenerator::emit_all_functions(std::vector<IR::Module> const& modules) {
-	for (IR::Module const& module : modules) { emit_all_functions(module); }
+void CodeGenerator::emit_all(std::vector<IR::Module> const& modules) {
+	for (IR::Module const& module : modules) { emit_all(module); }
 	llvm::verifyModule(program_, &llvm::errs());
 }

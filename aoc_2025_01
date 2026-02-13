@@ -1,4 +1,4 @@
-struct Info { direction: bool; rotation: bool }
+struct Info { direction: bool; rotation: uint32 }
 
 @extern func get_info() Info;
 

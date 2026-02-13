@@ -52,6 +52,8 @@ std::vector<IR::Symbol> Resolver::export_symbols() {
 					? decltype(IR::Symbol::item) {std::move(std::get<IR::Function>(symbol.item))}
 				: std::holds_alternative<IR::BuiltInFunction>(symbol.item)
 					? decltype(IR::Symbol::item) {std::get<IR::BuiltInFunction>(symbol.item)}
+				: std::holds_alternative<IR::Struct>(symbol.item)
+					? decltype(IR::Symbol::item) {std::move(std::get<IR::Struct>(symbol.item))}
 					: std::monostate {},
 				symbol.mutable_
 			}

@@ -53,12 +53,15 @@ private:
 
 	/// Assumes the function has already been created.
 	void emit_function(IR::Function const&);
+	/// Assumes the struct has already been created.
+	void emit_struct(IR::Struct const&);
 
 	void create_function(IR::Function const&);
+	void create_struct(IR::Struct const&);
 
-	void create_all_functions(IR::Module const&);
-	void create_all_functions(std::vector<IR::Module> const&);
+	void create_all(IR::Module const&);
+	void create_all(std::vector<IR::Module> const&);
 
-	void emit_all_functions(IR::Module const&);
-	void emit_all_functions(std::vector<IR::Module> const&);
+	void emit_all(IR::Module const&);
+	void emit_all(std::vector<IR::Module> const&);
 };
