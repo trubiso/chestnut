@@ -223,6 +223,43 @@ Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type> spanned_type, FileCont
 	}
 }
 
+std::optional<Spanned<IR::Expression>>
+Resolver::lower_get_default_value(IR::Type const& type, Span span, FileContext::ID file_id) {
+	// TODO: default values for structs (for now, just default value for each field)
+	if (!type.is_atom()) goto diagnostic;
+
+	switch (type.get_atom().kind()) {
+	case IR::Type::Atom::Kind::Integer:
+	case IR::Type::Atom::Kind::Float:
+		return Spanned {
+			span,
+			IR::Expression::make_atom(
+				IR::Expression::Atom::make_literal(
+					IR::Expression::Atom::Literal::Kind::Number,
+					"0",
+					type.clone()
+				)
+			)
+		};
+	case IR::Type::Atom::Kind::Bool:
+		return Spanned {span, IR::Expression::make_atom(IR::Expression::Atom::make_bool(false, type.clone()))};
+	case IR::Type::Atom::Kind::Void:
+	case IR::Type::Atom::Kind::Error: return {};
+	case IR::Type::Atom::Kind::Char:
+	case IR::Type::Atom::Kind::Named: goto diagnostic;
+	}
+
+diagnostic:
+	parsed_files.at(file_id).diagnostics.push_back(
+		Diagnostic::error(
+			"no default value",
+			"this variable's type has no defined default value. if you intended to have an undefined value, specify it by writing '= undefined'",
+			{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+		)
+	);
+	return {};
+}
+
 std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>>
 Resolver::lower(Spanned<AST::Identifier> const& identifier, bool allow_functions) {
 	auto data = lower(identifier.value, allow_functions);
@@ -473,36 +510,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	if (declare.is_undefined) assert(!value.has_value());
 
 	// value will only be {} if it is undefined
-	if (!declare.is_undefined && !value.has_value()) {
-		switch (type.get_atom().kind()) {
-		case IR::Type::Atom::Kind::Integer:
-		case IR::Type::Atom::Kind::Float:
-			value
-				= {span,
-			           IR::Expression::make_atom(
-					   IR::Expression::Atom::make_literal(
-						   IR::Expression::Atom::Literal::Kind::Number,
-						   "0",
-						   type.clone()
-					   )
-				   )};
-			break;
-		case IR::Type::Atom::Kind::Bool:
-			value = {span, IR::Expression::make_atom(IR::Expression::Atom::make_bool(false, type.clone()))};
-		case IR::Type::Atom::Kind::Void:  break;
-		case IR::Type::Atom::Kind::Error: break;
-		case IR::Type::Atom::Kind::Char:
-		// TODO: default values for structs (for now, just default value for each field)
-		case IR::Type::Atom::Kind::Named:
-			parsed_files.at(file_id).diagnostics.push_back(
-				Diagnostic::error(
-					"no default value",
-					"this variable's type has no defined default value. if you intended to have an undefined value, specify it by writing '= undefined'",
-					{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
-				)
-			);
-		}
-	}
+	if (!declare.is_undefined && !value.has_value()) value = lower_get_default_value(type, span, file_id);
 
 	return Spanned<IR::Statement> {
 		span,
