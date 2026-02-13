@@ -423,6 +423,9 @@ private:
 	);
 
 	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
+	void resolve(AST::Type::Atom&, Span, Scope const&, FileContext::ID);
+	void resolve(AST::Type&, Span, Scope const&, FileContext::ID);
+	void resolve(Spanned<AST::Type>&, Scope const&, FileContext::ID);
 	void resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
 	void resolve(AST::Expression::UnaryOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::AddressOperation&, Scope const&, FileContext::ID);
@@ -436,6 +439,7 @@ private:
 	void resolve(Spanned<AST::Statement>&, Scope&, FileContext::ID);
 	void resolve(AST::Scope&, Scope, FileContext::ID);
 	void resolve(AST::Function&, Scope, FileContext::ID);
+	void resolve(AST::Struct&, Scope const&, FileContext::ID);
 	void resolve(AST::Module&, Scope, FileContext::ID);
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();

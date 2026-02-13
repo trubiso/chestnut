@@ -145,7 +145,7 @@ void Resolver::resolve(
 		Spanned<std::string> const& fragment = identifier.path[i];
 		if (cannot_traverse_further) {
 			// for now, this can only mean it is a function, which does not have subitems
-			std::cout << "tried to access a function's subitems !" << std::endl;
+			std::cout << "tried to access a function/struct's subitems !" << std::endl;
 			break;
 		}
 
@@ -168,6 +168,10 @@ void Resolver::resolve(
 					pointed_items.push_back(&get_single_symbol(id));
 					added_items++;
 				}
+				cannot_traverse_further = true;
+			} else if (std::holds_alternative<AST::Struct>(value)) {
+				pointed_items.push_back(&get_single_symbol(std::get<AST::Struct>(value).name.value));
+				added_items++;
 				cannot_traverse_further = true;
 			} else if (std::holds_alternative<AST::Module>(value)) {
 				root_module = &std::get<AST::Module>(value);
@@ -213,13 +217,15 @@ void Resolver::resolve(
 			for (auto const& item : root_module->body.items) {
 				auto const& value = std::get<AST::Module::InnerItem>(item.value);
 				if (std::holds_alternative<AST::Import>(value)) continue;
-				std::optional<std::vector<AST::SymbolID>> const* symbol_id;
+				std::optional<std::vector<AST::SymbolID>> const* symbol_id = nullptr;
 				if (std::holds_alternative<AST::Function>(value)) {
 					symbol_id = &std::get<AST::Function>(value).name.value.id;
 				} else if (std::holds_alternative<AST::Module>(value)) {
 					symbol_id = &std::get<AST::Module>(value).name.value.id;
 				} else if (std::holds_alternative<AST::Alias>(value)) {
 					symbol_id = &std::get<AST::Alias>(value).value.value.id;
+				} else if (std::holds_alternative<AST::Struct>(value)) {
+					symbol_id = &std::get<AST::Struct>(value).name.value.id;
 				} else [[assume(false)]];
 
 				if (!symbol_id->has_value()) continue;
@@ -251,6 +257,38 @@ void Resolver::resolve(
 
 	// if we didn't find anything, we intentionally pass on the empty vector to the identifier
 	identifier.id = pointed_ids;
+}
+
+void Resolver::resolve(AST::Type::Atom& atom, Span span, Scope const& scope, FileContext::ID file_id) {
+	if (!atom.is_named()) return;
+	resolve(atom.get_named(), span, scope, file_id);
+
+	// check that we actually got a type
+	if (atom.get_named().id.has_value()) {
+		if (atom.get_named().id.value().empty()) return;
+		if (atom.get_named().id.value().size() > 1) {
+			// TODO: diagnostic (although this likely happens if you use a function name as a type name, in
+			// which case we should punish the author of the code)
+			std::cout << "ambiguous type, what did you do???" << std::endl;
+			std::exit(0);
+		}
+		if (!std::holds_alternative<AST::Struct*>(get_single_symbol(atom.get_named()).item)) {
+			// TODO: proper diagnostic instead of guilt-tripping
+			std::cout << "why did you use a non-struct as a type? :(" << std::endl;
+			std::exit(0);
+		}
+	}
+}
+
+void Resolver::resolve(AST::Type& type, Span span, Scope const& scope, FileContext::ID file_id) {
+	switch (type.kind()) {
+	case AST::Type::Kind::Atom:    return resolve(type.get_atom(), span, scope, file_id);
+	case AST::Type::Kind::Pointer: return resolve(type.get_pointer().type->value, span, scope, file_id);
+	}
+}
+
+void Resolver::resolve(Spanned<AST::Type>& type, Scope const& scope, FileContext::ID file_id) {
+	return resolve(type.value, type.span, scope, file_id);
 }
 
 void Resolver::resolve(
@@ -286,7 +324,6 @@ void Resolver::resolve(
 void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const& scope, FileContext::ID file_id) {
 	resolve(*function_call.callee, scope, file_id);
 	for (auto& argument : function_call.arguments.ordered) { resolve(argument, scope, file_id); }
-	// we cannot resolve labels just yet, because we need to know the type of the function and signature and etc
 	for (auto& argument : function_call.arguments.labeled) { resolve(std::get<1>(argument), scope, file_id); }
 }
 
@@ -320,6 +357,7 @@ void Resolver::resolve(Spanned<AST::Expression>& expression, Scope const& scope,
 }
 
 void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileContext::ID file_id) {
+	if (declare.type.has_value()) resolve(declare.type.value(), scope, file_id);
 	// resolve the value before the name, otherwise 'const a = a;' would not work
 	if (declare.value.has_value()) resolve(declare.value.value(), scope, file_id);
 	if (declare.name.value.id.has_value()) return;
@@ -377,14 +415,36 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 void Resolver::resolve(AST::Function& function, Scope scope, FileContext::ID file_id) {
 	Scope child_scope {&scope, {}};
 	for (auto& argument : function.arguments) {
+		resolve(argument.type, scope, file_id);
 		// intentionally replace (shadowing)
 		child_scope.symbols.insert_or_assign(argument.name.value.name(), argument.name.value.id.value());
 	}
+	resolve(function.return_type, scope, file_id);
 	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
+}
+
+void Resolver::resolve(AST::Struct& struct_, Scope const& scope, FileContext::ID file_id) {
+	// as of now, we just resolve all fields within the struct
+	for (auto& field : struct_.fields) {
+		resolve(field.type, scope, file_id);
+		// detect immediately recursive types (we allow pointers though, for now)
+		if (field.type.value.is_atom()
+		    && field.type.value.get_atom().is_named()
+		    && field.type.value.get_atom().get_named().id.value().size() == 1
+		    && field.type.value.get_atom().get_named().id.value().at(0)
+		               == struct_.name.value.id.value().at(0)) {
+			// TODO: move this somewhere else, probably during an IR pass, because we can't really detect
+			// mutually recursive types this way, and we don't know how the other type will use this, etc
+			std::cout << "recursive type detected !!" << std::endl;
+			std::exit(0);
+		}
+	}
 }
 
 void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id) {
 	Scope child_scope {&scope, {}};
+
+	// "hoist" module items by resolving those first
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
@@ -463,15 +523,21 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 					pushed_diagnostic = true;
 				}
 			}
+		} else if (std::holds_alternative<AST::Struct>(value)) {
+			auto& struct_ = std::get<AST::Struct>(value);
+			child_scope.symbols.emplace(struct_.name.value.name(), struct_.name.value.id.value());
 		}
 	}
 
+	// then actually resolve the bodies
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value))
 			resolve(std::get<AST::Function>(value), child_scope, file_id);
 		else if (std::holds_alternative<AST::Module>(value))
 			resolve(std::get<AST::Module>(value), child_scope, file_id);
+		else if (std::holds_alternative<AST::Struct>(value))
+			resolve(std::get<AST::Struct>(value), child_scope, file_id);
 	}
 }
 

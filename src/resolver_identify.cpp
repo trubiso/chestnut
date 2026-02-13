@@ -27,6 +27,7 @@ void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file
 	                {}}
 	);
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
+		// TODO: disallow duplicate struct and module names
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value))
 			identify(std::get<AST::Function>(value), std::get<bool>(item.value), file_id);

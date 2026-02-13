@@ -170,7 +170,11 @@ struct Type {
 		return Type(value_t {std::in_place_index<(size_t) Kind::Pointer>, std::move(pointer)});
 	}
 
+	inline bool is_atom() const { return kind() == Kind::Atom; }
+
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
+
+	inline Atom& get_atom() { return std::get<(size_t) Kind::Atom>(value); }
 
 	inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
 };

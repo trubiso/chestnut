@@ -44,6 +44,8 @@ std::string const& Module::get_name(InnerItem const& inner_item) {
 		return std::get<AST::Module>(inner_item).name.value.name();
 	else if (std::holds_alternative<AST::Alias>(inner_item))
 		return std::get<AST::Alias>(inner_item).name.value.name();
+	else if (std::holds_alternative<AST::Struct>(inner_item))
+		return std::get<AST::Struct>(inner_item).name.value.name();
 	// this segfaults on purpose because i don't want anyone to call this for imports
 	else if (std::holds_alternative<AST::Import>(inner_item)) return "";
 	[[assume(false)]];
