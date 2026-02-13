@@ -539,6 +539,14 @@ private:
 		TypeInfo::ID other_origin,
 		FileContext::ID
 	);
+	/// Unifies a named type and another type.
+	void unify_named(
+		TypeInfo::ID named,
+		TypeInfo::ID other,
+		TypeInfo::ID named_origin,
+		TypeInfo::ID other_origin,
+		FileContext::ID
+	);
 	/// Equates two types and adds a diagnostic if it fails, specifying the original type IDs for diagnostics.
 	void unify(TypeInfo::ID a, TypeInfo::ID b, TypeInfo::ID a_origin, TypeInfo::ID b_origin, FileContext::ID);
 	/// Equates two types and adds a diagnostic if it fails.
@@ -553,6 +561,8 @@ private:
 	bool can_unify_functions(TypeInfo const& function, TypeInfo const&) const;
 	/// Returns whether a pointer and another type can be unified.
 	bool can_unify_pointers(TypeInfo const& pointer, TypeInfo const&) const;
+	/// Returns whether a named type and another type can be unified.
+	bool can_unify_named(TypeInfo const& named, TypeInfo const&) const;
 	/// Returns whether two types can be unified.
 	bool can_unify(TypeInfo::ID, TypeInfo::ID) const;
 	bool can_unify(TypeInfo const&, TypeInfo::ID) const;

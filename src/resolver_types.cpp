@@ -203,6 +203,7 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 		}
 		if (type.get_same_as().ids.size() > 1) output << ')';
 	} else if (type.is_named()) {
+		// FIXME: this incidentally prints the symbol ID!!
 		output << *type.get_named();
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
@@ -481,6 +482,60 @@ void Resolver::unify_pointers(
 	}
 }
 
+void Resolver::unify_named(
+	TypeInfo::ID    named,
+	TypeInfo::ID    other,
+	TypeInfo::ID    named_origin,
+	TypeInfo::ID    other_origin,
+	FileContext::ID file_id
+) {
+	assert(type_pool_.at(named).is_named());
+	if (!type_pool_.at(other).is_named()) {
+		std::stringstream subtitle_stream {};
+		subtitle_stream
+			<< "expected both types to be "
+			<< get_type_name(named)
+			<< "; got "
+			<< get_type_name(other);
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				subtitle_stream.str(),
+				{get_type_sample(named_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
+			)
+		);
+		return;
+	}
+
+	AST::Identifier const *a = type_pool_.at(named).get_named(), *b = type_pool_.at(other).get_named();
+
+	// the symbol resolver has thrown errors, so let's turn them into bottoms before they cause more trouble
+	if (!a->id.has_value() || !b->id.has_value() || a->id.value().size() != 1 || b->id.value().size() != 1) {
+		type_pool_.at(named) = TypeInfo::make_bottom();
+		type_pool_.at(other) = TypeInfo::make_bottom();
+	}
+
+	// ensure they are actually the same named type
+	if (a->id.value().at(0) != b->id.value().at(0)) {
+		std::stringstream subtitle_stream {};
+		subtitle_stream
+			<< "expected both types to be "
+			<< get_type_name(named)
+			<< "; got "
+			<< get_type_name(other);
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				subtitle_stream.str(),
+				{get_type_sample(named_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
+			)
+		);
+		return;
+	}
+}
+
 void Resolver::unify(
 	TypeInfo::ID    a_id,
 	TypeInfo::ID    b_id,
@@ -512,6 +567,10 @@ void Resolver::unify(
 		set_same_as(b_id, a_id);
 		return;
 	}
+
+	// named types
+	if (a.is_named()) return unify_named(a_id, b_id, a_origin, b_origin, file_id);
+	if (b.is_named()) return unify_named(b_id, a_id, b_origin, a_origin, file_id);
 
 	// if any of them is a basic Known type, the other must be exactly the same
 	if (unify_basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, a_origin, b_origin, file_id)) return;
@@ -738,7 +797,7 @@ bool Resolver::can_unify_functions(TypeInfo const& function, TypeInfo const& oth
 }
 
 bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other) const {
-	// ensure they're both functions
+	// ensure they're both pointers
 	assert(pointer.is_pointer());
 	if (!other.is_pointer()) { return false; }
 
@@ -749,6 +808,20 @@ bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other
 
 	// ensure they are of the same mutability
 	return a_pointer.mutable_ == b_pointer.mutable_;
+}
+
+bool Resolver::can_unify_named(TypeInfo const& named, TypeInfo const& other) const {
+	// ensure they're both named types
+	assert(named.is_named());
+	if (!other.is_named()) { return false; }
+	AST::Identifier const *a = named.get_named(), *b = other.get_named();
+
+	// they "can" be unified (but they'll become bottoms)
+	if (!a->id.has_value() || !b->id.has_value() || a->id.value().size() != 1 || b->id.value().size() != 1)
+		return true;
+
+	// ensure they are actually the same named type
+	return a->id.value().at(0) == b->id.value().at(0);
 }
 
 bool Resolver::can_unify(TypeInfo::ID a, TypeInfo::ID b) const {
@@ -774,6 +847,10 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	// make unknowns known
 	if (a.is_unknown()) return true;
 	if (b.is_unknown()) return true;
+
+	// named types
+	if (a.is_named()) return can_unify_named(a, b);
+	if (b.is_named()) return can_unify_named(b, a);
 
 	// if any of them is a basic Known type, the other must be exactly the same
 	std::optional<bool> attempt;
