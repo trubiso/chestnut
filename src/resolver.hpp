@@ -86,6 +86,8 @@ private:
 			Function,
 			/// The exact same as any of the specified candidates.
 			SameAs,
+			/// A named type, which points to an identifier resolved during name resolution.
+			Named,
 			/// A pointer type.
 			Pointer,
 			/// Known to be the built-in type 'void'.
@@ -105,19 +107,20 @@ private:
 		};
 
 		typedef std::variant<
-			std::monostate,  // Unknown
-			std::monostate,  // Bottom
-			std::monostate,  // Module
-			Function,        // Function
-			SameAs,          // SameAs
-			Pointer,         // Pointer
-			std::monostate,  // KnownVoid
-			std::monostate,  // KnownChar
-			std::monostate,  // KnownBool
-			KnownInteger,    // KnownInteger
-			KnownFloat,      // KnownFloat
-			PartialInteger,  // PartialInteger
-			std::monostate   // PartialFloat
+			std::monostate,          // Unknown
+			std::monostate,          // Bottom
+			std::monostate,          // Module
+			Function,                // Function
+			SameAs,                  // SameAs
+			AST::Identifier const*,  // Named
+			Pointer,                 // Pointer
+			std::monostate,          // KnownVoid
+			std::monostate,          // KnownChar
+			std::monostate,          // KnownBool
+			KnownInteger,            // KnownInteger
+			KnownFloat,              // KnownFloat
+			PartialInteger,          // PartialInteger
+			std::monostate           // PartialFloat
 			>
 			value_t;
 
@@ -147,6 +150,10 @@ private:
 
 		inline static TypeInfo make_same_as(std::vector<ID>&& ids) {
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::SameAs>, SameAs {std::move(ids)}});
+		}
+
+		inline static TypeInfo make_named(AST::Identifier const* identifier) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, identifier});
 		}
 		
 		inline static TypeInfo make_pointer(Pointer&& pointer) {
@@ -197,6 +204,8 @@ private:
 
 		inline bool is_same_as() const { return kind() == Kind::SameAs; }
 
+		inline bool is_named() const { return kind() == Kind::Named; }
+
 		inline bool is_pointer() const { return kind() == Kind::Pointer; }
 
 		inline bool is_known_void() const { return kind() == Kind::KnownVoid; }
@@ -218,6 +227,8 @@ private:
 		inline Function& get_function() { return std::get<(size_t) Kind::Function>(value); }
 
 		inline SameAs const& get_same_as() const { return std::get<(size_t) Kind::SameAs>(value); }
+
+		inline AST::Identifier const* get_named() const { return std::get<(size_t) Kind::Named>(value); }
 		
 		inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
 		

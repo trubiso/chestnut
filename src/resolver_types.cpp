@@ -13,7 +13,7 @@ Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom) {
 	case AST::Type::Atom::Kind::Void:     return make_known_void();
 	case AST::Type::Atom::Kind::Char:     return make_known_char();
 	case AST::Type::Atom::Kind::Bool:     return make_known_bool();
-	case AST::Type::Atom::Kind::Named:    return make_bottom();  // TODO: handle named types
+	case AST::Type::Atom::Kind::Named:    return make_named(&atom.get_named());
 	case AST::Type::Atom::Kind::Inferred: return make_unknown();
 	case AST::Type::Atom::Kind::Integer:  break;
 	}
@@ -107,6 +107,7 @@ void Resolver::debug_print_type(TypeInfo type) const {
 	case TypeInfo::Kind::Unknown:        std::cout << "(unknown type)"; return;
 	case TypeInfo::Kind::Bottom:         std::cout << "(bottom)"; return;
 	case TypeInfo::Kind::Module:         std::cout << "(module)"; return;
+	case TypeInfo::Kind::Named:          std::cout << *type.get_named(); return;
 	case TypeInfo::Kind::KnownVoid:      std::cout << "void"; return;
 	case TypeInfo::Kind::KnownChar:      std::cout << "char"; return;
 	case TypeInfo::Kind::KnownBool:      std::cout << "bool"; return;
@@ -175,6 +176,7 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	case TypeInfo::Kind::PartialFloat:   return "float";
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::Named:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::KnownFloat:
@@ -200,6 +202,8 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 			if (++count < type.get_same_as().ids.size()) output << " | ";
 		}
 		if (type.get_same_as().ids.size() > 1) output << ')';
+	} else if (type.is_named()) {
+		output << *type.get_named();
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		output << "*" << (pointer.mutable_ ? "mut" : "const") << " " << get_type_name(pointer.pointee);
