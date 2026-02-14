@@ -3,9 +3,10 @@ struct Info { direction: bool; rotation: uint32 }
 @extern func get_info() Info;
 
 func split_info() {
-	const info = get_info();
-	const direction = get_info().direction;
+	const info: Info = get_info();
+	const direction = info.direction;
 	const rotation = info.rotation;
+	info.direction = true;
 }
 
 @extern func open_input() *mut void;

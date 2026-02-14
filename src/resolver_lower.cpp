@@ -24,6 +24,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 	case TypeInfo::Kind::Module:
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::MemberAccess:
 	case TypeInfo::Kind::Named:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
@@ -32,7 +33,8 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 
 	// FIXME: we throw a million diagnostics when there are resolved type cycles
 	auto [span, file_id] = type_span_pool_.at(type_origin);
-	if (type.is_unknown()) {
+	if (type.is_unknown() || type.is_member_access()) {
+		// member accesses shouldn't make it to lowering, but you never know!
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"unknown type",
@@ -433,6 +435,43 @@ Spanned<IR::Expression> Resolver::lower(
 }
 
 Spanned<IR::Expression> Resolver::lower(
+	AST::Expression::MemberAccess const& member_access,
+	TypeInfo::ID                         type_id,
+	Span                                 span,
+	std::vector<IR::BasicBlock>&         basic_blocks,
+	FileContext::ID                      file_id,
+	bool                                 allow_functions
+) {
+	auto error_expression
+		= Spanned<IR::Expression> {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
+
+	auto accessee = extract_expression(*member_access.accessee, basic_blocks, file_id);
+	assert(accessee.value.is_identifier());
+
+	if (!accessee.value.type.is_atom() || !accessee.value.type.get_atom().is_named()) return error_expression;
+	IR::Identifier    struct_id   = accessee.value.type.get_atom().get_named();
+	IR::Struct const& struct_     = std::get<IR::Struct>(symbol_pool_.at(struct_id).item);
+	size_t            field_index = 0;
+	// we know the field is in there somewhere
+	for (size_t i = 0; i < struct_.fields.size(); ++i) {
+		if (struct_.fields[i].name.value == member_access.field.value) {
+			field_index = i;
+			break;
+		}
+	}
+
+	IR::Type type = reconstruct_type(type_id);
+
+	// TODO: check if it is a function (it shouldn't be)
+	return {span,
+	        IR::Expression::make_member_access(
+			{accessee.span, accessee.value.get_identifier()},
+			field_index,
+			std::move(type)
+		)};
+}
+
+Spanned<IR::Expression> Resolver::lower(
 	AST::Expression const&       expression,
 	Span                         span,
 	std::vector<IR::BasicBlock>& basic_blocks,
@@ -451,6 +490,15 @@ Spanned<IR::Expression> Resolver::lower(
 		);
 	case AST::Expression::Kind::FunctionCall:
 		return lower(expression.get_function_call(), span, basic_blocks, file_id, allow_functions);
+	case AST::Expression::Kind::MemberAccess:
+		return lower(
+			expression.get_member_access(),
+			expression.type.value(),
+			span,
+			basic_blocks,
+			file_id,
+			allow_functions
+		);
 	case AST::Expression::Kind::UnaryOperation:
 	case AST::Expression::Kind::AddressOperation: break;
 	case AST::Expression::Kind::BinaryOperation:
@@ -548,6 +596,18 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 		return Spanned<IR::Statement> {
 			span,
 			IR::Statement::make_write(IR::Statement::Write {written_to, std::move(value)})
+		};
+	}
+
+	if (lhs.value.is_member_access()) {
+		return Spanned<IR::Statement> {
+			span,
+			IR::Statement::make_write_access(
+				IR::Statement::WriteAccess {
+							    {lhs.span, std::move(lhs.value.get_member_access())},
+							    std::move(value)
+				}
+			)
 		};
 	}
 
@@ -808,6 +868,7 @@ IR::Struct Resolver::lower(AST::Struct& struct_, FileContext::ID file_id) {
 IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id) {
 	IR::Module module {lower_identifier(original_module.name), {}};
 	// we don't need aliases anymore, those are purely for name resolution
+	// FIXME: ensure structs are lowered before we resolve function bodies
 	for (Spanned<AST::Module::Item>& item : original_module.body.items) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {

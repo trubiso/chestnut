@@ -121,6 +121,7 @@ private:
 			Function,                // Function
 			SameAs,                  // SameAs
 			MemberAccess,            // MemberAccess
+			// FIXME: this pointer is way too unstable
 			AST::Identifier const*,  // Named
 			Pointer,                 // Pointer
 			std::monostate,          // KnownVoid
@@ -664,6 +665,7 @@ private:
 	IR::Expression::Atom lower_atom(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	// FIXME: clang-format goes BALLISTIC over these function declarations
 	Spanned<IR::Expression> lower(AST::Expression::FunctionCall const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Expression> lower(AST::Expression::MemberAccess const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression> lower(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression> lower(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Expression> lower(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
