@@ -9,11 +9,12 @@
 
 Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom) {
 	switch (atom.kind()) {
-	case AST::Type::Atom::Kind::Float:    return make_known_float(KnownFloat {atom.get_float().width});
-	case AST::Type::Atom::Kind::Void:     return make_known_void();
-	case AST::Type::Atom::Kind::Char:     return make_known_char();
-	case AST::Type::Atom::Kind::Bool:     return make_known_bool();
-	case AST::Type::Atom::Kind::Named:    return make_named(&atom.get_named());
+	case AST::Type::Atom::Kind::Float: return make_known_float(KnownFloat {atom.get_float().width});
+	case AST::Type::Atom::Kind::Void:  return make_known_void();
+	case AST::Type::Atom::Kind::Char:  return make_known_char();
+	case AST::Type::Atom::Kind::Bool:  return make_known_bool();
+	// we can make a named partial since this function is only called from the resolver
+	case AST::Type::Atom::Kind::Named:    return make_named_partial(&atom.get_named());
 	case AST::Type::Atom::Kind::Inferred: return make_unknown();
 	case AST::Type::Atom::Kind::Integer:  break;
 	}
@@ -118,7 +119,8 @@ void Resolver::debug_print_type(TypeInfo type) const {
 	case TypeInfo::Kind::Unknown:        std::cout << "(unknown type)"; return;
 	case TypeInfo::Kind::Bottom:         std::cout << "(bottom)"; return;
 	case TypeInfo::Kind::Module:         std::cout << "(module)"; return;
-	case TypeInfo::Kind::Named:          std::cout << *type.get_named(); return;
+	case TypeInfo::Kind::NamedPartial:   std::cout << *type.get_named_partial(); return;
+	case TypeInfo::Kind::NamedKnown:     std::cout << symbol_pool_.at(type.get_named_known()).name; return;
 	case TypeInfo::Kind::KnownVoid:      std::cout << "void"; return;
 	case TypeInfo::Kind::KnownChar:      std::cout << "char"; return;
 	case TypeInfo::Kind::KnownBool:      std::cout << "bool"; return;
@@ -202,11 +204,12 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
 	case TypeInfo::Kind::MemberAccess:
-	case TypeInfo::Kind::Named:
+	case TypeInfo::Kind::NamedKnown:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::KnownFloat:
 	case TypeInfo::Kind::PartialInteger: break;
+	case TypeInfo::Kind::NamedPartial:   [[assume(false)]]; break;  // these should've been chewed out by now
 	}
 
 	std::stringstream output {};
@@ -231,9 +234,8 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	} else if (type.is_member_access()) {
 		TypeInfo::MemberAccess const& member_access = type.get_member_access();
 		output << get_type_name(member_access.accessee) << '.' << member_access.field;
-	} else if (type.is_named()) {
-		// FIXME: this incidentally prints the symbol ID!!
-		output << *type.get_named();
+	} else if (type.is_named_known()) {
+		output << symbol_pool_.at(type.get_named_known()).name;
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		output << "*" << (pointer.mutable_ ? "mut" : "const") << " " << get_type_name(pointer.pointee);
@@ -559,8 +561,8 @@ void Resolver::unify_named(
 	TypeInfo::ID    other_origin,
 	FileContext::ID file_id
 ) {
-	assert(type_pool_.at(named).is_named());
-	if (!type_pool_.at(other).is_named()) {
+	assert(type_pool_.at(named).is_named_known());
+	if (!type_pool_.at(other).is_named_known()) {
 		std::stringstream subtitle_stream {};
 		subtitle_stream
 			<< "expected both types to be "
@@ -578,16 +580,10 @@ void Resolver::unify_named(
 		return;
 	}
 
-	AST::Identifier const *a = type_pool_.at(named).get_named(), *b = type_pool_.at(other).get_named();
-
-	// the symbol resolver has thrown errors, so let's turn them into bottoms before they cause more trouble
-	if (!a->id.has_value() || !b->id.has_value() || a->id.value().size() != 1 || b->id.value().size() != 1) {
-		type_pool_.at(named) = TypeInfo::make_bottom();
-		type_pool_.at(other) = TypeInfo::make_bottom();
-	}
+	AST::SymbolID a = type_pool_.at(named).get_named_known(), b = type_pool_.at(other).get_named_known();
 
 	// ensure they are actually the same named type
-	if (a->id.value().at(0) != b->id.value().at(0)) {
+	if (a != b) {
 		std::stringstream subtitle_stream {};
 		subtitle_stream
 			<< "expected both types to be "
@@ -643,8 +639,8 @@ void Resolver::unify(
 	if (b.is_member_access()) return unify_member_access(b_id, a_id, b_origin, a_origin, file_id);
 
 	// named types
-	if (a.is_named()) return unify_named(a_id, b_id, a_origin, b_origin, file_id);
-	if (b.is_named()) return unify_named(b_id, a_id, b_origin, a_origin, file_id);
+	if (a.is_named_known()) return unify_named(a_id, b_id, a_origin, b_origin, file_id);
+	if (b.is_named_known()) return unify_named(b_id, a_id, b_origin, a_origin, file_id);
 
 	// if any of them is a basic Known type, the other must be exactly the same
 	if (unify_basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, a_origin, b_origin, file_id)) return;
@@ -886,16 +882,11 @@ bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other
 
 bool Resolver::can_unify_named(TypeInfo const& named, TypeInfo const& other) const {
 	// ensure they're both named types
-	assert(named.is_named());
-	if (!other.is_named()) { return false; }
-	AST::Identifier const *a = named.get_named(), *b = other.get_named();
-
-	// they "can" be unified (but they'll become bottoms)
-	if (!a->id.has_value() || !b->id.has_value() || a->id.value().size() != 1 || b->id.value().size() != 1)
-		return true;
+	assert(named.is_named_known());
+	if (!other.is_named_known()) { return false; }
 
 	// ensure they are actually the same named type
-	return a->id.value().at(0) == b->id.value().at(0);
+	return named.get_named_known() == other.get_named_known();
 }
 
 bool Resolver::can_unify(TypeInfo::ID a, TypeInfo::ID b) const {
@@ -927,8 +918,8 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	if (b.is_member_access()) return true;
 
 	// named types
-	if (a.is_named()) return can_unify_named(a, b);
-	if (b.is_named()) return can_unify_named(b, a);
+	if (a.is_named_known()) return can_unify_named(a, b);
+	if (b.is_named_known()) return can_unify_named(b, a);
 
 	// if any of them is a basic Known type, the other must be exactly the same
 	std::optional<bool> attempt;
@@ -1099,13 +1090,10 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 
 	// only named types can have fields as of right now
 	TypeInfo const& underlying = *maybe_underlying.value();
-	if (!underlying.is_named()) return false;
-
-	// if the named type itself is not resolved, we can't resolve this member access
-	if (!underlying.get_named()->id.has_value() || underlying.get_named()->id.value().empty()) return false;
+	if (!underlying.is_named_known()) return false;
 
 	// this member access will 100% be resolved now! :D
-	AST::SymbolID type_name_id = underlying.get_named()->id.value().at(0);
+	AST::SymbolID type_name_id = underlying.get_named_known();
 
 	// we don't have any other user type as of now :P
 	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_name_id).item);

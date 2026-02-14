@@ -94,8 +94,10 @@ private:
 			SameAs,
 			/// Accessing a member field of a type.
 			MemberAccess,
-			/// A named type, which points to an identifier resolved during name resolution.
-			Named,
+			/// A named type which is not yet known (up to name resolution).
+			NamedPartial,
+			/// A named type resolved by name resolution.
+			NamedKnown,
 			/// A pointer type.
 			Pointer,
 			/// Known to be the built-in type 'void'.
@@ -121,8 +123,8 @@ private:
 			Function,                // Function
 			SameAs,                  // SameAs
 			MemberAccess,            // MemberAccess
-			// FIXME: this pointer is way too unstable
-			AST::Identifier const*,  // Named
+			AST::Identifier const*,  // NamedPartial
+			AST::SymbolID,           // NamedKnown
 			Pointer,                 // Pointer
 			std::monostate,          // KnownVoid
 			std::monostate,          // KnownChar
@@ -168,8 +170,12 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named(AST::Identifier const* identifier) {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, identifier});
+		inline static TypeInfo make_named_partial(AST::Identifier const* identifier) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::NamedPartial>, identifier});
+		}
+
+		inline static TypeInfo make_named_known(AST::SymbolID id) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::NamedKnown>, id});
 		}
 		
 		inline static TypeInfo make_pointer(Pointer&& pointer) {
@@ -222,7 +228,9 @@ private:
 
 		inline bool is_member_access() const { return kind() == Kind::MemberAccess; }
 
-		inline bool is_named() const { return kind() == Kind::Named; }
+		inline bool is_named_partial() const { return kind() == Kind::NamedPartial; }
+
+		inline bool is_named_known() const { return kind() == Kind::NamedKnown; }
 
 		inline bool is_pointer() const { return kind() == Kind::Pointer; }
 
@@ -250,7 +258,9 @@ private:
 
 		inline MemberAccess& get_member_access() { return std::get<(size_t) Kind::MemberAccess>(value); }
 
-		inline AST::Identifier const* get_named() const { return std::get<(size_t) Kind::Named>(value); }
+		inline AST::Identifier const* get_named_partial() const { return std::get<(size_t) Kind::NamedPartial>(value); }
+
+		inline AST::SymbolID get_named_known() const { return std::get<(size_t) Kind::NamedKnown>(value); }
 		
 		inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
 		
@@ -471,6 +481,9 @@ private:
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
 
+	/// Turns all named partial types into named known types or bottoms.
+	void prune_named_partial_types();
+
 	// === TYPES ===
 
 	/// Holds all types. All valid TypeInfo::IDs are valid indices to this array.
@@ -503,6 +516,8 @@ private:
 
 	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID);
 	TypeInfo from_type(AST::Type const&, FileContext::ID);
+
+	TypeInfo from_identifier(AST::Identifier const&);
 
 	/// Returns the span for a given type ID.
 	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }

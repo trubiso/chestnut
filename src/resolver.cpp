@@ -9,6 +9,7 @@ std::vector<IR::Module> Resolver::resolve() {
 	populate_module_table();
 	identify_module_items();
 	resolve_identifiers();
+	prune_named_partial_types();
 	infer_types();
 
 	auto lowered = lower();

@@ -25,7 +25,8 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
 	case TypeInfo::Kind::MemberAccess:
-	case TypeInfo::Kind::Named:
+	case TypeInfo::Kind::NamedPartial:
+	case TypeInfo::Kind::NamedKnown:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::PartialInteger: break;
@@ -76,11 +77,8 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.is_named()) {
-		// the resolver will already have thrown diagnostics, so let's error
-		if (!type.get_named()->id.has_value() || type.get_named()->id.value().empty())
-			return IR::Type::make_atom(IR::Type::Atom::make_error());
-		return IR::Type::make_atom(IR::Type::Atom::make_named(type.get_named()->id.value()[0]));
+	} else if (type.is_named_known()) {
+		return IR::Type::make_atom(IR::Type::Atom::make_named(type.get_named_known()));
 	} else if (type.is_pointer()) {
 		return IR::Type::make_pointer(
 			IR::Type::Pointer {
@@ -141,6 +139,9 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			);
 		}
 	}
+
+	[[assume(false)]];
+	return IR::Type::make_atom(IR::Type::Atom::make_error());
 }
 
 IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, bool allow_functions) {
@@ -779,8 +780,7 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 			IR::Function::Argument {lower_identifier(name), lower_type(std::move(type), file_id)}
 		);
 	}
-	Spanned<IR::Type> return_type = lower_type(std::move(function.return_type), file_id);
-	// TODO: ensure that we have a return statement at the end, since basic blocks need to always jump
+	Spanned<IR::Type>           return_type = lower_type(std::move(function.return_type), file_id);
 	std::vector<IR::BasicBlock> basic_blocks {};
 	if (function.body.has_value()) {
 		basic_blocks.push_back(IR::BasicBlock {0, {}, std::monostate {}});

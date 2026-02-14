@@ -549,3 +549,15 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 void Resolver::resolve_identifiers() {
 	for (ParsedFile& file : parsed_files) { resolve(file.module, Scope {}, file.file_id); }
 }
+
+void Resolver::prune_named_partial_types() {
+	for (TypeInfo& type : type_pool_)
+		if (type.is_named_partial()) {
+			// if we did not manage to resolve, we make a bottom
+			if (!type.get_named_partial()->id.has_value()
+			    || type.get_named_partial()->id.value().size() != 1)
+				type = TypeInfo::make_bottom();
+			// if we managed to resolve, we make a named known
+			else type = TypeInfo::make_named_known(type.get_named_partial()->id.value().at(0));
+		}
+}
