@@ -629,7 +629,8 @@ private:
 	/// includes the case in which it is determined that the field does not exist!)
 	bool try_decide(TypeInfo::ID);
 
-	TypeInfo::ID infer(AST::Expression::Atom const&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression::Atom::StructLiteral&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression::Atom&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::FunctionCall&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::MemberAccess&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression&, Span, FileContext::ID);

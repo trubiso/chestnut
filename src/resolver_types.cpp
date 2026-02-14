@@ -1141,7 +1141,44 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	return true;
 }
 
-Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom const& atom, Span span, FileContext::ID file_id) {
+Resolver::TypeInfo::ID
+Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span, FileContext::ID file_id) {
+	// the type is whichever struct is pointed to
+	AST::SymbolID type_symbol_id = struct_literal.name.value.id.value().at(0);
+	TypeInfo      type           = TypeInfo::make_named_known(type_symbol_id);
+	TypeInfo::ID  type_id        = register_type(std::move(type), span, file_id);
+
+	// now, for each field, we unify it with the struct field type
+	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_symbol_id).item);
+	for (auto& field : struct_literal.fields) {
+		// we skip those which don't exist
+		auto struct_field = std::find_if(
+			struct_->fields.cbegin(),
+			struct_->fields.cend(),
+			[&field](AST::Struct::Field const& given_field) {
+				return given_field.name.value == field.name.value;
+			}
+		);
+		if (struct_field == struct_->fields.cend()) continue;
+
+		TypeInfo::ID field_type = infer(field.value->value, field.value->span, file_id);
+		// FIXME: we shouldn't have to re-register the types per struct literal
+		TypeInfo struct_field_type
+			= from_type(struct_field->type.value, symbol_pool_.at(type_symbol_id).file_id);
+		TypeInfo::ID struct_field_type_id = register_type(
+			std::move(struct_field_type),
+			struct_field->type.span,
+			symbol_pool_.at(type_symbol_id).file_id
+		);
+
+		// FIXME: i don't like how these diagnostics are worded for struct fields
+		unify(field_type, struct_field_type_id, file_id);
+	}
+
+	return type_id;
+}
+
+Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
 		// TODO: apply suffixes
@@ -1162,9 +1199,10 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom const& atom, Span s
 	case AST::Expression::Atom::Kind::CharLiteral:
 		// TODO: apply suffixes
 		return register_type(TypeInfo::make_known_char(), span, file_id);
-	case AST::Expression::Atom::Kind::BoolLiteral: return register_type(TypeInfo::make_known_bool(), span, file_id);
-	case AST::Expression::Atom::Kind::Expression:  return infer(*atom.get_expression(), span, file_id);
-	case AST::Expression::Atom::Kind::Identifier:  break;
+	case AST::Expression::Atom::Kind::BoolLiteral:   return register_type(TypeInfo::make_known_bool(), span, file_id);
+	case AST::Expression::Atom::Kind::StructLiteral: return infer(atom.get_struct_literal(), span, file_id);
+	case AST::Expression::Atom::Kind::Expression:    return infer(*atom.get_expression(), span, file_id);
+	case AST::Expression::Atom::Kind::Identifier:    break;
 	}
 
 	// for identifiers, we match the type in the symbol pool
