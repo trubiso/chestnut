@@ -124,6 +124,7 @@ static std::string compiler_name = "chc";
 struct Input {
 	bool                        run_compiler_tests;
 	bool                        print_ast;
+	bool                        print_ir;
 	CodeGenerator::Optimization optimization = CodeGenerator::Optimization::O0;
 	std::vector<std::string>    inputs;
 	std::string                 output;
@@ -138,7 +139,7 @@ Input get_input(int argc, char** argv) {
 			"output,o",
 			boost::program_options::value<std::string>(&input.output)->default_value("output.o"),
 			"output file"
-		)("print-ast", "print AST and quit");
+		)("print-ast", "print AST and quit")("print-ir", "print IR before codegen");
 
 		boost::program_options::options_description hidden("");
 		hidden.add_options()("inputs", boost::program_options::value<std::vector<std::string>>());
@@ -171,6 +172,7 @@ Input get_input(int argc, char** argv) {
 
 		input.run_compiler_tests = variables_map.count("run-compiler-tests");
 		input.print_ast          = variables_map.count("print-ast");
+		input.print_ir           = variables_map.count("print-ir");
 		if (input.run_compiler_tests) return input;
 
 		if (!variables_map.count("inputs")) {
@@ -213,7 +215,7 @@ int main(int argc, char** argv) {
 	if (input.print_ast) std::exit(0);
 
 	Resolver                resolver {std::move(parsed_files)};
-	std::vector<IR::Module> modules = resolver.resolve();
+	std::vector<IR::Module> modules = resolver.resolve(input.print_ir);
 
 	for (auto const& file : resolver.parsed_files)
 		for (auto const& diagnostic : file.diagnostics) {

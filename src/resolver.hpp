@@ -28,7 +28,7 @@ public:
 		, module_table_ {} {}
 
 	/// Resolves all names and types and lowers to IR.
-	std::vector<IR::Module> resolve();
+	std::vector<IR::Module> resolve(bool print_ir = false);
 	/// Exports all symbols as IR symbols.
 	std::vector<IR::Symbol> export_symbols();
 	/// Prints a dump of all symbols and their corresponding types.

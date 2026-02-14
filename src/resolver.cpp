@@ -2,18 +2,25 @@
 
 #include <iostream>
 
-std::vector<IR::Module> Resolver::resolve() {
+std::vector<IR::Module> Resolver::resolve(bool print_ir) {
+	// identification
 	identify_built_in_operators();
-	desugar_control_flow();
+	desugar_control_flow();  // desugar
 	identify_labels();
-	populate_module_table();
+	populate_module_table();  // population
 	identify_module_items();
+
+	// symbols
 	resolve_identifiers();
 	prune_named_partial_types();
+
+	// type inference
 	infer_types();
 
+	// lowering
 	auto lowered = lower();
-	for (IR::Module const& module : lowered) { print(std::cout, module) << std::endl; }
+	if (print_ir)
+		for (IR::Module const& module : lowered) print(std::cout, module) << std::endl;
 	return lowered;
 }
 
