@@ -302,10 +302,16 @@ struct Expression {
 		bool                mutable_;
 	};
 
-	// expressions must now be either atoms or function calls
-	enum class Kind { Atom, FunctionCall, Deref, Ref };
+	struct MemberAccess {
+		Spanned<Identifier> accessee;
+		size_t              field_index;
+		Type                type;
+	};
 
-	typedef std::variant<Atom, FunctionCall, Deref, Ref> value_t;
+	// expressions must now be either atoms or function calls
+	enum class Kind { Atom, FunctionCall, Deref, Ref, MemberAccess };
+
+	typedef std::variant<Atom, FunctionCall, Deref, Ref, MemberAccess> value_t;
 
 	value_t value;
 
@@ -343,6 +349,15 @@ struct Expression {
 		);
 	}
 
+	inline static Expression make_member_access(Spanned<Identifier>&& accessee, size_t field_index, Type&& type) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::MemberAccess>,
+				MemberAccess {std::move(accessee), field_index, std::move(type)}
+                }
+		);
+	}
+
 	inline bool is_atom() const { return kind() == Kind::Atom; }
 
 	inline bool is_function_call() const { return kind() == Kind::FunctionCall; }
@@ -350,6 +365,8 @@ struct Expression {
 	inline bool is_deref() const { return kind() == Kind::Deref; }
 
 	inline bool is_ref() const { return kind() == Kind::Ref; }
+
+	inline bool is_member_access() const { return kind() == Kind::MemberAccess; }
 
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 
@@ -366,6 +383,10 @@ struct Expression {
 	inline Ref const& get_ref() const { return std::get<(size_t) Kind::Ref>(value); }
 
 	inline Ref& get_ref() { return std::get<(size_t) Kind::Ref>(value); }
+
+	inline MemberAccess const& get_member_access() const { return std::get<(size_t) Kind::MemberAccess>(value); }
+
+	inline MemberAccess& get_member_access() { return std::get<(size_t) Kind::MemberAccess>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Expression::Atom::Literal const&);
@@ -373,6 +394,7 @@ std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
 std::ostream& operator<<(std::ostream&, Expression::Deref const&);
 std::ostream& operator<<(std::ostream&, Expression::Ref const&);
+std::ostream& operator<<(std::ostream&, Expression::MemberAccess const&);
 std::ostream& operator<<(std::ostream&, Expression const&);
 
 struct Statement;
@@ -400,10 +422,16 @@ struct Statement {
 		Spanned<Expression> value;
 	};
 
-	// expression statements are now calls and scope statements are resolved now anyways
-	enum class Kind { Declare, Set, Call, Write };
+	// writing to a struct field
+	struct WriteAccess {
+		Spanned<Expression::MemberAccess> access;
+		Spanned<Expression>               value;
+	};
 
-	typedef std::variant<Declare, Set, Expression::FunctionCall, Write> value_t;
+	// expression statements are now calls and scope statements are resolved now anyways
+	enum class Kind { Declare, Set, Call, Write, WriteAccess };
+
+	typedef std::variant<Declare, Set, Expression::FunctionCall, Write, WriteAccess> value_t;
 
 	value_t value;
 
@@ -425,6 +453,10 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Write>, std::move(write)});
 	}
 
+	inline static Statement make_write_access(WriteAccess&& write_access) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::WriteAccess>, std::move(write_access)});
+	}
+
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Declare& get_declare() { return std::get<(size_t) Kind::Declare>(value); }
@@ -440,11 +472,16 @@ struct Statement {
 	inline Write const& get_write() const { return std::get<(size_t) Kind::Write>(value); }
 
 	inline Write& get_write() { return std::get<(size_t) Kind::Write>(value); }
+
+	inline WriteAccess const& get_write_access() const { return std::get<(size_t) Kind::WriteAccess>(value); }
+
+	inline WriteAccess& get_write_access() { return std::get<(size_t) Kind::WriteAccess>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
 std::ostream& operator<<(std::ostream&, Statement::Set const&);
 std::ostream& operator<<(std::ostream&, Statement::Write const&);
+std::ostream& operator<<(std::ostream&, Statement::WriteAccess const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
 
 struct BasicBlock {
