@@ -304,8 +304,9 @@ struct Expression {
 
 	struct MemberAccess {
 		Spanned<Identifier> accessee;
+		Type                accessee_type;
 		size_t              field_index;
-		Type                type;
+		Type                field_type;
 	};
 
 	// expressions must now be either atoms or function calls
@@ -349,11 +350,20 @@ struct Expression {
 		);
 	}
 
-	inline static Expression make_member_access(Spanned<Identifier>&& accessee, size_t field_index, Type&& type) {
+	inline static Expression make_member_access(
+		Spanned<Identifier>&& accessee,
+		Type&&                accessee_type,
+		size_t                field_index,
+		Type&&                field_type
+	) {
 		return Expression(
 			value_t {
 				std::in_place_index<(size_t) Kind::MemberAccess>,
-				MemberAccess {std::move(accessee), field_index, std::move(type)}
+				MemberAccess {
+					      std::move(accessee),
+					      std::move(accessee_type),
+					      field_index, std::move(field_type)
+				}
                 }
 		);
 	}

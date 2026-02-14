@@ -466,6 +466,7 @@ Spanned<IR::Expression> Resolver::lower(
 	return {span,
 	        IR::Expression::make_member_access(
 			{accessee.span, accessee.value.get_identifier()},
+			std::move(accessee.value.type),
 			field_index,
 			std::move(type)
 		)};
