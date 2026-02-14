@@ -1,14 +1,5 @@
 struct Info { direction: bool; rotation: uint32 }
 
-@extern func get_info() Info;
-
-func split_info() {
-	const info: Info = get_info();
-	const direction = info.direction;
-	const rotation = info.rotation;
-	info.direction = true;
-}
-
 @extern func open_input() *mut void;
 @extern func close_input(file: *mut void);
 @extern func get_line(file: *mut void) bool;
@@ -16,20 +7,29 @@ func split_info() {
 @extern func get_rotation() uint32;
 @extern func print_output(anon x: uint64);
 
+@extern func get_empty_info_struct() Info;
+
+func get_info() Info {
+	mut empty_struct = get_empty_info_struct();
+	empty_struct.direction = get_direction();
+	empty_struct.rotation = get_rotation();
+	return empty_struct;
+}
+
 @extern func main() int32 {
 	const file = open_input();
 	mut output: uint64 = 0;
 	mut angle: uint32 = 50;
 'loop:
 	branch (!get_line(file)) 'end;
-	mut rotation = get_rotation();
+	mut rotation = get_info().rotation;
 	// we first normalize the rotation to [0, 99]
 	goto 'normalize_cond;
 'normalize_loop: rotation = rotation - 100;
 'normalize_cond: branch (rotation > 99) 'normalize_loop 'normalize_cont;
 'normalize_cont:
 	// now we apply the rotation
-	if (get_direction()) {
+	if (get_info().direction) {
 		// right
 		if (angle + rotation > 99) angle = angle + rotation - 100;
 		else angle = angle + rotation;

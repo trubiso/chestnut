@@ -32,6 +32,10 @@ uint32_t get_rotation() {
 	return rotation;
 }
 
+uint64_t get_empty_info_struct() {
+	return 0;
+}
+
 void print_output(uint64_t value) {
 	printf("%lu\n", value);
 }
