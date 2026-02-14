@@ -1514,6 +1514,10 @@ void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 		if (!type_pool_.at(lhs_type).is_pointer()) return;
 		TypeInfo::Pointer const& pointer = type_pool_.at(lhs_type).get_pointer();
 		unify(pointer.pointee, rhs_type, lhs_type, rhs_type, file_id);
+	} else if (set.lhs.value.is_member_access()) {
+		// member access is as simple as identifier lhs
+		TypeInfo::ID lhs_type = infer(set.lhs.value, set.lhs.span, file_id);
+		unify(lhs_type, rhs_type, file_id);
 	}
 }
 
