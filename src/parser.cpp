@@ -953,7 +953,7 @@ void Parser::skip_semis() {
 }
 
 std::optional<Struct::Field> Parser::parse_struct_field() {
-	auto name = SPANNED(consume_identifier);
+	auto name = SPANNED(consume_bare_unqualified_identifier);
 	if (!name.has_value()) return {};
 	if (!expect_symbol("expected ':' to specify field type", Token::Symbol::Colon)) return {};
 	auto type = SPANNED_REASON(expect_type, "expected field type");

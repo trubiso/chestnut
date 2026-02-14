@@ -791,7 +791,7 @@ IR::Struct Resolver::lower(AST::Struct& struct_, FileContext::ID file_id) {
 		std::back_inserter(fields),
 		[&](AST::Struct::Field& field) {
 			return IR::Struct::Field {
-				Spanned {field.name.span, field.name.value.name()},
+				Spanned {field.name.span, field.name.value},
 				lower_type(std::move(field.type), file_id)
 			};
 		}

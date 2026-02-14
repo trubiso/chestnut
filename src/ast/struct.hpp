@@ -9,9 +9,8 @@ struct Struct {
 
 	struct Field {
 		// TODO: public/private
-		// FIXME: this should be a string, since this will never get resolved :P
-		Spanned<Identifier> name;  // unqualified
-		Spanned<Type>       type;
+		Spanned<std::string> name;
+		Spanned<Type>        type;
 	};
 
 	std::vector<Field> fields;
