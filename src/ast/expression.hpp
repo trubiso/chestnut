@@ -11,7 +11,15 @@ namespace AST {
 
 struct Expression {
 	struct Atom {
-		enum class Kind { Identifier, NumberLiteral, StringLiteral, CharLiteral, BoolLiteral, Expression };
+		enum class Kind {
+			Identifier,
+			NumberLiteral,
+			StringLiteral,
+			CharLiteral,
+			BoolLiteral,
+			StructLiteral,
+			Expression
+		};
 
 		struct NumberLiteral {
 			std::string               literal;
@@ -34,12 +42,24 @@ struct Expression {
 			bool value;
 		};
 
+		struct StructLiteral {
+			Spanned<Identifier> name;
+
+			struct Field {
+				Spanned<std::string>                 name;
+				std::unique_ptr<Spanned<Expression>> value;
+			};
+
+			std::vector<Field> fields;
+		};
+
 		typedef std::variant<
 			Identifier,
 			NumberLiteral,
 			StringLiteral,
 			CharLiteral,
 			BoolLiteral,
+			StructLiteral,
 			std::unique_ptr<Expression>>
 			value_t;
 
@@ -82,6 +102,16 @@ struct Expression {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::BoolLiteral>, BoolLiteral {value}});
 		}
 
+		inline static Atom
+		make_struct_literal(Spanned<Identifier>&& name, std::vector<StructLiteral::Field>&& fields) {
+			return Atom(
+				value_t {
+					std::in_place_index<(size_t) Kind::StructLiteral>,
+					StructLiteral {std::move(name), std::move(fields)}
+                        }
+			);
+		}
+
 		inline static Atom make_expression(std::unique_ptr<Expression>&& expression) {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
 		}
@@ -95,6 +125,8 @@ struct Expression {
 		inline bool is_char_literal() const { return kind() == Kind::CharLiteral; }
 
 		inline bool is_bool_literal() const { return kind() == Kind::BoolLiteral; }
+
+		inline bool is_struct_literal() const { return kind() == Kind::StructLiteral; }
 
 		inline bool is_expression() const { return kind() == Kind::Expression; }
 
@@ -115,6 +147,12 @@ struct Expression {
 		}
 
 		inline BoolLiteral get_bool_literal() const { return std::get<(size_t) Kind::BoolLiteral>(value); }
+
+		inline StructLiteral const& get_struct_literal() const {
+			return std::get<(size_t) Kind::StructLiteral>(value);
+		}
+
+		inline StructLiteral& get_struct_literal() { return std::get<(size_t) Kind::StructLiteral>(value); }
 
 		inline std::unique_ptr<Expression> const& get_expression() const {
 			return std::get<(size_t) Kind::Expression>(value);
@@ -303,6 +341,7 @@ struct Expression {
 std::ostream& operator<<(std::ostream&, Expression::Atom::NumberLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom::StringLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom::CharLiteral const&);
+std::ostream& operator<<(std::ostream&, Expression::Atom::StructLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::UnaryOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::AddressOperation const&);

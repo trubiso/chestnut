@@ -122,6 +122,8 @@ private:
 
 	std::optional<Expression::FunctionCall::Argument> consume_expression_function_call_argument();
 
+	std::optional<Expression::Atom::StructLiteral::Field> consume_expression_struct_literal_field();
+
 	std::optional<Expression> consume_expression_atom();
 	std::optional<Expression> consume_expression_function_call();
 	std::optional<Expression> consume_expression_member_access();

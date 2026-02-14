@@ -41,6 +41,18 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom::CharLiteral const& 
 	}
 }
 
+std::ostream& operator<<(std::ostream& os, Expression::Atom::StructLiteral const& struct_literal) {
+	os << "[struct literal of type " << struct_literal.name.value << " with ";
+	if (struct_literal.fields.empty()) return os << "no fields]";
+	os << "fields ";
+	size_t count = 0;
+	for (auto const& field : struct_literal.fields) {
+		os << '[' << field.name.value << ": " << field.value->value << ']';
+		if (++count < struct_literal.fields.size()) os << ", ";
+	}
+	return os << ']';
+}
+
 std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	switch (atom.kind()) {
 	case Expression::Atom::Kind::Identifier:    return os << atom.get_identifier();
@@ -49,7 +61,8 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	case Expression::Atom::Kind::CharLiteral:   return os << atom.get_char_literal();
 	case Expression::Atom::Kind::BoolLiteral:
 		return os << '[' << (atom.get_bool_literal().value ? "true" : "false") << ']';
-	case Expression::Atom::Kind::Expression: return os << '(' << *atom.get_expression() << ')';
+	case Expression::Atom::Kind::StructLiteral: return os << atom.get_struct_literal();
+	case Expression::Atom::Kind::Expression:    return os << '(' << *atom.get_expression() << ')';
 	}
 	[[assume(false)]];
 }

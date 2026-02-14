@@ -10,6 +10,8 @@ struct Info { direction: bool; rotation: uint32 }
 @extern func get_empty_info_struct() Info;
 
 func get_info() Info {
+	return Info { direction: get_direction(), rotation: get_rotation() };
+
 	mut empty_struct = get_empty_info_struct();
 	empty_struct.direction = get_direction();
 	empty_struct.rotation = get_rotation();

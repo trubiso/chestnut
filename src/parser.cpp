@@ -252,19 +252,83 @@ std::optional<Type> Parser::consume_type() {
 	return std::move(operand.value);
 }
 
+std::optional<Expression::Atom::StructLiteral::Field> Parser::consume_expression_struct_literal_field() {
+	// this is just <name> ":" <value expr>
+
+	auto name = SPANNED(consume_bare_unqualified_identifier);
+	if (!name.has_value()) return {};
+	if (!expect_symbol("expected ':' after struct literal field name", Token::Symbol::Colon)) return {};
+	auto value = SPANNED_REASON(expect_expression, "expected struct literal field value after ':'");
+	if (!value.has_value()) return {};
+
+	return {
+		{std::move(name.value()), std::make_unique<Spanned<Expression>>(std::move(value.value()))}
+	};
+}
+
 std::optional<Expression> Parser::consume_expression_atom() {
 	// it could be a potentially qualified identifier
-	std::optional<Identifier> identifier = consume_identifier();
+	std::optional<Spanned<Identifier>> identifier = SPANNED(consume_identifier);
 	if (identifier.has_value()) {
 		// special case for "true" and "false", which refer to boolean literals. they are strict keywords in
 		// this sense
-		if (identifier.value().is_unqualified()
-		    && (identifier.value().name() == "true" || identifier.value().name() == "false")) {
+		if (identifier.value().value.is_unqualified()
+		    && (identifier.value().value.name() == "true" || identifier.value().value.name() == "false")) {
 			return Expression::make_atom(
-				Expression::Atom::make_bool_literal(identifier.value().name() == "true")
+				Expression::Atom::make_bool_literal(identifier.value().value.name() == "true")
 			);
 		}
-		return Expression::make_atom(Expression::Atom::make_identifier(std::move(identifier.value())));
+
+		// special case for struct literals
+		if (consume_symbol(Token::Symbol::LBrace)) {
+			std::optional<Expression::Atom::StructLiteral::Field> maybe_field;
+			std::vector<Expression::Atom::StructLiteral::Field>   fields {};
+
+			while ((maybe_field = consume_expression_struct_literal_field()).has_value()) {
+				Expression::Atom::StructLiteral::Field field = std::move(maybe_field.value());
+
+				auto duplicate_field = std::find_if(
+					fields.cbegin(),
+					fields.cend(),
+					[&field](Expression::Atom::StructLiteral::Field const& given_field) {
+						return given_field.name.value == field.name.value;
+					}
+				);
+
+				if (duplicate_field != fields.cend()) {
+					diagnostics_.push_back(
+						Diagnostic::error(
+							"duplicate field name",
+							"field name used twice in struct literal",
+							{Diagnostic::Sample(
+								context_,
+								{Diagnostic::Sample::Label(
+									 field.name.span,
+									 OutFmt::Color::Red
+								 ),
+					                         Diagnostic::Sample::Label(
+									 duplicate_field->name.span,
+									 "first used here",
+									 OutFmt::Color::Cyan
+								 )}
+							)}
+						)
+					);
+				} else {
+					// we only push it if it's not duplicate
+					fields.push_back(std::move(field));
+				}
+				if (!consume_single_comma_or_more()) break;
+			}
+
+			expect_symbol("expected closing brace to end struct literal", Token::Symbol::RBrace);
+
+			return Expression::make_atom(
+				Expression::Atom::make_struct_literal(std::move(identifier.value()), std::move(fields))
+			);
+		}
+
+		return Expression::make_atom(Expression::Atom::make_identifier(std::move(identifier.value().value)));
 	}
 
 	// since it's not an identifier, it has to be a literal
