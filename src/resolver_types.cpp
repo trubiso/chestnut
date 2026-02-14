@@ -97,6 +97,17 @@ bool Resolver::TypeInfo::get_pointer_mutable(std::vector<TypeInfo> const& pool) 
 	}
 }
 
+std::optional<Resolver::TypeInfo const*>
+Resolver::TypeInfo::get_single_underlying(std::vector<TypeInfo> const& pool) const {
+	if (is_same_as()) {
+		auto const& ids = get_same_as().ids;
+		if (ids.size() != 1) return {};
+		return pool.at(ids.at(0)).get_single_underlying(pool);
+	}
+
+	return this;
+}
+
 void Resolver::debug_print_type(TypeInfo::ID id) const {
 	std::cout << "$" << id << " ";
 	debug_print_type(type_pool_.at(id));
@@ -1078,10 +1089,67 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 	return true;
 }
 
-bool Resolver::try_decide(TypeInfo::ID id) {
-	TypeInfo::MemberAccess& member_access = type_pool_.at(id).get_member_access();
-	// TODO: decide member access
-	std::cout << "todo: decide member access" << std::endl;
+bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
+	TypeInfo::MemberAccess& member_access = type_pool_.at(undecided_member_access).get_member_access();
+
+	// we can only actually decide the member access if we know the type of the accessee
+	std::optional<TypeInfo const*> maybe_underlying
+		= type_pool_.at(member_access.accessee).get_single_underlying(type_pool_);
+	if (!maybe_underlying.has_value()) return false;
+
+	// only named types can have fields as of right now
+	TypeInfo const& underlying = *maybe_underlying.value();
+	if (!underlying.is_named()) return false;
+
+	// if the named type itself is not resolved, we can't resolve this member access
+	if (!underlying.get_named()->id.has_value() || underlying.get_named()->id.value().empty()) return false;
+
+	// this member access will 100% be resolved now! :D
+	AST::SymbolID type_name_id = underlying.get_named()->id.value().at(0);
+
+	// we don't have any other user type as of now :P
+	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_name_id).item);
+
+	// first of all, let's check whether the struct even has the field
+	auto maybe_field = std::find_if(
+		struct_->fields.cbegin(),
+		struct_->fields.cend(),
+		[&member_access](AST::Struct::Field const& field) { return field.name.value == member_access.field; }
+	);
+	if (maybe_field == struct_->fields.cend()) {
+		// if it doesn't exist, we throw a diagnostic
+		FileContext::ID   file_id = get_type_file_id(undecided_member_access);
+		std::stringstream subtitle_stream {};
+		subtitle_stream
+			<< "type '"
+			<< struct_->name.value
+			<< "' does not have any field named '"
+			<< member_access.field
+			<< "'";
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"tried to access nonexistent field",
+				subtitle_stream.str(),
+				{Diagnostic::Sample(
+					get_context(file_id),
+					get_type_span(undecided_member_access),
+					OutFmt::Color::Red
+				)}
+			)
+		);
+		return true;
+	}
+
+	// let's get the type of the field
+	AST::Struct::Field const& field      = *maybe_field;
+	TypeInfo                  field_type = from_type(field.type.value, symbol_pool_.at(type_name_id).file_id);
+
+	// finally, let's set the type and unify all possible types
+	type_pool_.at(undecided_member_access) = field_type;
+	for (TypeInfo::ID id : member_access.possible_types) {
+		unify(id, undecided_member_access, get_type_file_id(id));
+	}
+
 	return true;
 }
 

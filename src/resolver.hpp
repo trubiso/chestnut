@@ -279,6 +279,8 @@ private:
 		ID get_pointee(std::vector<TypeInfo> const&) const;
 		/// Returns whether this pointer is mutable (assumes is_pointer()).
 		bool get_pointer_mutable(std::vector<TypeInfo> const&) const;
+		/// Returns a single TypeInfo after traversing all SameAs references, if they all point to a single type.
+		std::optional<TypeInfo const*> get_single_underlying(std::vector<TypeInfo> const&) const;
 	};
 
 	struct Symbol {
