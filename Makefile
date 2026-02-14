@@ -15,7 +15,7 @@ SRCS := $(OBJS:$(BUILD_DIR)/%.o=$(SRC_DIR)/%.cpp)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) -c $(CXXFLAGS) $< -o $@
+	$(CXX) -c $(CXXFLAGS) -MMD -MP $< -o $@
 
 .PHONY: clean cleanall build run test tidy cleancallgrind callgrind
 
@@ -45,3 +45,5 @@ cleancallgrind:
 
 callgrind: ./chc cleancallgrind
 	valgrind --dump-instr=yes --tool=callgrind ./chc my_module
+
+-include $(OBJS:.o=.d)
