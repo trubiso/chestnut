@@ -51,6 +51,8 @@ struct Expression {
 			};
 
 			std::vector<Field> fields;
+			/// Whether the struct literal has the correct amount of fields.
+			bool valid = true;
 		};
 
 		typedef std::variant<

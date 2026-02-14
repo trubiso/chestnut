@@ -396,6 +396,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 						)}
 					)
 				);
+				struct_literal.valid = false;
 			}
 		}
 
@@ -423,6 +424,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 						{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
 					)
 				);
+				struct_literal.valid = false;
 			}
 		}
 	}
