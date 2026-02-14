@@ -606,6 +606,9 @@ private:
 	/// Tries to decide an undecided overload. Returns whether the overload was successfully decided (that
 	/// includes the case in which it is determined that no function meets the constraints!)
 	bool try_decide(UndecidedOverload&);
+	/// Tries to decide an undecided member access. Returns whether it was successfully decided (that
+	/// includes the case in which it is determined that the field does not exist!)
+	bool try_decide(TypeInfo::ID);
 
 	TypeInfo::ID infer(AST::Expression::Atom const&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::FunctionCall&, Span, FileContext::ID);
@@ -618,6 +621,15 @@ private:
 	void         infer(AST::Scope&, AST::SymbolID function, FileContext::ID);
 	void         infer(AST::Function&, FileContext::ID);
 	void         infer(AST::Module&, FileContext::ID);
+
+	/// Tries to decide all remaining function overloads and member accesses, returning whether there are
+	/// still any remaining types which were not able to be decided.
+	bool try_decide_remaining_types();
+
+	/// Decides all remaining types (that is, function overloads and member accesses). All types not decided
+	/// here throw diagnostics.
+	void decide_remaining_types();
+
 	/// Infers all types within the program.
 	void infer_types();
 

@@ -1003,6 +1003,8 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 }
 
 bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
+	// TODO: change type to bottom on fail
+
 	// filter the candidates
 	std::vector<UndecidedOverload::Candidate> new_candidates {};
 	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
@@ -1073,6 +1075,13 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 		}
 	}
 
+	return true;
+}
+
+bool Resolver::try_decide(TypeInfo::ID id) {
+	TypeInfo::MemberAccess& member_access = type_pool_.at(id).get_member_access();
+	// TODO: decide member access
+	std::cout << "todo: decide member access" << std::endl;
 	return true;
 }
 
@@ -1309,8 +1318,7 @@ Resolver::infer(AST::Expression::MemberAccess& member_access, Span span, FileCon
 	TypeInfo     type = TypeInfo::make_member_access(accessee_id, member_access.field.value);
 	TypeInfo::ID id   = register_type(std::move(type), span, file_id);
 
-	// TODO: decide member accesses
-	undecided_member_accesses.push_back(id);
+	if (!try_decide(id)) undecided_member_accesses.push_back(id);
 
 	return id;
 }
@@ -1505,19 +1513,40 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 	}
 }
 
-void Resolver::infer_types() {
-	for (ParsedFile& file : parsed_files) { infer(file.module, file.file_id); }
-
-	// we try to resolve overloads now that the entire program is known
-	while (!undecided_overloads.empty()) {
+bool Resolver::try_decide_remaining_types() {
+	// PERF: use std::copy_if
+	while (!undecided_overloads.empty() || !undecided_member_accesses.empty()) {
+		// we first try to decide the overloads
 		std::vector<UndecidedOverload> remaining_overloads {};
 		for (UndecidedOverload& undecided_overload : undecided_overloads)
 			if (!try_decide(undecided_overload))
 				remaining_overloads.push_back(std::move(undecided_overload));
 		size_t old_size     = undecided_overloads.size();
 		undecided_overloads = std::move(remaining_overloads);
-		if (old_size == undecided_overloads.size()) break;
+
+		bool overloads_succeeded = old_size != undecided_overloads.size();
+
+		// then we try to decide the member accesses
+		std::vector<TypeInfo::ID> remaining_member_accesses {};
+		for (TypeInfo::ID undecided_member_access : undecided_member_accesses)
+			if (!try_decide(undecided_member_access))
+				remaining_member_accesses.push_back(undecided_member_access);
+		old_size                  = remaining_member_accesses.size();
+		undecided_member_accesses = std::move(remaining_member_accesses);
+
+		bool member_accesses_succeeded = old_size != undecided_member_accesses.size();
+
+		// finally, we quit if we made no progress
+		if (!overloads_succeeded && !member_accesses_succeeded) break;
 	}
+
+	// only if both arrays are empty we have finished deciding the program
+	return undecided_overloads.empty() && undecided_member_accesses.empty();
+}
+
+void Resolver::decide_remaining_types() {
+	// we try to decide remaining overloads and member accesses now that the entire program is known
+	if (try_decide_remaining_types()) return;
 
 	// we will try a more destructive approach now: we will fill in all partial numeric types and try to decide.
 	// this doesn't really have an effect if it doesn't work, because the lowering phase would have done this
@@ -1571,17 +1600,11 @@ void Resolver::infer_types() {
 		}
 	}
 
-	// if any type was filled in, let's try again!
-	if (changes_made)
-		while (!undecided_overloads.empty()) {
-			std::vector<UndecidedOverload> remaining_overloads {};
-			for (UndecidedOverload& undecided_overload : undecided_overloads)
-				if (!try_decide(undecided_overload))
-					remaining_overloads.push_back(std::move(undecided_overload));
-			size_t old_size     = undecided_overloads.size();
-			undecided_overloads = std::move(remaining_overloads);
-			if (old_size == undecided_overloads.size()) break;
-		}
+	// if no type was filled in, there is no hope left
+	if (!changes_made) return;
+
+	// if any type was filled in, though, let's try again!
+	if (try_decide_remaining_types()) return;
 
 	// if we did not manage to decide any overload, we gotta throw diagnostics (we literally tried everything we can
 	// at this point :P)
@@ -1619,4 +1642,11 @@ void Resolver::infer_types() {
 			if (undecided_overload.identifier.has_value()) undecided_overload.identifier.value()->id = {};
 		}
 	}
+
+	// TODO: also throw diagnostics for member accesses
+}
+
+void Resolver::infer_types() {
+	for (ParsedFile& file : parsed_files) { infer(file.module, file.file_id); }
+	decide_remaining_types();
 }
