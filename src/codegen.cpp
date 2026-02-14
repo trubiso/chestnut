@@ -267,6 +267,14 @@ llvm::Value* CodeGenerator::call_built_in(
 	}
 }
 
+llvm::Value* CodeGenerator::get_access_pointer(IR::Expression::MemberAccess const& member_access) {
+	return builder_.CreateStructGEP(
+		generate_type(member_access.accessee_type),
+		variables_[member_access.accessee.value],
+		member_access.field_index
+	);
+}
+
 llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom) {
 	switch (atom.kind()) {
 	case IR::Expression::Atom::Kind::Identifier:
@@ -392,12 +400,17 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Ref const& deref
 	return variables_[deref.value.value];
 }
 
+llvm::Value* CodeGenerator::generate_expression(IR::Expression::MemberAccess const& member_access) {
+	return builder_.CreateLoad(generate_type(member_access.field_type), get_access_pointer(member_access));
+}
+
 llvm::Value* CodeGenerator::generate_expression(IR::Expression const& expression) {
 	switch (expression.kind()) {
 	case IR::Expression::Kind::Atom:         return generate_expression(expression.get_atom());
 	case IR::Expression::Kind::FunctionCall: return generate_expression(expression.get_function_call());
 	case IR::Expression::Kind::Deref:        return generate_expression(expression.get_deref());
 	case IR::Expression::Kind::Ref:          return generate_expression(expression.get_ref());
+	case IR::Expression::Kind::MemberAccess: return generate_expression(expression.get_member_access());
 	}
 }
 
@@ -420,12 +433,18 @@ void CodeGenerator::emit_statement(IR::Statement::Write const& write) {
 	builder_.CreateStore(value, builder_.CreateLoad(builder_.getPtrTy(), variables_[write.address.value]));
 }
 
+void CodeGenerator::emit_statement(IR::Statement::WriteAccess const& write_access) {
+	llvm::Value* value = generate_expression(write_access.value.value);
+	builder_.CreateStore(value, get_access_pointer(write_access.access.value));
+}
+
 void CodeGenerator::emit_statement(IR::Statement const& statement, llvm::BasicBlock* block) {
 	switch (statement.kind()) {
-	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare(), block);
-	case IR::Statement::Kind::Set:     return emit_statement(statement.get_set());
-	case IR::Statement::Kind::Call:    generate_expression(statement.get_call()); return;
-	case IR::Statement::Kind::Write:   return emit_statement(statement.get_write());
+	case IR::Statement::Kind::Declare:     return emit_statement(statement.get_declare(), block);
+	case IR::Statement::Kind::Set:         return emit_statement(statement.get_set());
+	case IR::Statement::Kind::Call:        generate_expression(statement.get_call()); return;
+	case IR::Statement::Kind::Write:       return emit_statement(statement.get_write());
+	case IR::Statement::Kind::WriteAccess: return emit_statement(statement.get_write_access());
 	}
 }
 
