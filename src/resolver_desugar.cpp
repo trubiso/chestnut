@@ -4,6 +4,33 @@
 #include <variant>
 
 std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
+	AST::Expression::Atom&     atom,
+	Span                       span,
+	AST::Statement::Label::ID& label_counter,
+	FileContext::ID            file_id
+) {
+	switch (atom.kind()) {
+	case AST::Expression::Atom::Kind::Identifier:
+	case AST::Expression::Atom::Kind::NumberLiteral:
+	case AST::Expression::Atom::Kind::StringLiteral:
+	case AST::Expression::Atom::Kind::CharLiteral:
+	case AST::Expression::Atom::Kind::BoolLiteral:   return {};
+	case AST::Expression::Atom::Kind::StructLiteral: break;
+	case AST::Expression::Atom::Kind::Expression:
+		return desugar_control_flow_expr(*atom.get_expression(), span, label_counter, file_id);
+	}
+
+	// for struct literals, we want to desugar each field
+	std::vector<Spanned<AST::Statement>> stmts {};
+	for (auto& field : atom.get_struct_literal().fields) {
+		std::vector<Spanned<AST::Statement>> extra_stmts
+			= desugar_control_flow_expr(*field.value, label_counter, file_id);
+		std::move(extra_stmts.begin(), extra_stmts.end(), std::back_inserter(stmts));
+	}
+	return stmts;
+}
+
+std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	AST::Expression::UnaryOperation& unary_operation,
 	AST::Statement::Label::ID&       label_counter,
 	FileContext::ID                  file_id
@@ -249,7 +276,8 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	FileContext::ID            file_id
 ) {
 	switch (expression.kind()) {
-	case AST::Expression::Kind::Atom: return {};
+	case AST::Expression::Kind::Atom:
+		return desugar_control_flow_expr(expression.get_atom(), span, label_counter, file_id);
 	case AST::Expression::Kind::UnaryOperation:
 		return desugar_control_flow_expr(expression.get_unary_operation(), label_counter, file_id);
 	case AST::Expression::Kind::AddressOperation:
