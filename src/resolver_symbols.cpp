@@ -327,6 +327,10 @@ void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const
 	for (auto& argument : function_call.arguments.labeled) { resolve(std::get<1>(argument), scope, file_id); }
 }
 
+void Resolver::resolve(AST::Expression::MemberAccess& member_access, Scope const& scope, FileContext::ID file_id) {
+	resolve(*member_access.accessee, scope, file_id);
+}
+
 void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scope, FileContext::ID file_id) {
 	switch (expression.kind()) {
 	case AST::Expression::Kind::UnaryOperation: resolve(expression.get_unary_operation(), scope, file_id); return;
@@ -337,6 +341,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	case AST::Expression::Kind::FunctionCall:    resolve(expression.get_function_call(), scope, file_id); return;
 	case AST::Expression::Kind::Atom:            break;
 	case AST::Expression::Kind::If:              return;
+	case AST::Expression::Kind::MemberAccess:    resolve(expression.get_member_access(), scope, file_id); return;
 	}
 
 	// atom resolution (better to do it here directly)

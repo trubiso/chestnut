@@ -53,6 +53,15 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	return stmts;
 }
 
+std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
+	AST::Expression::MemberAccess& member_access,
+	Span                           span,
+	AST::Statement::Label::ID&     label_counter,
+	FileContext::ID                file_id
+) {
+	return desugar_control_flow_expr(*member_access.accessee, label_counter, file_id);
+}
+
 std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 	AST::Expression&           expression,
 	Span                       span,
@@ -250,6 +259,8 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	case AST::Expression::Kind::FunctionCall:
 		return desugar_control_flow_expr(expression.get_function_call(), span, label_counter, file_id);
 	case AST::Expression::Kind::If: return desugar_control_flow_expr_if(expression, span, label_counter, file_id);
+	case AST::Expression::Kind::MemberAccess:
+		return desugar_control_flow_expr(expression.get_member_access(), span, label_counter, file_id);
 	}
 }
 

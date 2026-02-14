@@ -369,6 +369,7 @@ private:
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::AddressOperation&, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::BinaryOperation&, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::FunctionCall&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression::MemberAccess&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within an expression, returning any necessary statements to be inserted before it.
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr(Spanned<AST::Expression>&, AST::Statement::Label::ID& label_counter, FileContext::ID);
@@ -432,6 +433,7 @@ private:
 	void resolve(AST::Expression::AddressOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::BinaryOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::FunctionCall&, Scope const&, FileContext::ID);
+	void resolve(AST::Expression::MemberAccess&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression&, Span, Scope const&, FileContext::ID);
 	void resolve(Spanned<AST::Expression>&, Scope const&, FileContext::ID);
 	void resolve(AST::Statement::Declare&, Scope&, FileContext::ID);
