@@ -120,15 +120,17 @@ private:
 		std::vector<Token::Symbol>&& operators
 	);
 
-	std::optional<Expression>                         consume_expression_atom();
 	std::optional<Expression::FunctionCall::Argument> consume_expression_function_call_argument();
-	std::optional<Expression>                         consume_expression_function_call();
-	std::optional<Expression>                         consume_expression_unary_l1();
-	std::optional<Expression>                         consume_expression_binop_l1();
-	std::optional<Expression>                         consume_expression_binop_l2();
-	std::optional<Expression>                         consume_expression_binop_l3();
-	std::optional<Expression>                         consume_expression_binop_l4();
-	std::optional<Expression>                         consume_expression();
+
+	std::optional<Expression> consume_expression_atom();
+	std::optional<Expression> consume_expression_function_call();
+	std::optional<Expression> consume_expression_member_access();
+	std::optional<Expression> consume_expression_unary_l1();
+	std::optional<Expression> consume_expression_binop_l1();
+	std::optional<Expression> consume_expression_binop_l2();
+	std::optional<Expression> consume_expression_binop_l3();
+	std::optional<Expression> consume_expression_binop_l4();
+	std::optional<Expression> consume_expression();
 
 	std::optional<Statement> consume_statement_declare();
 	std::optional<Statement> consume_statement_set();
@@ -176,6 +178,7 @@ private:
 
 	std::optional<Expression> expect_expression_atom(std::string_view reason);
 	std::optional<Expression> expect_expression_function_call(std::string_view reason);
+	std::optional<Expression> expect_expression_member_access(std::string_view reason);
 	std::optional<Expression> expect_expression_unary_l1(std::string_view reason);
 	std::optional<Expression> expect_expression_binop_l1(std::string_view reason);
 	std::optional<Expression> expect_expression_binop_l2(std::string_view reason);

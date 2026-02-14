@@ -163,9 +163,15 @@ struct Expression {
 		std::unique_ptr<Spanned<Expression>> false_;
 	};
 
-	enum class Kind { Atom, UnaryOperation, AddressOperation, BinaryOperation, FunctionCall, If };
+	struct MemberAccess {
+		std::unique_ptr<Spanned<Expression>> accessee;
+		Spanned<std::string>                 field;
+	};
 
-	typedef std::variant<Atom, UnaryOperation, AddressOperation, BinaryOperation, FunctionCall, If> value_t;
+	enum class Kind { Atom, UnaryOperation, AddressOperation, BinaryOperation, FunctionCall, If, MemberAccess };
+
+	typedef std::variant<Atom, UnaryOperation, AddressOperation, BinaryOperation, FunctionCall, If, MemberAccess>
+		value_t;
 
 	value_t value;
 	// TODO: move TypeInfo::ID elsewhere to have it here
@@ -233,6 +239,16 @@ struct Expression {
 		);
 	}
 
+	inline static Expression
+	make_member_access(std::unique_ptr<Spanned<Expression>>&& accessee, Spanned<std::string>&& field) {
+		return Expression(
+			value_t {
+				std::in_place_index<(size_t) Kind::MemberAccess>,
+				MemberAccess {std::move(accessee), std::move(field)}
+                }
+		);
+	}
+
 	inline bool is_atom() const { return kind() == Kind::Atom; }
 
 	inline bool is_unary_operation() const { return kind() == Kind::UnaryOperation; }
@@ -244,6 +260,8 @@ struct Expression {
 	inline bool is_function_call() const { return kind() == Kind::FunctionCall; }
 
 	inline bool is_if() const { return kind() == Kind::If; }
+
+	inline bool is_member_access() const { return kind() == Kind::MemberAccess; }
 
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 
@@ -275,6 +293,10 @@ struct Expression {
 
 	inline If& get_if() { return std::get<(size_t) Kind::If>(value); }
 
+	inline MemberAccess const& get_member_access() const { return std::get<(size_t) Kind::MemberAccess>(value); }
+
+	inline MemberAccess& get_member_access() { return std::get<(size_t) Kind::MemberAccess>(value); }
+
 	bool can_be_lhs() const;
 };
 
@@ -287,6 +309,7 @@ std::ostream& operator<<(std::ostream&, Expression::AddressOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::BinaryOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
 std::ostream& operator<<(std::ostream&, Expression::If const&);
+std::ostream& operator<<(std::ostream&, Expression::MemberAccess const&);
 std::ostream& operator<<(std::ostream&, Expression const&);
 
 }  // namespace AST

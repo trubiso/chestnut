@@ -12,6 +12,7 @@
 namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
+// FIXME: clang-format won't stop jiggling this macro around LOL
 #define SPANNED_REASON(fn, reason)                                                               \
 	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
 		return (fn) (reason);                                                            \
@@ -421,6 +422,30 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 	return std::move(callee.value);
 }
 
+std::optional<Expression> Parser::consume_expression_member_access() {
+	std::optional<Spanned<Expression>> maybe_accessee = SPANNED(consume_expression_function_call);
+	if (!maybe_accessee.has_value()) return {};
+	Spanned<Expression> accessee = std::move(maybe_accessee.value());
+
+	while (consume_symbol(Token::Symbol::Dot)) {
+		auto maybe_field = SPANNED_REASON(expect_bare_unqualified_identifier, "expected field name after dot");
+		if (!maybe_field) return std::move(accessee.value);
+		auto field = std::move(maybe_field.value());
+
+		Span span(accessee.span.start, field.span.end);
+
+		accessee = Spanned<Expression> {
+			span,
+			Expression::make_member_access(
+				std::make_unique<Spanned<Expression>>(std::move(accessee)),
+				std::move(field)
+			)
+		};
+	}
+
+	return std::move(accessee.value);
+}
+
 std::optional<Expression> Parser::consume_generic_binop(
 	std::optional<Expression> (Parser::*consume)(),
 	std::optional<Expression> (Parser::*expect)(std::string_view),
@@ -512,8 +537,8 @@ std::optional<Expression> Parser::consume_generic_unop(
 std::optional<Expression> Parser::consume_expression_unary_l1() {
 	// then, unary -, !, & and *
 	return consume_generic_unop(
-		&Parser::consume_expression_function_call,
-		&Parser::expect_expression_function_call,
+		&Parser::consume_expression_member_access,
+		&Parser::expect_expression_member_access,
 		{Token::Symbol::Minus, Token::Symbol::Bang, Token::Symbol::Amp, Token::Symbol::Star}
 	);
 }
@@ -893,6 +918,10 @@ std::optional<Expression> Parser::expect_expression_atom(std::string_view reason
 
 std::optional<Expression> Parser::expect_expression_function_call(std::string_view reason) {
 	EXPECT(consume_expression_function_call, "expression");
+}
+
+std::optional<Expression> Parser::expect_expression_member_access(std::string_view reason) {
+	EXPECT(consume_expression_member_access, "expression");
 }
 
 std::optional<Expression> Parser::expect_expression_unary_l1(std::string_view reason) {

@@ -2,6 +2,12 @@ struct Info { direction: bool; rotation: uint32 }
 
 @extern func get_info() Info;
 
+func split_info() {
+	const info = get_info();
+	const direction = get_info().direction;
+	const rotation = info.rotation;
+}
+
 @extern func open_input() *mut void;
 @extern func close_input(file: *mut void);
 @extern func get_line(file: *mut void) bool;

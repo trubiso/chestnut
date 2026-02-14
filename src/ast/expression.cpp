@@ -97,6 +97,10 @@ std::ostream& operator<<(std::ostream& os, Expression::If const& if_) {
 	    << ")";
 }
 
+std::ostream& operator<<(std::ostream& os, Expression::MemberAccess const& member_access) {
+	return os << '(' << member_access.accessee->value << '.' << member_access.field.value << ')';
+}
+
 std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 	switch (expression.kind()) {
 	case Expression::Kind::Atom:             return os << expression.get_atom();
@@ -105,6 +109,7 @@ std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 	case Expression::Kind::BinaryOperation:  return os << expression.get_binary_operation();
 	case Expression::Kind::FunctionCall:     return os << expression.get_function_call();
 	case Expression::Kind::If:               return os << expression.get_if();
+	case Expression::Kind::MemberAccess:     return os << expression.get_member_access();
 	}
 	[[assume(false)]];
 }
