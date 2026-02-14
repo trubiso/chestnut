@@ -53,6 +53,12 @@ private:
 			std::vector<ID> ids;
 		};
 
+		struct MemberAccess {
+			ID              accessee;
+			std::vector<ID> possible_types;
+			std::string     field;
+		};
+
 		struct Pointer {
 			ID   pointee;
 			bool mutable_;
@@ -86,6 +92,8 @@ private:
 			Function,
 			/// The exact same as any of the specified candidates.
 			SameAs,
+			/// Accessing a member field of a type.
+			MemberAccess,
 			/// A named type, which points to an identifier resolved during name resolution.
 			Named,
 			/// A pointer type.
@@ -112,6 +120,7 @@ private:
 			std::monostate,          // Module
 			Function,                // Function
 			SameAs,                  // SameAs
+			MemberAccess,            // MemberAccess
 			AST::Identifier const*,  // Named
 			Pointer,                 // Pointer
 			std::monostate,          // KnownVoid
@@ -150,6 +159,12 @@ private:
 
 		inline static TypeInfo make_same_as(std::vector<ID>&& ids) {
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::SameAs>, SameAs {std::move(ids)}});
+		}
+
+		inline static TypeInfo make_member_access(ID accessee, std::string const& field) {
+			return TypeInfo(
+				value_t {std::in_place_index<(size_t) Kind::MemberAccess>, MemberAccess {accessee, {}, field}}
+			);
 		}
 
 		inline static TypeInfo make_named(AST::Identifier const* identifier) {
@@ -204,6 +219,8 @@ private:
 
 		inline bool is_same_as() const { return kind() == Kind::SameAs; }
 
+		inline bool is_member_access() const { return kind() == Kind::MemberAccess; }
+
 		inline bool is_named() const { return kind() == Kind::Named; }
 
 		inline bool is_pointer() const { return kind() == Kind::Pointer; }
@@ -227,6 +244,10 @@ private:
 		inline Function& get_function() { return std::get<(size_t) Kind::Function>(value); }
 
 		inline SameAs const& get_same_as() const { return std::get<(size_t) Kind::SameAs>(value); }
+
+		inline MemberAccess const& get_member_access() const { return std::get<(size_t) Kind::MemberAccess>(value); }
+
+		inline MemberAccess& get_member_access() { return std::get<(size_t) Kind::MemberAccess>(value); }
 
 		inline AST::Identifier const* get_named() const { return std::get<(size_t) Kind::Named>(value); }
 		
@@ -475,6 +496,8 @@ private:
 
 	std::vector<UndecidedOverload> undecided_overloads {};
 
+	std::vector<TypeInfo::ID> undecided_member_accesses {};
+
 	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID);
 	TypeInfo from_type(AST::Type const&, FileContext::ID);
 
@@ -524,6 +547,14 @@ private:
 		TypeInfo::ID b,
 		TypeInfo::ID a_origin,
 		TypeInfo::ID b_origin,
+		FileContext::ID
+	);
+	/// Unifies a member access and another type.
+	void unify_member_access(
+		TypeInfo::ID member_access,
+		TypeInfo::ID other,
+		TypeInfo::ID member_access_origin,
+		TypeInfo::ID other_origin,
 		FileContext::ID
 	);
 	/// Unifies a function and another type.
@@ -578,6 +609,7 @@ private:
 
 	TypeInfo::ID infer(AST::Expression::Atom const&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::FunctionCall&, Span, FileContext::ID);
+	TypeInfo::ID infer(AST::Expression::MemberAccess&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression&, Span, FileContext::ID);
 	void         infer(AST::Statement::Declare&, FileContext::ID);
 	void         infer(AST::Statement::Set&, FileContext::ID);

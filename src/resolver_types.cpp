@@ -114,6 +114,7 @@ void Resolver::debug_print_type(TypeInfo type) const {
 	case TypeInfo::Kind::PartialFloat:   std::cout << "(float)"; return;
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::MemberAccess:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::KnownFloat:
@@ -140,6 +141,19 @@ void Resolver::debug_print_type(TypeInfo type) const {
 			if (++count < type.get_same_as().ids.size()) std::cout << " | ";
 		}
 		std::cout << ")";
+	} else if (type.is_member_access()) {
+		TypeInfo::MemberAccess const& member_access = type.get_member_access();
+		debug_print_type(member_access.accessee);
+		std::cout << '.' << member_access.field;
+		if (!member_access.possible_types.empty()) {
+			std::cout << " (possibly: ";
+			size_t count = 0;
+			for (TypeInfo::ID subid : member_access.possible_types) {
+				debug_print_type(subid);
+				if (++count < member_access.possible_types.size()) std::cout << ", ";
+			}
+			std::cout << ')';
+		}
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		std::cout << "(*" << (pointer.mutable_ ? "mut" : "const") << " ";
@@ -176,6 +190,7 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	case TypeInfo::Kind::PartialFloat:   return "float";
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::MemberAccess:
 	case TypeInfo::Kind::Named:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
@@ -202,6 +217,9 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 			if (++count < type.get_same_as().ids.size()) output << " | ";
 		}
 		if (type.get_same_as().ids.size() > 1) output << ')';
+	} else if (type.is_member_access()) {
+		TypeInfo::MemberAccess const& member_access = type.get_member_access();
+		output << get_type_name(member_access.accessee) << '.' << member_access.field;
 	} else if (type.is_named()) {
 		// FIXME: this incidentally prints the symbol ID!!
 		output << *type.get_named();
@@ -366,6 +384,47 @@ bool Resolver::unify_basic_known(
 	if (!a_matches) a = TypeInfo::make_bottom();
 	if (!b_matches) b = TypeInfo::make_bottom();
 	return true;
+}
+
+void Resolver::unify_member_access(
+	TypeInfo::ID    member_access,
+	TypeInfo::ID    other,
+	TypeInfo::ID    member_access_origin,
+	TypeInfo::ID    other_origin,
+	FileContext::ID file_id
+) {
+	// for member access, the diagnostics will be thrown later anyways, so we always accept whatever happens here.
+	assert(type_pool_.at(member_access).is_member_access());
+	auto& a = type_pool_.at(member_access).get_member_access();
+
+	// we push origins for diagnostics' sake
+	if (!type_pool_.at(other).is_member_access()) {
+		if (std::find(a.possible_types.cbegin(), a.possible_types.cend(), other_origin)
+		    == a.possible_types.cend()) {
+			a.possible_types.push_back(other_origin);
+		}
+		return;
+	}
+
+	auto& b = type_pool_.at(other).get_member_access();
+
+	// make a list of all common possible types
+	std::vector<TypeInfo::ID> new_possible_types {};
+	new_possible_types.reserve(a.possible_types.size());
+	std::copy(a.possible_types.cbegin(), a.possible_types.cend(), std::back_inserter(new_possible_types));
+	std::copy_if(
+		b.possible_types.cbegin(),
+		b.possible_types.cend(),
+		std::back_inserter(new_possible_types),
+		[&new_possible_types](TypeInfo::ID type) {
+			return std::find(new_possible_types.cbegin(), new_possible_types.cend(), type)
+		            == new_possible_types.cend();
+		}
+	);
+
+	// then set it for both!
+	a.possible_types = new_possible_types;
+	b.possible_types = std::move(new_possible_types);
 }
 
 void Resolver::unify_functions(
@@ -567,6 +626,10 @@ void Resolver::unify(
 		set_same_as(b_id, a_id);
 		return;
 	}
+
+	// member access types
+	if (a.is_member_access()) return unify_member_access(a_id, b_id, a_origin, b_origin, file_id);
+	if (b.is_member_access()) return unify_member_access(b_id, a_id, b_origin, a_origin, file_id);
 
 	// named types
 	if (a.is_named()) return unify_named(a_id, b_id, a_origin, b_origin, file_id);
@@ -847,6 +910,10 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	// make unknowns known
 	if (a.is_unknown()) return true;
 	if (b.is_unknown()) return true;
+
+	// member access types (these always succeed :P)
+	if (a.is_member_access()) return true;
+	if (b.is_member_access()) return true;
 
 	// named types
 	if (a.is_named()) return can_unify_named(a, b);
@@ -1235,6 +1302,19 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	return expr_type;
 }
 
+Resolver::TypeInfo::ID
+Resolver::infer(AST::Expression::MemberAccess& member_access, Span span, FileContext::ID file_id) {
+	TypeInfo::ID accessee_id = infer(member_access.accessee->value, member_access.accessee->span, file_id);
+
+	TypeInfo     type = TypeInfo::make_member_access(accessee_id, member_access.field.value);
+	TypeInfo::ID id   = register_type(std::move(type), span, file_id);
+
+	// TODO: decide member accesses
+	undecided_member_accesses.push_back(id);
+
+	return id;
+}
+
 Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, FileContext::ID file_id) {
 	switch (expression.kind()) {
 	case AST::Expression::Kind::Atom:             expression.type = infer(expression.get_atom(), span, file_id); break;
@@ -1243,6 +1323,9 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, F
 	case AST::Expression::Kind::BinaryOperation:  break;
 	case AST::Expression::Kind::FunctionCall:
 		expression.type = infer(expression.get_function_call(), span, file_id);
+		break;
+	case AST::Expression::Kind::MemberAccess:
+		expression.type = infer(expression.get_member_access(), span, file_id);
 		break;
 	case AST::Expression::Kind::If: [[assume(false)]]; return expression.type.value();
 	}
