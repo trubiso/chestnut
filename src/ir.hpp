@@ -229,6 +229,7 @@ struct Expression {
 			Identifier,
 			Literal,
 			Bool,
+			StructLiteral,
 			Error,
 		};
 
@@ -237,7 +238,13 @@ struct Expression {
 			std::string literal;
 		};
 
-		typedef std::variant<Identifier, Literal, bool, std::monostate> value_t;
+		struct StructLiteral {
+			Spanned<Identifier>        name;
+			// fields ordered according to the struct
+			std::vector<Spanned<Atom>> fields;
+		};
+
+		typedef std::variant<Identifier, Literal, bool, StructLiteral, std::monostate> value_t;
 
 		value_t  value;
 		IR::Type type;
@@ -264,6 +271,14 @@ struct Expression {
 		// TODO: the type should always be bool, idk if it's even worth having it as an arg
 		inline static Atom make_bool(bool value, IR::Type type) { return Atom {value, std::move(type)}; }
 
+		inline static Atom
+		make_struct_literal(Spanned<Identifier>&& name, std::vector<Spanned<Atom>>&& fields, IR::Type&& type) {
+			return Atom {
+				Atom::StructLiteral {std::move(name), std::move(fields)},
+				std::move(type)
+			};
+		}
+
 		inline static Atom make_error() {
 			return Atom {std::monostate {}, Type::make_atom(Type::Atom::make_error())};
 		}
@@ -274,6 +289,8 @@ struct Expression {
 
 		inline bool is_bool() const { return kind() == Kind::Bool; }
 
+		inline bool is_struct_literal() const { return kind() == Kind::StructLiteral; }
+
 		inline bool is_error() const { return kind() == Kind::Error; }
 
 		inline Identifier get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
@@ -281,6 +298,10 @@ struct Expression {
 		inline Identifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline Literal const& get_literal() const { return std::get<(size_t) Kind::Literal>(value); }
+
+		inline StructLiteral const& get_struct_literal() const {
+			return std::get<(size_t) Kind::StructLiteral>(value);
+		}
 
 		inline bool get_bool() const { return std::get<(size_t) Kind::Bool>(value); }
 	};
@@ -400,6 +421,7 @@ struct Expression {
 };
 
 std::ostream& operator<<(std::ostream&, Expression::Atom::Literal const&);
+std::ostream& operator<<(std::ostream&, Expression::Atom::StructLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
 std::ostream& operator<<(std::ostream&, Expression::Deref const&);

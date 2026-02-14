@@ -330,6 +330,44 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	return extract_expression(expression.value, expression.span, basic_blocks, file_id, allow_functions);
 }
 
+IR::Expression::Atom Resolver::lower(
+	AST::Expression::Atom::StructLiteral const& struct_literal,
+	TypeInfo::ID                                type_id,
+	Span                                        span,
+	std::vector<IR::BasicBlock>&                basic_blocks,
+	FileContext::ID                             file_id,
+	bool                                        allow_functions
+) {
+	if (!struct_literal.valid) return IR::Expression::Atom::make_error();
+
+	// since the order of the struct literal's fields is not necessarily the same as the struct's, we need to
+	// iterate.
+
+	// PERF: at some point the struct literal's fields should then be replaced by a std::unordered_map
+	std::vector<Spanned<IR::Expression::Atom>> fields {};
+	fields.reserve(struct_literal.fields.size());
+	IR::Struct const& struct_
+		= std::get<IR::Struct>(symbol_pool_.at(struct_literal.name.value.id.value().at(0)).item);
+	for (auto const& field : struct_.fields) {
+		auto corresponding = std::find_if(
+			struct_literal.fields.cbegin(),
+			struct_literal.fields.cend(),
+			[&field](AST::Expression::Atom::StructLiteral::Field const& given_field) {
+				return field.name.value == given_field.name.value;
+			}
+		);
+		assert(corresponding != struct_literal.fields.cend());
+		// i guess functions are allowed here?
+		fields.push_back(extract_expression(*corresponding->value, basic_blocks, file_id, true));
+	}
+
+	return IR::Expression::Atom::make_struct_literal(
+		lower_identifier(struct_literal.name),
+		std::move(fields),
+		reconstruct_type(type_id)
+	);
+}
+
 IR::Expression::Atom Resolver::lower_atom(
 	AST::Expression::Atom const& atom,
 	TypeInfo::ID                 type_id,
@@ -338,6 +376,7 @@ IR::Expression::Atom Resolver::lower_atom(
 	FileContext::ID              file_id,
 	bool                         allow_functions
 ) {
+	// TODO: actually care about allow_functions more LOL
 	switch (atom.kind()) {
 	case AST::Expression::Atom::Kind::NumberLiteral:
 		return IR::Expression::Atom::make_literal(
@@ -359,6 +398,8 @@ IR::Expression::Atom Resolver::lower_atom(
 		);
 	case AST::Expression::Atom::Kind::BoolLiteral:
 		return IR::Expression::Atom::make_bool(atom.get_bool_literal().value, reconstruct_type(type_id));
+	case AST::Expression::Atom::Kind::StructLiteral:
+		return lower(atom.get_struct_literal(), type_id, span, basic_blocks, file_id, allow_functions);
 	case AST::Expression::Atom::Kind::Expression:
 		return extract_expression(*atom.get_expression(), span, basic_blocks, file_id).value;
 	case AST::Expression::Atom::Kind::Identifier: break;
