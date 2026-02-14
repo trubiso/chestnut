@@ -352,6 +352,79 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	} else if (atom.is_expression()) {
 		// for subexpressions, we just recurse
 		resolve(*atom.get_expression(), span, scope, file_id);
+	} else if (atom.is_struct_literal()) {
+		// for struct literals, we need to resolve both the type and the fields
+		AST::Expression::Atom::StructLiteral& struct_literal = atom.get_struct_literal();
+
+		// we transfer the name to a type to resolve it and then back to maintain the ID
+		// in the future, we will have to ensure that this is a struct, but for now resolve already does that
+		AST::Type temp_type
+			= AST::Type::make_atom(AST::Type::Atom::make_named(std::move(struct_literal.name.value)));
+		resolve(temp_type, struct_literal.name.span, scope, file_id);
+		struct_literal.name.value = std::move(temp_type.get_atom().get_named());
+
+		// now, we check if all given fields exist in the struct and we resolve all of them, regardless of
+		// whether they exist or not
+		AST::Struct* struct_
+			= std::get<AST::Struct*>(symbol_pool_.at(struct_literal.name.value.id.value().at(0)).item);
+		for (auto& field : struct_literal.fields) {
+			// TODO: maybe in the future get closest field via levenshtein
+			resolve(*field.value, scope, file_id);
+			if (std::find_if(
+				    struct_->fields.cbegin(),
+				    struct_->fields.cend(),
+				    [&field](AST::Struct::Field const& given_field) {
+					    return given_field.name.value == field.name.value;
+				    }
+			    )
+			    == struct_->fields.cend()) {
+				std::stringstream subtitle_stream {};
+				subtitle_stream
+					<< "field '"
+					<< field.name.value
+					<< "' does not exist in struct '"
+					<< struct_->name.value.name()
+					<< "'";
+				parsed_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"nonexistent struct field",
+						subtitle_stream.str(),
+						{Diagnostic::Sample(
+							get_context(file_id),
+							field.name.span,
+							OutFmt::Color::Red
+						)}
+					)
+				);
+			}
+		}
+
+		// finally, we check whether any field is missing
+		for (auto const& field : struct_->fields) {
+			if (std::find_if(
+				    struct_literal.fields.cbegin(),
+				    struct_literal.fields.cend(),
+				    [&field](AST::Expression::Atom::StructLiteral::Field const& given_field) {
+					    return field.name.value == given_field.name.value;
+				    }
+			    )
+			    == struct_literal.fields.cend()) {
+				std::stringstream subtitle_stream {};
+				subtitle_stream
+					<< "field '"
+					<< field.name.value
+					<< "' exists in struct '"
+					<< struct_->name.value.name()
+					<< "', but it was not given a value in the struct literal";
+				parsed_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"missing struct field",
+						subtitle_stream.str(),
+						{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+					)
+				);
+			}
+		}
 	}
 	// the rest of them do not need any kind of resolution yet
 	return;
