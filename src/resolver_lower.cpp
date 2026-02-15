@@ -226,28 +226,25 @@ Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type> spanned_type, FileCont
 	}
 }
 
-std::optional<Spanned<IR::Expression>>
-Resolver::lower_get_default_value(IR::Type const& type, Span span, FileContext::ID file_id) {
+Spanned<IR::Expression> Resolver::lower_get_default_value(IR::Type const& type, Span span, FileContext::ID file_id) {
 	// TODO: default values for structs (for now, just default value for each field)
 	if (!type.is_atom()) goto diagnostic;
 
 	switch (type.get_atom().kind()) {
 	case IR::Type::Atom::Kind::Integer:
 	case IR::Type::Atom::Kind::Float:
-		return Spanned {
-			span,
-			IR::Expression::make_atom(
+		return {span,
+		        IR::Expression::make_atom(
 				IR::Expression::Atom::make_literal(
 					IR::Expression::Atom::Literal::Kind::Number,
 					"0",
 					type.clone()
 				)
-			)
-		};
+			)};
 	case IR::Type::Atom::Kind::Bool:
-		return Spanned {span, IR::Expression::make_atom(IR::Expression::Atom::make_bool(false, type.clone()))};
+		return {span, IR::Expression::make_atom(IR::Expression::Atom::make_bool(false, type.clone()))};
 	case IR::Type::Atom::Kind::Void:
-	case IR::Type::Atom::Kind::Error: return {};
+	case IR::Type::Atom::Kind::Error: return {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
 	case IR::Type::Atom::Kind::Char:
 	case IR::Type::Atom::Kind::Named: goto diagnostic;
 	}
@@ -260,7 +257,7 @@ diagnostic:
 			{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
 		)
 	);
-	return {};
+	return {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
 }
 
 std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>>

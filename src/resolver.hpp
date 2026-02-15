@@ -668,7 +668,7 @@ private:
 	Spanned<IR::Type> lower_type(Spanned<AST::Type>, FileContext::ID);
 
 	/// Gets the default value for the given type.
-	std::optional<Spanned<IR::Expression>> lower_get_default_value(IR::Type const&, Span, FileContext::ID);
+	Spanned<IR::Expression> lower_get_default_value(IR::Type const&, Span, FileContext::ID);
 
 	/// Lowers any identifier into its IR equivalent and type.
 	std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>> lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
