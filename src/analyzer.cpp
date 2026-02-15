@@ -303,22 +303,44 @@ void Analyzer::check_assigned(IR::Statement::Write& write, FileContext::ID file_
 
 void Analyzer::check_assigned(
 	IR::Statement::WriteAccess& write_access,
+	Span                        span,
 	FileContext::ID             file_id,
 	AssignedMap&                assigned
 ) {
 	// we do not support partial initialization, so the struct must be set
-	// TODO: check mutability
 	check_assigned(write_access.access.value, file_id, assigned);
+	IR::Symbol const& symbol = symbols.at(write_access.access.value.accessee.value);
+	if (!symbol.mutable_) {
+		std::stringstream subtitle {};
+		subtitle << "variable '" << symbol.name << "' was declared as constant";
+		resolved_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"tried to mutate field of immutable variable",
+				subtitle.str(),
+				{Diagnostic::Sample(
+					 get_context(symbol.file_id),
+					 "declaration",
+					 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
+				 ),
+		                 Diagnostic::Sample(
+					 get_context(file_id),
+					 "mutation",
+					 {Diagnostic::Sample::Label(span, OutFmt::Color::Red)}
+				 )}
+			)
+		);
+	}
 	check_assigned(write_access.value, file_id, assigned);
 }
 
-void Analyzer::check_assigned(IR::Statement& statement, FileContext::ID file_id, AssignedMap& assigned) {
+void Analyzer::check_assigned(IR::Statement& statement, Span span, FileContext::ID file_id, AssignedMap& assigned) {
 	switch (statement.kind()) {
-	case IR::Statement::Kind::Declare:     return check_assigned(statement.get_declare(), file_id, assigned);
-	case IR::Statement::Kind::Set:         return check_assigned(statement.get_set(), file_id, assigned);
-	case IR::Statement::Kind::Call:        return check_assigned(statement.get_call(), file_id, assigned);
-	case IR::Statement::Kind::Write:       return check_assigned(statement.get_write(), file_id, assigned);
-	case IR::Statement::Kind::WriteAccess: return check_assigned(statement.get_write_access(), file_id, assigned);
+	case IR::Statement::Kind::Declare: return check_assigned(statement.get_declare(), file_id, assigned);
+	case IR::Statement::Kind::Set:     return check_assigned(statement.get_set(), file_id, assigned);
+	case IR::Statement::Kind::Call:    return check_assigned(statement.get_call(), file_id, assigned);
+	case IR::Statement::Kind::Write:   return check_assigned(statement.get_write(), file_id, assigned);
+	case IR::Statement::Kind::WriteAccess:
+		return check_assigned(statement.get_write_access(), span, file_id, assigned);
 	}
 }
 
@@ -331,7 +353,7 @@ void Analyzer::check_assigned(
 ) {
 	// first, we check every statement
 	for (Spanned<IR::Statement>& statement : basic_block.statements)
-		check_assigned(statement.value, file_id, assigned);
+		check_assigned(statement.value, statement.span, file_id, assigned);
 
 	// finally, we need to check how this fares in each of our possible jumps out
 	if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {

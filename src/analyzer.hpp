@@ -50,8 +50,8 @@ private:
 	void check_assigned(IR::Statement::Declare&, FileContext::ID, AssignedMap& assigned);
 	void check_assigned(IR::Statement::Set&, FileContext::ID, AssignedMap& assigned);
 	void check_assigned(IR::Statement::Write&, FileContext::ID, AssignedMap& assigned);
-	void check_assigned(IR::Statement::WriteAccess&, FileContext::ID, AssignedMap& assigned);
-	void check_assigned(IR::Statement&, FileContext::ID, AssignedMap& assigned);
+	void check_assigned(IR::Statement::WriteAccess&, Span, FileContext::ID, AssignedMap& assigned);
+	void check_assigned(IR::Statement&, Span, FileContext::ID, AssignedMap& assigned);
 	void check_assigned(
 		IR::BasicBlock&,
 		IR::Function&,
