@@ -18,10 +18,10 @@ FileContext Analyzer::get_context(FileContext::ID file_id) const {
 }
 
 void Analyzer::check_assigned(
-	IR::Identifier                                  identifier,
-	Span                                            span,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
+	IR::Identifier     identifier,
+	Span               span,
+	FileContext::ID    file_id,
+	AssignedMap const& assigned
 ) {
 	if (!assigned.contains(identifier)) return;
 	if (!assigned.at(identifier))
@@ -43,18 +43,18 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	Spanned<IR::Identifier> const&                  identifier,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
+	Spanned<IR::Identifier> const& identifier,
+	FileContext::ID                file_id,
+	AssignedMap const&             assigned
 ) {
 	return check_assigned(identifier.value, identifier.span, file_id, assigned);
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::Atom const&                     atom,
-	Span                                            span,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
+	IR::Expression::Atom const& atom,
+	Span                        span,
+	FileContext::ID             file_id,
+	AssignedMap const&          assigned
 ) {
 	switch (atom.kind()) {
 	case IR::Expression::Atom::Kind::Literal:
@@ -70,9 +70,9 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::FunctionCall const&             function_call,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
+	IR::Expression::FunctionCall const& function_call,
+	FileContext::ID                     file_id,
+	AssignedMap const&                  assigned
 ) {
 	if (std::holds_alternative<Spanned<IR::Identifier>>(function_call.callee))
 		check_assigned(std::get<Spanned<IR::Identifier>>(function_call.callee), file_id, assigned);
@@ -80,41 +80,37 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::Deref const&                    deref,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
+	IR::Expression::Deref const& deref,
+	FileContext::ID              file_id,
+	AssignedMap const&           assigned
 ) {
 	check_assigned(deref.address, file_id, assigned);
 }
 
-void Analyzer::check_assigned(
-	IR::Expression::Ref const&                      ref,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
-) {
+void Analyzer::check_assigned(IR::Expression::Ref const& ref, FileContext::ID file_id, AssignedMap const& assigned) {
 	check_assigned(ref.value, file_id, assigned);
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::MemberAccess const&             member_access,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
+	IR::Expression::MemberAccess const& member_access,
+	FileContext::ID                     file_id,
+	AssignedMap const&                  assigned
 ) {
 	check_assigned(member_access.accessee, file_id, assigned);
 }
 
 void Analyzer::check_assigned(
-	Spanned<IR::Expression::Atom> const&            atom,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
+	Spanned<IR::Expression::Atom> const& atom,
+	FileContext::ID                      file_id,
+	AssignedMap const&                   assigned
 ) {
 	return check_assigned(atom.value, atom.span, file_id, assigned);
 }
 
 void Analyzer::check_assigned(
-	Spanned<IR::Expression> const&                  expression,
-	FileContext::ID                                 file_id,
-	std::unordered_map<IR::Identifier, bool> const& assigned
+	Spanned<IR::Expression> const& expression,
+	FileContext::ID                file_id,
+	AssignedMap const&             assigned
 ) {
 	switch (expression.value.kind()) {
 	case IR::Expression::Kind::Atom:
@@ -128,19 +124,11 @@ void Analyzer::check_assigned(
 	}
 }
 
-void Analyzer::check_assigned(
-	IR::Statement::Declare&                   declare,
-	FileContext::ID                           file_id,
-	std::unordered_map<IR::Identifier, bool>& assigned
-) {
+void Analyzer::check_assigned(IR::Statement::Declare& declare, FileContext::ID file_id, AssignedMap& assigned) {
 	assigned.insert({declare.name.value, false});
 }
 
-void Analyzer::check_assigned(
-	IR::Statement::Set&                       set,
-	FileContext::ID                           file_id,
-	std::unordered_map<IR::Identifier, bool>& assigned
-) {
+void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, AssignedMap& assigned) {
 	check_assigned(set.value, file_id, assigned);
 	if (assigned.contains(set.name.value)) {
 		// TODO: it would be nice to find the first mutation span
@@ -182,11 +170,7 @@ void Analyzer::check_assigned(
 			<< std::endl;
 }
 
-void Analyzer::check_assigned(
-	IR::Statement::Write&                     write,
-	FileContext::ID                           file_id,
-	std::unordered_map<IR::Identifier, bool>& assigned
-) {
+void Analyzer::check_assigned(IR::Statement::Write& write, FileContext::ID file_id, AssignedMap& assigned) {
 	// the pointer we're writing to must be assigned
 	// TODO: move mutability check here
 	check_assigned(write.address, file_id, assigned);
@@ -194,9 +178,9 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	IR::Statement::WriteAccess&               write_access,
-	FileContext::ID                           file_id,
-	std::unordered_map<IR::Identifier, bool>& assigned
+	IR::Statement::WriteAccess& write_access,
+	FileContext::ID             file_id,
+	AssignedMap&                assigned
 ) {
 	// we do not support partial initialization, so the struct must be set
 	// TODO: check mutability
@@ -204,11 +188,7 @@ void Analyzer::check_assigned(
 	check_assigned(write_access.value, file_id, assigned);
 }
 
-void Analyzer::check_assigned(
-	IR::Statement&                            statement,
-	FileContext::ID                           file_id,
-	std::unordered_map<IR::Identifier, bool>& assigned
-) {
+void Analyzer::check_assigned(IR::Statement& statement, FileContext::ID file_id, AssignedMap& assigned) {
 	switch (statement.kind()) {
 	case IR::Statement::Kind::Declare:     return check_assigned(statement.get_declare(), file_id, assigned);
 	case IR::Statement::Kind::Set:         return check_assigned(statement.get_set(), file_id, assigned);
@@ -222,7 +202,7 @@ void Analyzer::check_assigned(
 	IR::BasicBlock&                                                                 basic_block,
 	IR::Function&                                                                   function,
 	FileContext::ID                                                                 file_id,
-	std::unordered_map<IR::Identifier, bool>&                                       assigned,
+	AssignedMap&                                                                    assigned,
 	std::unordered_map<IR::BasicBlock::ID, std::unordered_set<IR::BasicBlock::ID>>& preds
 ) {
 	// first, we check every statement
@@ -245,7 +225,7 @@ void Analyzer::check_assigned(
 		if (!preds.at(branch.true_).contains(basic_block.id)) {
 			preds.at(branch.true_).insert(basic_block.id);
 			// we copy to avoid info leak from the true branch onto the false branch
-			std::unordered_map<IR::Identifier, bool> assigned_copy = assigned;
+			AssignedMap assigned_copy = assigned;
 			check_assigned(function.body.at(branch.true_), function, file_id, assigned_copy, preds);
 		}
 		if (!preds.at(branch.false_).contains(basic_block.id)) {
@@ -263,7 +243,8 @@ void Analyzer::check_assigned(
 
 void Analyzer::check_assigned(IR::Function& function, FileContext::ID file_id) {
 	if (function.body.empty()) return;
-	std::unordered_map<IR::Identifier, bool>                                       assigned {};
+	AssignedMap assigned {};
+
 	std::unordered_map<IR::BasicBlock::ID, std::unordered_set<IR::BasicBlock::ID>> preds {};
 	for (IR::BasicBlock::ID id = 0; id < function.body.size(); ++id) preds.insert({id, {}});
 	check_assigned(function.body.at(0), function, file_id, assigned, preds);
