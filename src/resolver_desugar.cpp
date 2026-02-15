@@ -119,7 +119,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 
 	AST::SymbolID new_id  = symbol_next();
 	TypeInfo::ID  type_id = register_type(TypeInfo::make_known_bool(), stub_span, file_id, new_id);
-	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, true, false, {}});
+	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, false, false, {}});
 	AST::Identifier new_var {
 		{stub_span, "_"}
 	};
@@ -127,7 +127,6 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 
 	AST::Expression value = AST::Expression::make_atom(AST::Expression::Atom::make_bool_literal(is_or));
 
-	// FIXME: i hate this var being mutable as well
 	stmts.emplace_back(
 		stub_span,
 		AST::Statement::make_declare(
@@ -135,7 +134,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 				{stub_span, new_var},
 				{{stub_span, AST::Type::make_atom(AST::Type::Atom::make_bool())}},
 				{{stub_span, std::move(value)}},
-				{stub_span, true},
+				{stub_span, false},
 				false
         }
 		)
@@ -196,14 +195,12 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 
 	AST::SymbolID new_id  = symbol_next();
 	TypeInfo::ID  type_id = register_type(TypeInfo::make_unknown(), stub_span, file_id, new_id);
-	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, true, false, {}});
+	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, false, false, {}});
 	AST::Identifier new_var {
 		{stub_span, "_"}
 	};
 	new_var.id = {new_id};
 
-	// FIXME: i hate this variable being mutable. we need to find a different solution (const variables are
-	// single-assignment from declaration, for instance).
 	stmts.emplace_back(
 		stub_span,
 		AST::Statement::make_declare(
@@ -211,7 +208,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 				{stub_span, new_var},
 				std::nullopt,
 				std::nullopt,
-				{stub_span,    true},
+				{stub_span,   false},
 				true
         }
 		)

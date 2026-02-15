@@ -239,7 +239,7 @@ struct Expression {
 		};
 
 		struct StructLiteral {
-			Spanned<Identifier>        name;
+			Spanned<Identifier> name;
 			// fields ordered according to the struct
 			std::vector<Spanned<Atom>> fields;
 		};
@@ -435,11 +435,9 @@ typedef std::vector<Spanned<Statement>> Scope;
 
 struct Statement {
 	struct Declare {
-		Spanned<Identifier>                name;
-		Type                               type;
-		std::optional<Spanned<Expression>> value;
-
-		Spanned<bool> mutable_;
+		Spanned<Identifier> name;
+		Type                type;
+		Spanned<bool>       mutable_;
 	};
 
 	// set statements must set an identifier now. once we do deref sets, that will be a separate statement anyways.

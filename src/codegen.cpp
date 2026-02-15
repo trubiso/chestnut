@@ -435,12 +435,10 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression const& expression
 }
 
 void CodeGenerator::emit_statement(IR::Statement::Declare const& declare, llvm::BasicBlock* block) {
-	llvm::Type*  type  = generate_type(declare.type);
-	llvm::Value* value = declare.value.has_value() ? generate_expression(declare.value.value().value) : nullptr;
+	llvm::Type* type = generate_type(declare.type);
 	// FIXME: we should probably create this variable in the entry of the function
 	variables_[declare.name.value]
 		= llvm::IRBuilder<>(block, block->begin()).CreateAlloca(type, nullptr, get_name(declare.name.value));
-	if (value) builder_.CreateStore(value, variables_[declare.name.value]);
 }
 
 void CodeGenerator::emit_statement(IR::Statement::Set const& set) {

@@ -291,6 +291,7 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	FileContext::ID              file_id,
 	bool                         allow_functions
 ) {
+	// we skip things which are already atoms
 	if (expression.is_atom())
 		return {span,
 		        lower_atom(
@@ -306,18 +307,24 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	Spanned<IR::Identifier> name {span, id};
 
 	IR::Type type = reconstruct_type(expression.type.value(), allow_functions);
-	// we actually make the statement before pushing it just in case this lowering creates a new basic block
-	Spanned<IR::Statement> statement {
-		span,
-		IR::Statement::make_declare(
-			IR::Statement::Declare {
-						name, type.clone(),
-						lower(expression, span, basic_blocks, file_id),
-						Spanned<bool> {span, false}
-			}
-		)
-	};
-	basic_blocks.at(basic_blocks.size() - 1).statements.push_back(std::move(statement));
+	// first, we lower the value
+	auto value = lower(expression, span, basic_blocks, file_id);
+	// then, we push the declaration
+	basic_blocks.at(basic_blocks.size() - 1)
+		.statements.emplace_back(
+			span,
+			IR::Statement::make_declare(
+				IR::Statement::Declare {
+					name,
+					type.clone(),
+					{span, false}
+        }
+			)
+		);
+	// finally, we push the set statement
+	basic_blocks.at(basic_blocks.size() - 1)
+		.statements.emplace_back(span, IR::Statement::make_set(IR::Statement::Set {name, std::move(value)}));
+	// and we return the declared identifier
 	return {name.span, IR::Expression::Atom::make_identifier(std::move(name.value), std::move(type))};
 }
 
@@ -603,11 +610,20 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	// value will only be {} if it is undefined
 	if (!declare.is_undefined && !value.has_value()) value = lower_get_default_value(type, span, file_id);
 
+	// we add the declare first
+	basic_blocks.at(basic_blocks.size() - 1)
+		.statements.emplace_back(
+			span,
+			IR::Statement::make_declare(
+				IR::Statement::Declare {name, std::move(type), std::move(declare.mutable_)}
+			)
+		);
+
+	// then, we add the set statement if we have a value
+	if (!value.has_value()) return {};
 	return Spanned<IR::Statement> {
 		span,
-		IR::Statement::make_declare(
-			IR::Statement::Declare {name, std::move(type), std::move(value), declare.mutable_}
-		)
+		IR::Statement::make_set(IR::Statement::Set {name, std::move(value.value())})
 	};
 }
 
@@ -656,29 +672,8 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 
 	assert(lhs.value.is_atom());
 	auto lhs_identifier = Spanned<IR::Identifier> {lhs.span, lhs.value.get_atom().get_identifier()};
-	// check that we're setting an actually mutable variable
-	if (!symbol_pool_.at(lhs_identifier.value).mutable_) {
-		Symbol const&     symbol = symbol_pool_.at(lhs_identifier.value);
-		std::stringstream subtitle {};
-		subtitle << "symbol '" << symbol.name << "' was not declared as mutable";
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"tried to mutate immutable symbol",
-				subtitle.str(),
-				{Diagnostic::Sample(
-					 get_context(symbol.file_id),
-					 "declaration",
-					 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
-				 ),
-		                 Diagnostic::Sample(
-					 get_context(file_id),
-					 "mutation",
-					 {Diagnostic::Sample::Label(lhs_identifier.span, OutFmt::Color::Red)}
-				 )}
-			)
-		);
-	}
 
+	// we check mutability later
 	return Spanned<IR::Statement> {
 		span,
 		IR::Statement::make_set(IR::Statement::Set {lhs_identifier, std::move(value)})
