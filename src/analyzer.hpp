@@ -30,6 +30,12 @@ private:
 	/// Returns the file context for the requested file ID.
 	FileContext get_context(FileContext::ID) const;
 
+	void optimize_blocks(IR::Function&);
+	void optimize_blocks(IR::Module&);
+	/// Optimizes away blocks which are unconditional jumps, and optimizes away unconditional jumps to blocks which
+	/// are empty.
+	void optimize_blocks();
+
 	using AssignedMap = std::unordered_map<IR::Identifier, std::optional<Span>>;
 
 	void check_assigned(IR::Identifier, Span, FileContext::ID, AssignedMap const& assigned);

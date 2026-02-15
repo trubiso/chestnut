@@ -4,6 +4,7 @@
 #include <variant>
 
 void Analyzer::analyze(bool print_ir) {
+	optimize_blocks();
 	check_assigned();
 	if (print_ir)
 		for (ResolvedFile const& file : resolved_files) print(std::cout, file.module) << std::endl;
@@ -37,6 +38,94 @@ FileContext Analyzer::get_context(FileContext::ID file_id) const {
 		resolved_files.at(file_id).loc,
 		resolved_files.at(file_id).source,
 	};
+}
+
+void Analyzer::optimize_blocks(IR::Function& function) {
+	if (function.body.empty()) return;
+
+	// optimize forwarding blocks
+	std::unordered_map<IR::BasicBlock::ID, IR::BasicBlock::ID> forwarding {};
+	// first, we check for all forwarding blocks
+	for (IR::BasicBlock& basic_block : function.body) {
+		if (basic_block.statements.empty() && std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
+			forwarding.insert({basic_block.id, std::get<IR::BasicBlock::Goto>(basic_block.jump).id});
+		}
+	}
+	// then, we replace their usage
+	for (IR::BasicBlock& basic_block : function.body) {
+		// we skip forwarding blocks themselves
+		if (forwarding.contains(basic_block.id)) continue;
+		if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
+			IR::BasicBlock::Goto& goto_ = std::get<IR::BasicBlock::Goto>(basic_block.jump);
+			// jump all references
+			while (forwarding.contains(goto_.id)) goto_.id = forwarding.at(goto_.id);
+		} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
+			IR::BasicBlock::Branch& branch = std::get<IR::BasicBlock::Branch>(basic_block.jump);
+			// jump all references
+			while (forwarding.contains(branch.true_)) branch.true_ = forwarding.at(branch.true_);
+			while (forwarding.contains(branch.false_)) branch.false_ = forwarding.at(branch.false_);
+		}
+	}
+
+	// optimize unconditional jumps to empty blocks
+	for (IR::BasicBlock& basic_block : function.body) {
+		if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
+			IR::BasicBlock::Goto& goto_     = std::get<IR::BasicBlock::Goto>(basic_block.jump);
+			IR::BasicBlock const* jumped_to = &*std::find_if(
+				function.body.cbegin(),
+				function.body.cend(),
+				[&goto_](IR::BasicBlock const& block) { return block.id == goto_.id; }
+			);
+			while (jumped_to->statements.empty()) {
+				auto const& jump = jumped_to->jump;
+				if (std::holds_alternative<IR::BasicBlock::Goto>(jump)) {
+					goto_.id  = std::get<IR::BasicBlock::Goto>(jump).id;
+					jumped_to = &*std::find_if(
+						function.body.cbegin(),
+						function.body.cend(),
+						[&goto_](IR::BasicBlock const& block) { return block.id == goto_.id; }
+					);
+				} else if (std::holds_alternative<IR::BasicBlock::Branch>(jump)) {
+					auto const& branch = std::get<IR::BasicBlock::Branch>(jump);
+					basic_block.jump   = IR::BasicBlock::Branch {
+						  {branch.condition.span, {branch.condition.value.clone()}},
+                                                branch.true_,
+                                                branch.false_,
+                                        };
+					break;
+				} else if (std::holds_alternative<IR::BasicBlock::Return>(jump)) {
+					basic_block.jump = IR::BasicBlock::Return {
+						std::get<IR::BasicBlock::Return>(jump).value.transform(
+							[](Spanned<IR::Expression::Atom> const& value) {
+								return Spanned {value.span, value.value.clone()};
+							}
+						)
+					};
+					break;
+				} else if (std::holds_alternative<std::monostate>(jump)) {
+					basic_block.jump = std::monostate {};
+					break;
+				}
+			}
+		}
+	}
+
+	// TODO: remove basic blocks with no predecessors
+}
+
+void Analyzer::optimize_blocks(IR::Module& module) {
+	for (IR::Identifier item : module.items) {
+		auto& value = symbols.at(item).item;
+		if (std::holds_alternative<IR::Module>(value)) {
+			optimize_blocks(std::get<IR::Module>(value));
+		} else if (std::holds_alternative<IR::Function>(value)) {
+			optimize_blocks(std::get<IR::Function>(value));
+		}
+	}
+}
+
+void Analyzer::optimize_blocks() {
+	for (ResolvedFile& file : resolved_files) optimize_blocks(file.module);
 }
 
 void Analyzer::check_assigned(
