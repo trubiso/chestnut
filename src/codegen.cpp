@@ -78,7 +78,7 @@ void CodeGenerator::process(std::vector<IR::Module> const& modules, std::string 
 	llvm::raw_fd_ostream dest(of, ec, llvm::sys::fs::OF_None);
 
 	if (ec) {
-		llvm::errs() << "Could not open file: " << ec.message();
+		llvm::errs() << "fatal error: could not open file: " << ec.message();
 		std::exit(1);
 	}
 
@@ -87,7 +87,7 @@ void CodeGenerator::process(std::vector<IR::Module> const& modules, std::string 
 	auto file_type = llvm::CodeGenFileType::ObjectFile;
 
 	if (target_machine->addPassesToEmitFile(pass, dest, nullptr, file_type)) {
-		llvm::errs() << "TargetMachine can't emit a file of this type";
+		llvm::errs() << "fatal error: TargetMachine can't emit a file of this type";
 		std::exit(1);
 	}
 

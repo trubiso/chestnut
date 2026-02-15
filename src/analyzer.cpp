@@ -202,7 +202,7 @@ void Analyzer::check_assigned(
 	IR::Symbol const& symbol = symbols.at(ref.value.value);
 	if (!symbol.mutable_ && ref.mutable_) {
 		std::stringstream subtitle {};
-		subtitle << "symbol '" << symbol.name << "' was declared as constant";
+		subtitle << "symbol `" << symbol.name << "` was declared as constant";
 		resolved_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"tried to take mutable reference of immutable symbol",
@@ -269,10 +269,10 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 			bool declare_and_set_is_same = symbols.at(set.name.value).span == assigned.at(set.name.value);
 			IR::Symbol const& symbol     = symbols.at(set.name.value);
 			std::stringstream subtitle {};
-			subtitle << "variable '" << symbol.name << "' was declared as constant";
+			subtitle << "variable `" << symbol.name << "` was declared as constant";
 			if (declare_and_set_is_same)
 				subtitle
-					<< ".\ntip: you can set the variable's value to 'undefined' in the declaration and set its value exactly once after declaration if you want an immutable variable decided, for example, by a condition.";
+					<< ".\ntip: you can set the variable's value to `undefined` in the declaration and set its value exactly once after declaration if you want an immutable variable decided, for example, by a condition.";
 			else
 				// if they're not the same, the variable must have originally been undefined
 				subtitle
@@ -340,7 +340,7 @@ void Analyzer::check_assigned(
 	IR::Symbol const& symbol = symbols.at(write_access.access.value.accessee.value);
 	if (!symbol.mutable_) {
 		std::stringstream subtitle {};
-		subtitle << "variable '" << symbol.name << "' was declared as constant";
+		subtitle << "variable `" << symbol.name << "` was declared as constant";
 		resolved_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"tried to mutate field of immutable variable",

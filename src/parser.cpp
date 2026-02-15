@@ -257,8 +257,8 @@ std::optional<Expression::Atom::StructLiteral::Field> Parser::consume_expression
 
 	auto name = SPANNED(consume_bare_unqualified_identifier);
 	if (!name.has_value()) return {};
-	if (!expect_symbol("expected ':' after struct literal field name", Token::Symbol::Colon)) return {};
-	auto value = SPANNED_REASON(expect_expression, "expected struct literal field value after ':'");
+	if (!expect_symbol("expected `:` after struct literal field name", Token::Symbol::Colon)) return {};
+	auto value = SPANNED_REASON(expect_expression, "expected struct literal field value after `:`");
 	if (!value.has_value()) return {};
 
 	return {
@@ -665,7 +665,7 @@ std::optional<Expression> Parser::consume_expression() {
 		// this could mean that there is a function called "if". in that case though , i'm sorry :/
 		return {};
 	}
-	expect_keyword("expected 'else' clause after 'if' clause in if expression", Keyword::Else);
+	expect_keyword("expected `else` clause after `if` clause in if expression", Keyword::Else);
 	auto maybe_false = SPANNED_REASON(expect_expression, "expected expression after else keyword in if expression");
 	if (!maybe_false.has_value()) return {};
 	return Expression::make_if(
@@ -942,13 +942,13 @@ void Parser::add_expected_diagnostic(std::string_view what, std::string_view why
 // it's better to keep these ones expanded because of how specific they are
 bool Parser::expect_keyword(std::string_view reason, Keyword keyword) {
 	if (consume_keyword(keyword)) return true;
-	add_expected_diagnostic(std::format("keyword '{}'", get_variant_name(keyword)), reason);
+	add_expected_diagnostic(std::format("keyword `{}`", get_variant_name(keyword)), reason);
 	return false;
 }
 
 bool Parser::expect_symbol(std::string_view reason, Token::Symbol symbol) {
 	if (consume_symbol(symbol)) return true;
-	add_expected_diagnostic(std::format("symbol '{}'", ::get_variant_name(symbol)), reason);
+	add_expected_diagnostic(std::format("symbol `{}`", ::get_variant_name(symbol)), reason);
 	return false;
 }
 
@@ -1048,7 +1048,7 @@ void Parser::skip_semis() {
 std::optional<Struct::Field> Parser::parse_struct_field() {
 	auto name = SPANNED(consume_bare_unqualified_identifier);
 	if (!name.has_value()) return {};
-	if (!expect_symbol("expected ':' to specify field type", Token::Symbol::Colon)) return {};
+	if (!expect_symbol("expected `:` to specify field type", Token::Symbol::Colon)) return {};
 	auto type = SPANNED_REASON(expect_type, "expected field type");
 	if (!type.has_value()) return {};
 
@@ -1089,14 +1089,14 @@ std::optional<Function> Parser::parse_function() {
 		bool anonymous = false, mutable_ = false;
 		// store the span for diagnostics
 		std::optional<Span> anon_span, mut_span;
-		// if we get 'anon' or 'mut', they might be qualifying the argument
+		// if we get `anon` or `mut`, they might be qualifying the argument
 		while ((argument_name.value().value.name() == "anon" || argument_name.value().value.name() == "mut")
 		       && peek_unqualified_identifier()) {
 			if (argument_name.value().value.name() == "anon") {
 				if (anonymous)
 					diagnostics_.push_back(
 						Diagnostic::warning(
-							"redundant 'anon'",
+							"redundant `anon`",
 							"argument was already marked as anonymous",
 							{Diagnostic::Sample(
 								context_,
@@ -1118,7 +1118,7 @@ std::optional<Function> Parser::parse_function() {
 				if (mutable_)
 					diagnostics_.push_back(
 						Diagnostic::warning(
-							"redundant 'mut'",
+							"redundant `mut`",
 							"argument was already marked as mutable",
 							{Diagnostic::Sample(
 								context_,
@@ -1139,7 +1139,7 @@ std::optional<Function> Parser::parse_function() {
 			}
 			argument_name = SPANNED(consume_unqualified_identifier);
 		}
-		if (!expect_symbol("expected ':' to specify argument type", Token::Symbol::Colon)) return {};
+		if (!expect_symbol("expected `:` to specify argument type", Token::Symbol::Colon)) return {};
 		auto argument_type = SPANNED_REASON(expect_type, "expected argument type");
 		if (!argument_type.has_value()) return {};
 

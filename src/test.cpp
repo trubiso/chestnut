@@ -170,7 +170,7 @@ enum class ExpectedOutputKind { Diagnostics, Output };
 
 std::tuple<Test::Pass, ExpectedOutputKind> read_first_line(std::string_view line_sv) {
 	// first line syntax: "// pass: " Pass ", expect: " ExpectedOutputKind
-	assert(line_sv.starts_with("// pass: ") && "file must begin with '// pass: '");
+	assert(line_sv.starts_with("// pass: ") && "file must begin with `// pass: `");
 	std::string_view pass_kind = line_sv.substr(strlen("// pass: "));
 	std::string_view expect_bit;
 
@@ -185,7 +185,7 @@ std::tuple<Test::Pass, ExpectedOutputKind> read_first_line(std::string_view line
 	} else if (pass_kind.starts_with("Resolver")) {
 		pass       = Test::Pass::Resolver;
 		expect_bit = pass_kind.substr(strlen("Resolver"));
-	} else assert(false && "pass must be 'Lexer', 'Parser' or 'Resolver'");
+	} else assert(false && "pass must be `Lexer`, `Parser` or `Resolver`");
 
 	// expectation
 	assert(expect_bit.starts_with(", expect: "));
@@ -193,14 +193,14 @@ std::tuple<Test::Pass, ExpectedOutputKind> read_first_line(std::string_view line
 	ExpectedOutputKind expected_output_kind;
 	if (expectation == "Diagnostics") expected_output_kind = ExpectedOutputKind::Diagnostics;
 	else if (expectation == "Output") expected_output_kind = ExpectedOutputKind::Output;
-	else assert(false && "expectation must be 'Diagnostics' or 'Output'");
+	else assert(false && "expectation must be `Diagnostics` or `Output`");
 
 	return {pass, expected_output_kind};
 }
 
 Test::ExpectedDiagnostic parse_expected_diagnostic(std::string_view line_sv) {
 	// diagnostic syntax: "// severity: " Severity ", title: " <quoted title> [", subtitle: " <quoted subtitle>]
-	assert(line_sv.starts_with("// severity: ") && "expected diagnostic must begin with '// severity: '");
+	assert(line_sv.starts_with("// severity: ") && "expected diagnostic must begin with `// severity: `");
 	std::string_view severity_kind = line_sv.substr(strlen("// severity: "));
 	std::string_view title_bit;
 
@@ -212,11 +212,11 @@ Test::ExpectedDiagnostic parse_expected_diagnostic(std::string_view line_sv) {
 	} else if (severity_kind.starts_with("Warning")) {
 		severity  = Diagnostic::Severity::Warning;
 		title_bit = severity_kind.substr(strlen("Warning"));
-	} else assert(false && "expected diagnostic severity must be 'Error' or 'Warning'");
+	} else assert(false && "expected diagnostic severity must be `Error` or `Warning`");
 
 	// title
 	assert(title_bit.starts_with(", title: \"")
-	       && "title must be introduced by ', title: \"' (remember the quotes!)");
+	       && "title must be introduced by `, title: \"` (remember the quotes!)");
 	std::string_view title_substr = title_bit.substr(strlen(", title: \""));
 	size_t           title_size   = 0;
 	for (size_t i = 0; i < title_substr.size(); ++i)

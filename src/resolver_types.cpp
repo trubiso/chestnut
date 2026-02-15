@@ -1109,11 +1109,11 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 		FileContext::ID   file_id = get_type_file_id(undecided_member_access);
 		std::stringstream subtitle_stream {};
 		subtitle_stream
-			<< "type '"
-			<< struct_->name.value
-			<< "' does not have any field named '"
+			<< "type `"
+			<< struct_->name.value.name()
+			<< "` does not have any field named `"
 			<< member_access.field
-			<< "'";
+			<< "`";
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"tried to access nonexistent field",
@@ -1307,7 +1307,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 				if (!argument_exists) {
 					std::stringstream text {};
-					text << "missing labeled argument '" << identifier.value.name() << "'";
+					text << "missing labeled argument `" << identifier.value.name() << "`";
 					rejections.push_back(
 						Diagnostic::Sample(
 							get_context(get_type_file_id(callable_id)),

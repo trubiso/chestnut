@@ -253,7 +253,7 @@ diagnostic:
 	parsed_files.at(file_id).diagnostics.push_back(
 		Diagnostic::error(
 			"no default value",
-			"this variable's type has no defined default value. if you intended to have an undefined value, specify it by writing '= undefined'",
+			"this variable's type has no defined default value. if you intended to have an undefined value, specify it by writing `= undefined`",
 			{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
 		)
 	);

@@ -32,7 +32,7 @@ void Resolver::add_unknown_symbol_diagnostic(
 	FileContext::ID                 file_id,
 	bool                            add_import_suggestion
 ) {
-	std::string       title = std::format("unknown symbol '{}'", symbol);
+	std::string       title = std::format("unknown symbol `{}`", symbol);
 	std::stringstream subtitle_stream {};
 	subtitle_stream << "could not find any symbol with that name in the " << scope_type << " scope";
 
@@ -42,7 +42,7 @@ void Resolver::add_unknown_symbol_diagnostic(
 	if (!closest_symbols.empty()) {
 		subtitle_stream << " (did you perhaps mean ";
 		for (size_t i = 0; i < closest_symbols.size(); ++i) {
-			subtitle_stream << '\'' << closest_symbols[i] << '\'';
+			subtitle_stream << '`' << closest_symbols[i] << '`';
 			if (i + 1 < closest_symbols.size() - 1) subtitle_stream << ", ";
 			else if (i + 1 < closest_symbols.size()) subtitle_stream << " or ";
 		}
@@ -380,11 +380,11 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 			    == struct_->fields.cend()) {
 				std::stringstream subtitle_stream {};
 				subtitle_stream
-					<< "field '"
+					<< "field `"
 					<< field.name.value
-					<< "' does not exist in struct '"
+					<< "` does not exist in struct `"
 					<< struct_->name.value.name()
-					<< "'";
+					<< "`";
 				parsed_files.at(file_id).diagnostics.push_back(
 					Diagnostic::error(
 						"nonexistent struct field",
@@ -412,11 +412,11 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 			    == struct_literal.fields.cend()) {
 				std::stringstream subtitle_stream {};
 				subtitle_stream
-					<< "field '"
+					<< "field `"
 					<< field.name.value
-					<< "' exists in struct '"
+					<< "` exists in struct `"
 					<< struct_->name.value.name()
-					<< "', but it was not given a value in the struct literal";
+					<< "`, but it was not given a value in the struct literal";
 				parsed_files.at(file_id).diagnostics.push_back(
 					Diagnostic::error(
 						"missing struct field",
