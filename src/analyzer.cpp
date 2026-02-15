@@ -192,8 +192,34 @@ void Analyzer::check_assigned(
 	check_assigned(deref.address, file_id, assigned);
 }
 
-void Analyzer::check_assigned(IR::Expression::Ref const& ref, FileContext::ID file_id, AssignedMap const& assigned) {
+void Analyzer::check_assigned(
+	IR::Expression::Ref const& ref,
+	Span                       span,
+	FileContext::ID            file_id,
+	AssignedMap const&         assigned
+) {
 	check_assigned(ref.value, file_id, assigned);
+	IR::Symbol const& symbol = symbols.at(ref.value.value);
+	if (!symbol.mutable_ && ref.mutable_) {
+		std::stringstream subtitle {};
+		subtitle << "symbol '" << symbol.name << "' was declared as constant";
+		resolved_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"tried to take mutable reference of immutable symbol",
+				subtitle.str(),
+				{Diagnostic::Sample(
+					 get_context(symbol.file_id),
+					 "declaration",
+					 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
+				 ),
+		                 Diagnostic::Sample(
+					 get_context(file_id),
+					 "reference",
+					 {Diagnostic::Sample::Label(span, OutFmt::Color::Red)}
+				 )}
+			)
+		);
+	}
 }
 
 void Analyzer::check_assigned(
@@ -223,7 +249,8 @@ void Analyzer::check_assigned(
 	case IR::Expression::Kind::FunctionCall:
 		return check_assigned(expression.value.get_function_call(), file_id, assigned);
 	case IR::Expression::Kind::Deref: return check_assigned(expression.value.get_deref(), file_id, assigned);
-	case IR::Expression::Kind::Ref:   return check_assigned(expression.value.get_ref(), file_id, assigned);
+	case IR::Expression::Kind::Ref:
+		return check_assigned(expression.value.get_ref(), expression.span, file_id, assigned);
 	case IR::Expression::Kind::MemberAccess:
 		return check_assigned(expression.value.get_member_access(), file_id, assigned);
 	}
@@ -297,9 +324,9 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 
 void Analyzer::check_assigned(IR::Statement::Write& write, FileContext::ID file_id, AssignedMap& assigned) {
 	// the pointer we're writing to must be assigned
-	// TODO: move mutability check here
 	check_assigned(write.address, file_id, assigned);
 	check_assigned(write.value, file_id, assigned);
+	// mutability is already checked during lowering
 }
 
 void Analyzer::check_assigned(

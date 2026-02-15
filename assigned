@@ -24,6 +24,11 @@ func skip_vardecl() {
 	const q = a;
 }
 
+func refs() {
+	const my_immutable = 3;
+	const mutable = &mut my_immutable;
+}
+
 struct Test { field: bool }
 
 @extern

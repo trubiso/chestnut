@@ -43,7 +43,7 @@ private:
 	void check_assigned(IR::Expression::Atom const&, Span, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(IR::Expression::FunctionCall const&, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(IR::Expression::Deref const&, FileContext::ID, AssignedMap const& assigned);
-	void check_assigned(IR::Expression::Ref const&, FileContext::ID, AssignedMap const& assigned);
+	void check_assigned(IR::Expression::Ref const&, Span, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(IR::Expression::MemberAccess const&, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(Spanned<IR::Expression::Atom> const&, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(Spanned<IR::Expression> const&, FileContext::ID, AssignedMap const& assigned);
@@ -63,6 +63,5 @@ private:
 	void check_assigned(IR::Module&, FileContext::ID);
 	/// Checks whether each value has been assigned once before being used. Also checks mutability for set
 	/// statements, allowing constant variables to be set once if they were originally set to be undefined.
-	// TODO: also check mutability and kill two birds with one stone
 	void check_assigned();
 };
