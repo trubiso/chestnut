@@ -1,3 +1,4 @@
+#include "analyzer.hpp"
 #include "codegen.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
@@ -217,7 +218,25 @@ int main(int argc, char** argv) {
 	Resolver                resolver {std::move(parsed_files)};
 	std::vector<IR::Module> modules = resolver.resolve(input.print_ir);
 
-	for (auto const& file : resolver.parsed_files)
+	std::vector<Analyzer::ResolvedFile> resolved_files {};
+	resolved_files.reserve(parsed_files.size());
+	for (size_t i = 0; i < resolver.parsed_files.size(); ++i) {
+		Resolver::ParsedFile parsed_file = std::move(resolver.parsed_files[i]);
+		resolved_files.push_back(
+			Analyzer::ResolvedFile {
+				parsed_file.file_id,
+				std::move(parsed_file.source),
+				std::move(parsed_file.name),
+				std::move(parsed_file.loc),
+				std::move(modules[i]),
+				std::move(parsed_file.diagnostics)
+			}
+		);
+	}
+
+	Analyzer analyzer(resolver.export_symbols(), std::move(resolved_files));
+	analyzer.analyze();
+	for (auto const& file : analyzer.resolved_files)
 		for (auto const& diagnostic : file.diagnostics) {
 			diagnostic.print();
 			if (diagnostic.severity == Diagnostic::Severity::Error) errors++;
@@ -243,6 +262,6 @@ int main(int argc, char** argv) {
 		std::cerr << std::endl;
 	}
 
-	CodeGenerator generator(resolver.export_symbols());
+	CodeGenerator generator(std::move(analyzer.symbols));
 	generator.process(modules, input.output, input.optimization);
 }
