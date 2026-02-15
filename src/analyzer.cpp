@@ -27,8 +27,17 @@ void Analyzer::check_assigned(
 	if (!assigned.at(identifier))
 		resolved_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
-				"used variable before it was assigned a value",
-				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+				"used potentially uninitialized variable",
+				{Diagnostic::Sample(
+					 get_context(symbols.at(identifier).file_id),
+					 "declaration",
+					 {Diagnostic::Sample::Label(symbols.at(identifier).span, OutFmt::Color::Cyan)}
+				 ),
+		                 Diagnostic::Sample(
+					 get_context(file_id),
+					 "usage",
+					 {Diagnostic::Sample::Label(span, OutFmt::Color::Red)}
+				 )}
 			)
 		);
 }
