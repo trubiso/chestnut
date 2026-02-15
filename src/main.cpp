@@ -262,6 +262,9 @@ int main(int argc, char** argv) {
 		std::cerr << std::endl;
 	}
 
-	CodeGenerator generator(std::move(analyzer.symbols));
-	generator.process(modules, input.output, input.optimization);
+	CodeGenerator           generator(std::move(analyzer.symbols));
+	std::vector<IR::Module> analyzed_modules {};
+	analyzed_modules.reserve(analyzer.resolved_files.size());
+	for (Analyzer::ResolvedFile& file : analyzer.resolved_files) analyzed_modules.push_back(std::move(file.module));
+	generator.process(analyzed_modules, input.output, input.optimization);
 }
