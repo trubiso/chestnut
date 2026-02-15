@@ -279,9 +279,29 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 	switch (atom.kind()) {
 	case IR::Expression::Atom::Kind::Identifier:
 		return builder_.CreateLoad(generate_type(atom.type), variables_[atom.get_identifier()]);
-	case IR::Expression::Atom::Kind::Literal: break;
-	case IR::Expression::Atom::Kind::Bool:    return builder_.getInt1(atom.get_bool());
-	case IR::Expression::Atom::Kind::Error:   [[assume(false)]];
+	case IR::Expression::Atom::Kind::Literal:       break;
+	case IR::Expression::Atom::Kind::Bool:          return builder_.getInt1(atom.get_bool());
+	case IR::Expression::Atom::Kind::StructLiteral: break;
+	case IR::Expression::Atom::Kind::Error:         [[assume(false)]];
+	}
+
+	if (atom.is_struct_literal()) {
+		std::vector<llvm::Value*> fields {};
+		fields.reserve(atom.get_struct_literal().fields.size());
+		std::transform(
+			atom.get_struct_literal().fields.cbegin(),
+			atom.get_struct_literal().fields.cend(),
+			std::back_inserter(fields),
+			[&](Spanned<IR::Expression::Atom> const& value) { return generate_expression(value.value); }
+		);
+		auto type = llvm::StructType::getTypeByName(context_, get_name(atom.type.get_atom().get_named()));
+
+		// we have to manually create it this way because we don't have a guarantee that the values are constant
+		llvm::Value* value = llvm::UndefValue::get(type);
+		for (size_t i = 0; i < fields.size(); ++i) {
+			value = builder_.CreateInsertValue(value, fields[i], {static_cast<uint32_t>(i)});
+		}
+		return value;
 	}
 
 	// literals vary depending on their type
