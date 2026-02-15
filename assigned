@@ -2,9 +2,9 @@
 @extern func putchar(c: char);
 
 func fibonacci(count: uint64) {
-	mut a = undefined;
-	mut b = undefined;
-	mut i = undefined;
+	const a = 0;
+	mut b = 1;
+	mut i = 0;
 'loop:
 	i = i + 1;
 	print_integer(a);

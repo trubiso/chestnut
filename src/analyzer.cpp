@@ -228,7 +228,8 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(IR::Statement::Declare& declare, FileContext::ID file_id, AssignedMap& assigned) {
-	assigned.insert({declare.name.value, {}});
+	// we must replace the value, so if we go through a declaration more than once, it removes the value
+	assigned.insert_or_assign(declare.name.value, std::nullopt);
 }
 
 void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, AssignedMap& assigned) {
@@ -280,8 +281,7 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 					std::move(samples)
 				)
 			);
-		}
-		assigned.at(set.name.value) = set.name.span;
+		} else assigned.at(set.name.value) = set.name.span;
 	}
 	// TODO: fix this
 	else
