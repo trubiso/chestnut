@@ -308,7 +308,7 @@ struct Expression {
 
 	struct FunctionCall {
 		// we need to know what we're calling directly
-		std::variant<Identifier, BuiltInFunction> callee;
+		std::variant<Spanned<Identifier>, BuiltInFunction> callee;
 		// labeled arguments are mere syntactic sugar
 		std::vector<Spanned<Atom>> arguments;
 	};
@@ -343,8 +343,10 @@ struct Expression {
 		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, std::move(atom)});
 	}
 
-	inline static Expression
-	make_function_call(std::variant<Identifier, BuiltInFunction>&& callee, std::vector<Spanned<Atom>>&& arguments) {
+	inline static Expression make_function_call(
+		std::variant<Spanned<Identifier>, BuiltInFunction>&& callee,
+		std::vector<Spanned<Atom>>&&                         arguments
+	) {
 		return Expression(
 			value_t {
 				std::in_place_index<(size_t) Kind::FunctionCall>,
@@ -526,7 +528,7 @@ struct BasicBlock {
 	};
 
 	struct Branch {
-		Expression::Atom condition;
+		Spanned<Expression::Atom> condition;
 
 		ID true_;
 		ID false_;

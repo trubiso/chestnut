@@ -480,7 +480,7 @@ Spanned<IR::Expression> Resolver::lower(
 
 	// finally, we have the callee and the arguments
 	// TODO: check if the result is a function for allow_functions
-	return {span, IR::Expression::make_function_call(callee_identifier.value, std::move(arguments))};
+	return {span, IR::Expression::make_function_call(std::move(callee_identifier), std::move(arguments))};
 }
 
 Spanned<IR::Expression> Resolver::lower(
@@ -746,8 +746,8 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 		return {};
 	} else if (statement.value.is_branch()) {
 		// branch statements take a bit more effort
-		AST::Statement::Branch const& branch = statement.value.get_branch();
-		IR::Expression::Atom condition = extract_expression(branch.condition, basic_blocks, file_id).value;
+		AST::Statement::Branch const& branch    = statement.value.get_branch();
+		Spanned<IR::Expression::Atom> condition = extract_expression(branch.condition, basic_blocks, file_id);
 		// if we have a false branch, our job is done
 		if (branch.false_.has_value()) {
 			basic_blocks.at(basic_blocks.size() - 1).jump = IR::BasicBlock::Branch {

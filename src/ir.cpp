@@ -130,7 +130,8 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 
 std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call) {
 	os << "(call ";
-	if (std::holds_alternative<AST::SymbolID>(call.callee)) os << '@' << std::get<AST::SymbolID>(call.callee);
+	if (std::holds_alternative<Spanned<Identifier>>(call.callee))
+		os << '@' << std::get<Spanned<Identifier>>(call.callee).value;
 	else os << std::get<BuiltInFunction>(call.callee);
 	if (!call.arguments.empty()) {
 		os << " w/ args: (";
@@ -212,7 +213,7 @@ std::ostream& operator<<(std::ostream& os, BasicBlock const& basic_block) {
 		return os << " goto '@" << std::get<BasicBlock::Goto>(basic_block.jump).id;
 	else if (std::holds_alternative<BasicBlock::Branch>(basic_block.jump)) {
 		BasicBlock::Branch const& branch = std::get<BasicBlock::Branch>(basic_block.jump);
-		return os << " branch (" << branch.condition << ") '@" << branch.true_ << " '@" << branch.false_;
+		return os << " branch (" << branch.condition.value << ") '@" << branch.true_ << " '@" << branch.false_;
 	} else if (std::holds_alternative<BasicBlock::Return>(basic_block.jump)) {
 		BasicBlock::Return const& return_ = std::get<BasicBlock::Return>(basic_block.jump);
 		os << " return ";

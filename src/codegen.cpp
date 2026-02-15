@@ -393,7 +393,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::FunctionCall con
 	// we might be calling a built-in function
 	if (std::holds_alternative<IR::BuiltInFunction>(function_call.callee))
 		return call_built_in(std::get<IR::BuiltInFunction>(function_call.callee), function_call.arguments);
-	AST::SymbolID callee_id = std::get<AST::SymbolID>(function_call.callee);
+	IR::Identifier callee_id = std::get<Spanned<IR::Identifier>>(function_call.callee).value;
 	// or even a symbol that points to a built-in function!
 	if (std::holds_alternative<IR::BuiltInFunction>(symbols_.at(callee_id).item))
 		return call_built_in(
@@ -480,7 +480,7 @@ void CodeGenerator::emit_basic_block_jump(
 		builder_.CreateBr(blocks.at(goto_.id));
 	} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
 		IR::BasicBlock::Branch const& branch    = std::get<IR::BasicBlock::Branch>(basic_block.jump);
-		llvm::Value*                  condition = generate_expression(branch.condition);
+		llvm::Value*                  condition = generate_expression(branch.condition.value);
 		builder_.CreateCondBr(condition, blocks.at(branch.true_), blocks.at(branch.false_));
 	} else if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
 		IR::BasicBlock::Return const& return_ = std::get<IR::BasicBlock::Return>(basic_block.jump);

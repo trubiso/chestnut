@@ -64,9 +64,8 @@ void Analyzer::check_assigned(
 	FileContext::ID                                 file_id,
 	std::unordered_map<IR::Identifier, bool> const& assigned
 ) {
-	if (std::holds_alternative<IR::Identifier>(function_call.callee))
-		// FIXME: get the correct span
-		check_assigned(std::get<IR::Identifier>(function_call.callee), Span(0), file_id, assigned);
+	if (std::holds_alternative<Spanned<IR::Identifier>>(function_call.callee))
+		check_assigned(std::get<Spanned<IR::Identifier>>(function_call.callee), file_id, assigned);
 	for (auto const& argument : function_call.arguments) check_assigned(argument, file_id, assigned);
 }
 
@@ -196,8 +195,7 @@ void Analyzer::check_assigned(
 	} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
 		IR::BasicBlock::Branch& branch = std::get<IR::BasicBlock::Branch>(basic_block.jump);
 		// check the value
-		// FIXME: this is NOT the correct span LOL
-		check_assigned(branch.condition, function.name.span, file_id, assigned);
+		check_assigned(branch.condition, file_id, assigned);
 		// check both branches
 		if (!preds.at(branch.true_).contains(basic_block.id)) {
 			preds.at(branch.true_).insert(basic_block.id);
