@@ -18,6 +18,7 @@ func fibonacci(count: uint64) {
 
 @extern
 func main() {
-	const a: uint8 = undefined;
+	const a: uint8 = 3;
+	a = 4;
 	const b = a;
 }

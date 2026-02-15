@@ -1,5 +1,6 @@
 #include "analyzer.hpp"
 
+#include <sstream>
 #include <variant>
 
 void Analyzer::analyze() {
@@ -132,9 +133,44 @@ void Analyzer::check_assigned(
 	std::unordered_map<IR::Identifier, bool>& assigned
 ) {
 	check_assigned(set.value, file_id, assigned);
-	// TODO: check mutability
-	if (assigned.contains(set.name.value)) assigned.at(set.name.value) = true;
-	else std::cout << "setting " << symbols.at(set.name.value).name << " (@" << set.name.value << ")" << std::endl;
+	if (assigned.contains(set.name.value)) {
+		// TODO: it would be nice to find the first mutation span
+		if (assigned.at(set.name.value) && !symbols.at(set.name.value).mutable_) {
+			// mutability violation
+			IR::Symbol const& symbol = symbols.at(set.name.value);
+			std::stringstream subtitle {};
+			subtitle
+				<< "variable '"
+				<< symbol.name
+				<< "' was declared as constant.\ntip: you can set the variable's value to 'undefined' in the declaration and set its value exactly once after declaration if you want an immutable variable decided, for example, by a condition.";
+			resolved_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"tried to mutate immutable variable",
+					subtitle.str(),
+					{Diagnostic::Sample(
+						 get_context(symbol.file_id),
+						 "declaration",
+						 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
+					 ),
+			                 Diagnostic::Sample(
+						 get_context(file_id),
+						 "mutation",
+						 {Diagnostic::Sample::Label(set.name.span, OutFmt::Color::Red)}
+					 )}
+				)
+			);
+		}
+		assigned.at(set.name.value) = true;
+	}
+	// TODO: fix this
+	else
+		std::cout
+			<< "warning: setting undeclared "
+			<< symbols.at(set.name.value).name
+			<< " (@"
+			<< set.name.value
+			<< "); this shouldn't happen unless we somehow skip a variable declaration"
+			<< std::endl;
 }
 
 void Analyzer::check_assigned(
