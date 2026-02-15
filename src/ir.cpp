@@ -96,6 +96,29 @@ std::ostream& operator<<(std::ostream& os, BuiltInFunction const& built_in_funct
 	}
 }
 
+Expression::Atom Expression::Atom::clone() const {
+	switch (kind()) {
+	case Kind::Identifier:    return make_identifier(get_identifier(), type.clone());
+	case Kind::Literal:       return {get_literal(), type.clone()};
+	case Kind::Bool:          return make_bool(get_bool(), type.clone());
+	case Kind::StructLiteral: break;
+	case Kind::Error:         return make_error();
+	}
+
+	std::vector<Spanned<Atom>> fields {};
+	fields.reserve(get_struct_literal().fields.size());
+	std::transform(
+		get_struct_literal().fields.cbegin(),
+		get_struct_literal().fields.cend(),
+		std::back_inserter(fields),
+		[](Spanned<Atom> const& atom) { return Spanned {atom.span, atom.value.clone()}; }
+	);
+	return {
+		StructLiteral {get_struct_literal().name, std::move(fields)},
+		type.clone()
+	};
+}
+
 std::ostream& operator<<(std::ostream& os, Expression::Atom::Literal const& literal) {
 	switch (literal.kind) {
 	case Expression::Atom::Literal::Kind::Number: os << "(number) "; break;

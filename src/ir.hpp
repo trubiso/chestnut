@@ -304,6 +304,8 @@ struct Expression {
 		}
 
 		inline bool get_bool() const { return std::get<(size_t) Kind::Bool>(value); }
+
+		Atom clone() const;
 	};
 
 	struct FunctionCall {
