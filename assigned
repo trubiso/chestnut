@@ -1,0 +1,23 @@
+@extern func print_integer(anon x: uint64);
+@extern func putchar(c: char);
+
+func fibonacci(count: uint64) {
+	mut a = undefined;
+	mut b = undefined;
+	mut i = undefined;
+'loop:
+	i = i + 1;
+	print_integer(a);
+	putchar(' ');
+	const c = a + b;
+	a = b;
+	b = c;
+	// this only throws the correct diagnostics if the if becomes branch or gets removed
+	if (i < count) goto 'loop;
+}
+
+@extern
+func main() {
+	const a: uint8 = undefined;
+	const b = a;
+}
