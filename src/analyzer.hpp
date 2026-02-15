@@ -28,7 +28,7 @@ private:
 	/// Returns the file context for the requested file ID.
 	FileContext get_context(FileContext::ID) const;
 
-	using AssignedMap = std::unordered_map<IR::Identifier, bool>;
+	using AssignedMap = std::unordered_map<IR::Identifier, std::optional<Span>>;
 
 	void check_assigned(IR::Identifier, Span, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(Spanned<IR::Identifier> const&, FileContext::ID, AssignedMap const& assigned);

@@ -20,5 +20,7 @@ func fibonacci(count: uint64) {
 func main() {
 	const a: uint8 = 3;
 	a = 4;
-	const b = a;
+	const b = undefined;
+	b = 3;
+	b = 4;
 }

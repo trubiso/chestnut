@@ -125,39 +125,60 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(IR::Statement::Declare& declare, FileContext::ID file_id, AssignedMap& assigned) {
-	assigned.insert({declare.name.value, false});
+	assigned.insert({declare.name.value, {}});
 }
 
 void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, AssignedMap& assigned) {
 	check_assigned(set.value, file_id, assigned);
 	if (assigned.contains(set.name.value)) {
-		// TODO: it would be nice to find the first mutation span
-		if (assigned.at(set.name.value) && !symbols.at(set.name.value).mutable_) {
+		if (assigned.at(set.name.value).has_value() && !symbols.at(set.name.value).mutable_) {
 			// mutability violation
-			IR::Symbol const& symbol = symbols.at(set.name.value);
+			bool declare_and_set_is_same = symbols.at(set.name.value).span == assigned.at(set.name.value);
+			IR::Symbol const& symbol     = symbols.at(set.name.value);
 			std::stringstream subtitle {};
-			subtitle
-				<< "variable '"
-				<< symbol.name
-				<< "' was declared as constant.\ntip: you can set the variable's value to 'undefined' in the declaration and set its value exactly once after declaration if you want an immutable variable decided, for example, by a condition.";
+			subtitle << "variable '" << symbol.name << "' was declared as constant";
+			if (declare_and_set_is_same)
+				subtitle
+					<< ".\ntip: you can set the variable's value to 'undefined' in the declaration and set its value exactly once after declaration if you want an immutable variable decided, for example, by a condition.";
+			else
+				// if they're not the same, the variable must have originally been undefined
+				subtitle
+					<< ", set to undefined and given a value after its declaration; but it was modified again afterwards.";
+			std::vector<Diagnostic::Sample> samples {};
+			samples.push_back(
+				Diagnostic::Sample(
+					get_context(symbol.file_id),
+					"declaration",
+					{Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
+				)
+			);
+			if (!declare_and_set_is_same)
+				samples.push_back(
+					Diagnostic::Sample(
+						get_context(symbol.file_id),
+						"value",
+						{Diagnostic::Sample::Label(
+							assigned.at(set.name.value).value(),
+							OutFmt::Color::Magenta
+						)}
+					)
+				);
+			samples.push_back(
+				Diagnostic::Sample(
+					get_context(file_id),
+					"mutation",
+					{Diagnostic::Sample::Label(set.name.span, OutFmt::Color::Red)}
+				)
+			);
 			resolved_files.at(file_id).diagnostics.push_back(
 				Diagnostic::error(
 					"tried to mutate immutable variable",
 					subtitle.str(),
-					{Diagnostic::Sample(
-						 get_context(symbol.file_id),
-						 "declaration",
-						 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
-					 ),
-			                 Diagnostic::Sample(
-						 get_context(file_id),
-						 "mutation",
-						 {Diagnostic::Sample::Label(set.name.span, OutFmt::Color::Red)}
-					 )}
+					std::move(samples)
 				)
 			);
 		}
-		assigned.at(set.name.value) = true;
+		assigned.at(set.name.value) = set.name.span;
 	}
 	// TODO: fix this
 	else
