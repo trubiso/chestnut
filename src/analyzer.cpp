@@ -126,6 +126,8 @@ void Analyzer::check_assigned(
 	FileContext::ID    file_id,
 	AssignedMap const& assigned
 ) {
+	// FIXME: if it is not contained but it is from the scope/function, that should throw a diagnostic, because we
+	// are using a variable whose declaration we skipped over
 	if (!assigned.contains(identifier)) return;
 	if (!assigned.at(identifier))
 		resolved_files.at(file_id).diagnostics.push_back(
@@ -282,16 +284,15 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 				)
 			);
 		} else assigned.at(set.name.value) = set.name.span;
+	} else {
+		resolved_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"tried to mutate undeclared variable",
+				"this variable is declared in this scope, but that declaration does not occur before the variable is set, because it was skipped using low-level control flow constructs, i.e. goto/branch",
+				{Diagnostic::Sample(get_context(file_id), set.name.span, OutFmt::Color::Red)}
+			)
+		);
 	}
-	// TODO: fix this
-	else
-		std::cout
-			<< "warning: setting undeclared "
-			<< symbols.at(set.name.value).name
-			<< " (@"
-			<< set.name.value
-			<< "); this shouldn't happen unless we somehow skip a variable declaration"
-			<< std::endl;
 }
 
 void Analyzer::check_assigned(IR::Statement::Write& write, FileContext::ID file_id, AssignedMap& assigned) {

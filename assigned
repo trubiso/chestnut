@@ -15,6 +15,15 @@ func fibonacci(count: uint64) {
 	if (i < count) goto 'loop;
 }
 
+func skip_vardecl() {
+	goto 'next;
+'skip:
+	const a: uint8;
+'next:
+	a = 3;
+	const q = a;
+}
+
 struct Test { field: bool }
 
 @extern
