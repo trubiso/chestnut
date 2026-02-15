@@ -517,9 +517,9 @@ void CodeGenerator::emit_function(IR::Function const& ir_function) {
 			// if this is the first basic block, we have to insert argument boilerplate
 			size_t i = 0;
 			for (auto& arg : function->args()) {
-				AST::SymbolID argument_id   = ir_function.arguments[i++].name.value;
-				std::string   argument_name = get_name(argument_id);
-				variables_[argument_id]     = llvm::IRBuilder<>(block, block->begin())
+				IR::Identifier argument_id   = ir_function.arguments[i++].name.value;
+				std::string    argument_name = get_name(argument_id);
+				variables_[argument_id]      = llvm::IRBuilder<>(block, block->begin())
 				                                  .CreateAlloca(arg.getType(), nullptr, argument_name);
 				builder_.CreateStore(&arg, variables_[argument_id]);
 			}
@@ -617,7 +617,7 @@ void CodeGenerator::create_struct(IR::Struct const& struct_) {
 }
 
 void CodeGenerator::create_all(IR::Module const& module) {
-	for (AST::SymbolID item : module.items) {
+	for (IR::Identifier item : module.items) {
 		if (std::holds_alternative<IR::Module>(symbols_.at(item).item))
 			create_all(std::get<IR::Module>(symbols_.at(item).item));
 		else if (std::holds_alternative<IR::Function>(symbols_.at(item).item))
@@ -632,7 +632,7 @@ void CodeGenerator::create_all(std::vector<IR::Module> const& modules) {
 }
 
 void CodeGenerator::emit_all(IR::Module const& module) {
-	for (AST::SymbolID item : module.items) {
+	for (IR::Identifier item : module.items) {
 		if (std::holds_alternative<IR::Module>(symbols_.at(item).item))
 			emit_all(std::get<IR::Module>(symbols_.at(item).item));
 		else if (std::holds_alternative<IR::Function>(symbols_.at(item).item))
