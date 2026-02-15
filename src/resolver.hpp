@@ -278,7 +278,7 @@ private:
 
 		inline PartialInteger& get_partial_integer() { return std::get<(size_t) Kind::PartialInteger>(value); }
 
-		static TypeInfo from_type(AST::Type::Atom const&);
+		static TypeInfo from_type(AST::Type::Atom const&, bool partial = true);
 
 		/// Returns whether this type pertains to something which could theoretically be callable.
 		bool is_callable(std::vector<TypeInfo> const&) const;
@@ -515,8 +515,8 @@ private:
 
 	std::vector<TypeInfo::ID> undecided_member_accesses {};
 
-	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID);
-	TypeInfo from_type(AST::Type const&, FileContext::ID);
+	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID, bool partial = true);
+	TypeInfo from_type(AST::Type const&, FileContext::ID, bool partial = true);
 
 	TypeInfo from_identifier(AST::Identifier const&);
 

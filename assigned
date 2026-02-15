@@ -30,6 +30,7 @@ func refs() {
 }
 
 struct Test { field: bool }
+struct Jest { field: uint8; test: Test }
 
 @extern
 func main() {
@@ -40,4 +41,7 @@ func main() {
 	b = 4;
 	const test = Test { field: true };
 	test.field = false;
+	mut jest = Jest { field: 32, test: test };
+	jest.field = 64;
+	jest.test.field = true;
 }

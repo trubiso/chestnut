@@ -7,14 +7,15 @@
 #include <sstream>
 #include <variant>
 
-Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom) {
+Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom, bool partial) {
 	switch (atom.kind()) {
 	case AST::Type::Atom::Kind::Float: return make_known_float(KnownFloat {atom.get_float().width});
 	case AST::Type::Atom::Kind::Void:  return make_known_void();
 	case AST::Type::Atom::Kind::Char:  return make_known_char();
 	case AST::Type::Atom::Kind::Bool:  return make_known_bool();
-	// we can make a named partial since this function is only called from the resolver
-	case AST::Type::Atom::Kind::Named:    return make_named_partial(&atom.get_named());
+	case AST::Type::Atom::Kind::Named:
+		return partial ? make_named_partial(&atom.get_named())
+		               : make_named_known(atom.get_named().id.value().at(0));
 	case AST::Type::Atom::Kind::Inferred: return make_unknown();
 	case AST::Type::Atom::Kind::Integer:  break;
 	}
@@ -26,16 +27,16 @@ Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom) {
 	else return make_partial_integer(PartialInteger {integer, true});
 }
 
-Resolver::TypeInfo Resolver::from_type(AST::Type::Pointer const& pointer, FileContext::ID file_id) {
-	TypeInfo     inner   = from_type(pointer.type->value, file_id);
+Resolver::TypeInfo Resolver::from_type(AST::Type::Pointer const& pointer, FileContext::ID file_id, bool partial) {
+	TypeInfo     inner   = from_type(pointer.type->value, file_id, partial);
 	TypeInfo::ID pointee = register_type(std::move(inner), pointer.type->span, file_id);
 	return TypeInfo::make_pointer(TypeInfo::Pointer {pointee, pointer.mutable_});
 }
 
-Resolver::TypeInfo Resolver::from_type(AST::Type const& type, FileContext::ID file_id) {
+Resolver::TypeInfo Resolver::from_type(AST::Type const& type, FileContext::ID file_id, bool partial) {
 	switch (type.kind()) {
-	case AST::Type::Kind::Atom:    return TypeInfo::from_type(type.get_atom());
-	case AST::Type::Kind::Pointer: return from_type(type.get_pointer(), file_id);
+	case AST::Type::Kind::Atom:    return TypeInfo::from_type(type.get_atom(), partial);
+	case AST::Type::Kind::Pointer: return from_type(type.get_pointer(), file_id, partial);
 	}
 	[[assume(false)]];
 }
@@ -1129,8 +1130,8 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	}
 
 	// let's get the type of the field
-	AST::Struct::Field const& field      = *maybe_field;
-	TypeInfo                  field_type = from_type(field.type.value, symbol_pool_.at(type_name_id).file_id);
+	AST::Struct::Field const& field = *maybe_field;
+	TypeInfo field_type             = from_type(field.type.value, symbol_pool_.at(type_name_id).file_id, false);
 
 	// finally, let's set the type and unify all possible types
 	type_pool_.at(undecided_member_access) = field_type;
@@ -1164,7 +1165,7 @@ Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span,
 		TypeInfo::ID field_type = infer(field.value->value, field.value->span, file_id);
 		// FIXME: we shouldn't have to re-register the types per struct literal
 		TypeInfo struct_field_type
-			= from_type(struct_field->type.value, symbol_pool_.at(type_symbol_id).file_id);
+			= from_type(struct_field->type.value, symbol_pool_.at(type_symbol_id).file_id, false);
 		TypeInfo::ID struct_field_type_id = register_type(
 			std::move(struct_field_type),
 			struct_field->type.span,
