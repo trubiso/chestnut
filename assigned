@@ -12,7 +12,6 @@ func fibonacci(count: uint64) {
 	const c = a + b;
 	a = b;
 	b = c;
-	// this only throws the correct diagnostics if the if becomes branch or gets removed
 	if (i < count) goto 'loop;
 }
 

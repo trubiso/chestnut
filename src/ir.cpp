@@ -247,6 +247,10 @@ std::ostream& operator<<(std::ostream& os, BasicBlock const& basic_block) {
 	}
 }
 
+BasicBlock& Function::find_block(BasicBlock::ID id) {
+	return *std::find_if(body.begin(), body.end(), [id](IR::BasicBlock const& block) { return block.id == id; });
+}
+
 std::ostream& operator<<(std::ostream& os, Function const& function) {
 	os << "declare function @" << function.name.value << " w/ args (";
 	size_t count = 0;

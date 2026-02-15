@@ -558,6 +558,8 @@ struct Function {
 	std::vector<BasicBlock> body;
 
 	bool extern_;
+
+	BasicBlock& find_block(BasicBlock::ID);
 };
 
 std::ostream& operator<<(std::ostream&, Function const&);

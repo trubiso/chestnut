@@ -71,20 +71,12 @@ void Analyzer::optimize_blocks(IR::Function& function) {
 	for (IR::BasicBlock& basic_block : function.body) {
 		if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
 			IR::BasicBlock::Goto& goto_     = std::get<IR::BasicBlock::Goto>(basic_block.jump);
-			IR::BasicBlock const* jumped_to = &*std::find_if(
-				function.body.cbegin(),
-				function.body.cend(),
-				[&goto_](IR::BasicBlock const& block) { return block.id == goto_.id; }
-			);
+			IR::BasicBlock const* jumped_to = &function.find_block(goto_.id);
 			while (jumped_to->statements.empty()) {
 				auto const& jump = jumped_to->jump;
 				if (std::holds_alternative<IR::BasicBlock::Goto>(jump)) {
 					goto_.id  = std::get<IR::BasicBlock::Goto>(jump).id;
-					jumped_to = &*std::find_if(
-						function.body.cbegin(),
-						function.body.cend(),
-						[&goto_](IR::BasicBlock const& block) { return block.id == goto_.id; }
-					);
+					jumped_to = &function.find_block(goto_.id);
 				} else if (std::holds_alternative<IR::BasicBlock::Branch>(jump)) {
 					auto const& branch = std::get<IR::BasicBlock::Branch>(jump);
 					basic_block.jump   = IR::BasicBlock::Branch {
@@ -342,13 +334,12 @@ void Analyzer::check_assigned(
 		check_assigned(statement.value, file_id, assigned);
 
 	// finally, we need to check how this fares in each of our possible jumps out
-	// FIXME: this logic breaks in the file 'assigned'
 	if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
 		IR::BasicBlock::ID destination = std::get<IR::BasicBlock::Goto>(basic_block.jump).id;
 		// we don't want to check a basic block we've already checked from this basic block
 		if (preds.at(destination).contains(basic_block.id)) return;
 		preds.at(destination).insert(basic_block.id);
-		return check_assigned(function.body.at(destination), function, file_id, assigned, preds);
+		return check_assigned(function.find_block(destination), function, file_id, assigned, preds);
 	} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
 		IR::BasicBlock::Branch& branch = std::get<IR::BasicBlock::Branch>(basic_block.jump);
 		// check the value
@@ -358,11 +349,11 @@ void Analyzer::check_assigned(
 			preds.at(branch.true_).insert(basic_block.id);
 			// we copy to avoid info leak from the true branch onto the false branch
 			AssignedMap assigned_copy = assigned;
-			check_assigned(function.body.at(branch.true_), function, file_id, assigned_copy, preds);
+			check_assigned(function.find_block(branch.true_), function, file_id, assigned_copy, preds);
 		}
 		if (!preds.at(branch.false_).contains(basic_block.id)) {
 			preds.at(branch.false_).insert(basic_block.id);
-			check_assigned(function.body.at(branch.false_), function, file_id, assigned, preds);
+			check_assigned(function.find_block(branch.false_), function, file_id, assigned, preds);
 		}
 		return;
 	} else if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
