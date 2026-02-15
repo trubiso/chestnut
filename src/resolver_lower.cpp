@@ -300,7 +300,8 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 				allow_functions
 			)};
 	AST::SymbolID id = symbol_next();
-	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, expression.type.value(), false, false, {}});
+	// FIXME: we must come up with a better solution than making this mutable! peep the repercussions in assigned:35
+	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, expression.type.value(), true, false, {}});
 	Spanned<IR::Identifier> name {span, id};
 
 	IR::Type type = reconstruct_type(expression.type.value(), allow_functions);

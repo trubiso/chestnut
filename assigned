@@ -2,7 +2,7 @@
 @extern func putchar(c: char);
 
 func fibonacci(count: uint64) {
-	const a = 0;
+	mut a = 0;  // set to const for error
 	mut b = 1;
 	mut i = 0;
 'loop:
@@ -15,6 +15,7 @@ func fibonacci(count: uint64) {
 	if (i < count) goto 'loop;
 }
 
+/*
 func skip_vardecl() {
 	goto 'next;
 'skip:
@@ -28,20 +29,25 @@ func refs() {
 	const my_immutable = 3;
 	const mutable = &mut my_immutable;
 }
+*/
 
 struct Test { field: bool }
 struct Jest { field: uint8; test: Test }
 
 @extern
+func print_bool(anon _: bool);
+
+@extern
 func main() {
 	const a: uint8 = 3;
-	a = 4;
 	const b = undefined;
-	b = 3;
 	b = 4;
-	const test = Test { field: true };
-	test.field = false;
+	const test = Test { field: false };
+	print_bool(test.field);
 	mut jest = Jest { field: 32, test: test };
+	print_bool(jest.test.field);
 	jest.field = 64;
 	jest.test.field = true;
+	// FIXME: this does not print true
+	print_bool(jest.test.field);
 }
