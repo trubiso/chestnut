@@ -22,7 +22,9 @@ public:
 		: resolved_files(std::move(resolved_files))
 		, symbols(std::move(symbols)) {}
 
-	void analyze();
+	void analyze(bool print_ir = false);
+	/// Prints an IR module using the symbol table.
+	std::ostream& print(std::ostream&, IR::Module const&) const;
 
 private:
 	/// Returns the file context for the requested file ID.

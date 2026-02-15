@@ -3,8 +3,30 @@
 #include <sstream>
 #include <variant>
 
-void Analyzer::analyze() {
+void Analyzer::analyze(bool print_ir) {
 	check_assigned();
+	if (print_ir)
+		for (ResolvedFile const& file : resolved_files) print(std::cout, file.module) << std::endl;
+}
+
+std::ostream& Analyzer::print(std::ostream& os, IR::Module const& module) const {
+	os << "declare module @" << module.name.value << ": ";
+	if (module.items.empty()) { return os << "(empty module)"; }
+	os << "{\n";
+	os.iword(0)++;
+	for (auto item : module.items) {
+		for (long i = 0; i < os.iword(0); ++i) os << "    ";
+		if (std::holds_alternative<IR::Module>(symbols.at(item).item))
+			print(os, std::get<IR::Module>(symbols.at(item).item));
+		else if (std::holds_alternative<IR::Function>(symbols.at(item).item))
+			os << std::get<IR::Function>(symbols.at(item).item);
+		else if (std::holds_alternative<IR::Struct>(symbols.at(item).item))
+			os << std::get<IR::Struct>(symbols.at(item).item);
+		os << '\n';
+	}
+	os.iword(0)--;
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
+	return os << "}";
 }
 
 FileContext Analyzer::get_context(FileContext::ID file_id) const {

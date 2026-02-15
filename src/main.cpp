@@ -235,7 +235,8 @@ int main(int argc, char** argv) {
 	}
 
 	Analyzer analyzer(resolver.export_symbols(), std::move(resolved_files));
-	analyzer.analyze();
+	if (input.print_ir) std::cout << "=== POST-ANALYSIS ===" << std::endl;
+	analyzer.analyze(input.print_ir);
 	for (auto const& file : analyzer.resolved_files)
 		for (auto const& diagnostic : file.diagnostics) {
 			diagnostic.print();
