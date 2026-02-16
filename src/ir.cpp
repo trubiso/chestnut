@@ -184,25 +184,20 @@ std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call)
 	return os << ')';
 }
 
-std::ostream& operator<<(std::ostream& os, Expression::Deref const& deref) {
-	return os << "(deref @" << deref.address.value << ')';
-}
-
 std::ostream& operator<<(std::ostream& os, Expression::Ref const& ref) {
-	return os << "(&" << (ref.mutable_ ? "mut" : "const") << " (@" << ref.value.value << "))";
+	return os << "(&" << (ref.mutable_ ? "mut" : "const") << " (" << ref.value.value << "))";
 }
 
-std::ostream& operator<<(std::ostream& os, Expression::MemberAccess const& member_access) {
-	return os << "(@" << member_access.accessee.value << ".+" << member_access.field_index << ")";
+std::ostream& operator<<(std::ostream& os, Expression::Load const& load) {
+	return os << load.value.value;
 }
 
 std::ostream& operator<<(std::ostream& os, Expression const& expression) {
 	switch (expression.kind()) {
 	case Expression::Kind::Atom:         return os << expression.get_atom();
 	case Expression::Kind::FunctionCall: return os << expression.get_function_call();
-	case Expression::Kind::Deref:        return os << expression.get_deref();
 	case Expression::Kind::Ref:          return os << expression.get_ref();
-	case Expression::Kind::MemberAccess: return os << expression.get_member_access();
+	case Expression::Kind::Load:         return os << expression.get_load();
 	}
 	[[assume(false)]];
 }
@@ -215,30 +210,16 @@ std::ostream& operator<<(std::ostream& os, Statement::Declare const& declare) {
 
 std::ostream& operator<<(std::ostream& os, Statement::Set const& set) {
 	os << "[set stmt: ";
-	os << '@' << set.name.value << " = " << set.value.value;
-	return os << ";]";
-}
-
-std::ostream& operator<<(std::ostream& os, Statement::Write const& write) {
-	os << "[write stmt: ";
-	os << "*@" << write.address.value << " = " << write.value.value;
-	return os << ";]";
-}
-
-std::ostream& operator<<(std::ostream& os, Statement::WriteAccess const& write) {
-	os << "[write access stmt: ";
-	os << write.access.value << " = " << write.value.value;
+	os << set.place.value << " = " << set.value.value;
 	return os << ";]";
 }
 
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	switch (statement.kind()) {
-	case Statement::Kind::Declare:     return os << statement.get_declare();
-	case Statement::Kind::Set:         return os << statement.get_set();
-	case Statement::Kind::Call:        return os << "[call stmt: " << statement.get_call() << ";]";
-	case Statement::Kind::Write:       return os << statement.get_write();
-	case Statement::Kind::WriteAccess: return os << statement.get_write_access();
+	case Statement::Kind::Declare: return os << statement.get_declare();
+	case Statement::Kind::Set:     return os << statement.get_set();
+	case Statement::Kind::Call:    return os << "[call stmt: " << statement.get_call() << ";]";
 	}
 }
 

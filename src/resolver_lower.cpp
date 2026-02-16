@@ -281,6 +281,96 @@ Spanned<IR::Identifier> Resolver::lower_identifier(Spanned<AST::Identifier> cons
 	return {identifier.span, identifier.value.id.value()[0]};
 }
 
+Spanned<std::tuple<IR::Identifier, IR::Type>> Resolver::extract_rvalue_id(
+	AST::Expression const&       expression,
+	Span                         span,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id,
+	bool                         allow_functions
+) {
+	IR::Type type = reconstruct_type(expression.type.value(), allow_functions);
+	// first, we lower the rvalue
+	auto value = lower_rvalue(expression, span, basic_blocks, file_id);
+	auto name  = extract_rvalue_id(
+                std::move(value.value),
+                span,
+                type.clone(),
+                expression.type.value(),
+                basic_blocks,
+                file_id
+        );
+	return {
+		name.span,
+		{std::move(name.value), std::move(type)}
+	};
+}
+
+Spanned<IR::Identifier> Resolver::extract_rvalue_id(
+	IR::Expression&&             expression,
+	Span                         span,
+	IR::Type&&                   type,
+	TypeInfo::ID                 type_id,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id
+) {
+	AST::SymbolID id = symbol_next();
+	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, type_id, false, false, {}});
+	Spanned<IR::Identifier> name {span, id};
+
+	// we push the declaration
+	basic_blocks.at(basic_blocks.size() - 1)
+		.statements.emplace_back(
+			span,
+			IR::Statement::make_declare(
+				IR::Statement::Declare {
+					name,
+					type.clone(),
+					{span, false}
+        }
+			)
+		);
+	// then we push the set statement
+	basic_blocks.at(basic_blocks.size() - 1)
+		.statements.emplace_back(
+			span,
+			IR::Statement::make_set(
+				IR::Statement::Set {
+					{name.span, IR::Place::make_symbol(name.value, type.clone())},
+					{span, std::move(expression)}
+        }
+			)
+		);
+	// and we return the declared identifier
+	return name;
+}
+
+Spanned<IR::Place> Resolver::rvalue_to_lvalue(
+	Spanned<IR::Expression>&&    expression,
+	IR::Type&&                   type,
+	TypeInfo::ID                 type_id,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id
+) {
+	// we skip things which are already identifiers
+	if (expression.value.is_atom() && expression.value.get_atom().is_identifier()) {
+		return {expression.span,
+		        IR::Place::make_symbol(
+				expression.value.get_atom().get_identifier(),
+				std::move(expression.value.get_atom().type)
+			)};
+	}
+	auto id = extract_rvalue_id(
+		std::move(expression.value),
+		expression.span,
+		type.clone(),
+		type_id,
+		basic_blocks,
+		file_id
+	);
+	return {id.span, IR::Place::make_symbol(id.value, std::move(type))};
+	// TODO: extract identifier. we should extract that logic from extract_expression
+}
+
 Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	AST::Expression const&       expression,
 	Span                         span,
@@ -299,31 +389,13 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 				file_id,
 				allow_functions
 			)};
-	AST::SymbolID id = symbol_next();
-	// FIXME: we must come up with a better solution than making this mutable! peep the repercussions in assigned:35
-	symbol_pool_.push_back(Symbol {id, file_id, span, "_", {}, expression.type.value(), true, false, {}});
-	Spanned<IR::Identifier> name {span, id};
 
-	IR::Type type = reconstruct_type(expression.type.value(), allow_functions);
-	// first, we lower the value
-	auto value = lower(expression, span, basic_blocks, file_id);
-	// then, we push the declaration
-	basic_blocks.at(basic_blocks.size() - 1)
-		.statements.emplace_back(
-			span,
-			IR::Statement::make_declare(
-				IR::Statement::Declare {
-					name,
-					type.clone(),
-					{span, false}
-        }
-			)
-		);
-	// finally, we push the set statement
-	basic_blocks.at(basic_blocks.size() - 1)
-		.statements.emplace_back(span, IR::Statement::make_set(IR::Statement::Set {name, std::move(value)}));
-	// and we return the declared identifier
-	return {name.span, IR::Expression::Atom::make_identifier(std::move(name.value), std::move(type))};
+	auto id = extract_rvalue_id(expression, span, basic_blocks, file_id, allow_functions);
+	return {id.span,
+	        IR::Expression::Atom::make_identifier(
+			std::move(std::get<0>(id.value)),
+			std::move(std::get<1>(id.value))
+		)};
 }
 
 Spanned<IR::Expression::Atom> Resolver::extract_expression(
@@ -335,7 +407,7 @@ Spanned<IR::Expression::Atom> Resolver::extract_expression(
 	return extract_expression(expression.value, expression.span, basic_blocks, file_id, allow_functions);
 }
 
-IR::Expression::Atom Resolver::lower(
+IR::Expression::Atom Resolver::lower_atom(
 	AST::Expression::Atom::StructLiteral const& struct_literal,
 	TypeInfo::ID                                type_id,
 	Span                                        span,
@@ -404,7 +476,7 @@ IR::Expression::Atom Resolver::lower_atom(
 	case AST::Expression::Atom::Kind::BoolLiteral:
 		return IR::Expression::Atom::make_bool(atom.get_bool_literal().value, reconstruct_type(type_id));
 	case AST::Expression::Atom::Kind::StructLiteral:
-		return lower(atom.get_struct_literal(), type_id, span, basic_blocks, file_id, allow_functions);
+		return lower_atom(atom.get_struct_literal(), type_id, span, basic_blocks, file_id, allow_functions);
 	case AST::Expression::Atom::Kind::Expression:
 		return extract_expression(*atom.get_expression(), span, basic_blocks, file_id).value;
 	case AST::Expression::Atom::Kind::Identifier: break;
@@ -417,7 +489,7 @@ IR::Expression::Atom Resolver::lower_atom(
 	return IR::Expression::Atom::make_identifier(identifier, std::move(type));
 }
 
-Spanned<IR::Expression> Resolver::lower(
+Spanned<IR::Expression> Resolver::lower_rvalue(
 	AST::Expression::Atom const& atom,
 	TypeInfo::ID                 type_id,
 	Span                         span,
@@ -429,7 +501,7 @@ Spanned<IR::Expression> Resolver::lower(
 	        IR::Expression::make_atom(lower_atom(atom, type_id, span, basic_blocks, file_id, allow_functions))};
 }
 
-Spanned<IR::Expression> Resolver::lower(
+Spanned<IR::Expression> Resolver::lower_rvalue(
 	AST::Expression::FunctionCall const& function_call,
 	Span                                 span,
 	std::vector<IR::BasicBlock>&         basic_blocks,
@@ -438,7 +510,7 @@ Spanned<IR::Expression> Resolver::lower(
 ) {
 	auto error_expression
 		= Spanned<IR::Expression> {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
-	auto callee = lower(*function_call.callee, basic_blocks, file_id, true);
+	auto callee = lower_rvalue(*function_call.callee, basic_blocks, file_id, true);
 	// if the callee is not valid, we've already thrown diagnostics about it
 	if (!callee.value.is_atom() || !callee.value.get_atom().is_identifier()) return error_expression;
 	Spanned<IR::Identifier> callee_identifier {callee.span, callee.value.get_atom().get_identifier()};
@@ -481,7 +553,140 @@ Spanned<IR::Expression> Resolver::lower(
 	return {span, IR::Expression::make_function_call(std::move(callee_identifier), std::move(arguments))};
 }
 
-Spanned<IR::Expression> Resolver::lower(
+Spanned<IR::Expression> Resolver::lower_rvalue(
+	AST::Expression::AddressOperation const& address_operation,
+	Span                                     span,
+	std::vector<IR::BasicBlock>&             basic_blocks,
+	FileContext::ID                          file_id,
+	bool                                     allow_functions
+) {
+	auto operand = lower_lvalue(*address_operation.operand, basic_blocks, file_id);
+	return Spanned<IR::Expression> {span, IR::Expression::make_ref(std::move(operand), address_operation.mutable_)};
+}
+
+Spanned<IR::Expression> Resolver::lower_rvalue(
+	AST::Expression const&       expression,
+	Span                         span,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id,
+	bool                         allow_functions
+) {
+	switch (expression.kind()) {
+	case AST::Expression::Kind::Atom:
+		return lower_rvalue(
+			expression.get_atom(),
+			expression.type.value(),
+			span,
+			basic_blocks,
+			file_id,
+			allow_functions
+		);
+	case AST::Expression::Kind::FunctionCall:
+		return lower_rvalue(expression.get_function_call(), span, basic_blocks, file_id, allow_functions);
+	case AST::Expression::Kind::MemberAccess:
+		return {span,
+		        IR::Expression::make_load(lower_lvalue(
+				expression.get_member_access(),
+				expression.type.value(),
+				span,
+				basic_blocks,
+				file_id,
+				allow_functions
+			))};
+	case AST::Expression::Kind::UnaryOperation:
+		return Spanned<IR::Expression> {
+			span,
+			IR::Expression::make_load(
+				lower_lvalue(expression, span, basic_blocks, file_id, allow_functions)
+			)
+		};
+	case AST::Expression::Kind::AddressOperation:
+		return lower_rvalue(expression.get_address_operation(), span, basic_blocks, file_id, allow_functions);
+	case AST::Expression::Kind::BinaryOperation:
+	case AST::Expression::Kind::If:              [[assume(false)]];
+	}
+}
+
+Spanned<IR::Expression> Resolver::lower_rvalue(
+	Spanned<AST::Expression> const& expression,
+	std::vector<IR::BasicBlock>&    basic_blocks,
+	FileContext::ID                 file_id,
+	bool                            allow_functions
+) {
+	return lower_rvalue(expression.value, expression.span, basic_blocks, file_id, allow_functions);
+}
+
+Spanned<IR::Place> Resolver::lower_lvalue(
+	AST::Expression::AddressOperation const& address_operation,
+	TypeInfo::ID                             type_id,
+	Span                                     span,
+	std::vector<IR::BasicBlock>&             basic_blocks,
+	FileContext::ID                          file_id,
+	bool                                     allow_functions
+) {
+	return rvalue_to_lvalue(
+		lower_rvalue(address_operation, span, basic_blocks, file_id, allow_functions),
+		reconstruct_type(type_id),
+		type_id,
+		basic_blocks,
+		file_id
+	);
+}
+
+Spanned<IR::Place> Resolver::lower_lvalue(
+	AST::Expression::FunctionCall const& function_call,
+	TypeInfo::ID                         type_id,
+	Span                                 span,
+	std::vector<IR::BasicBlock>&         basic_blocks,
+	FileContext::ID                      file_id,
+	bool                                 allow_functions
+) {
+	return rvalue_to_lvalue(
+		lower_rvalue(function_call, span, basic_blocks, file_id, allow_functions),
+		reconstruct_type(type_id),
+		type_id,
+		basic_blocks,
+		file_id
+	);
+}
+
+Spanned<IR::Place> Resolver::lower_lvalue(
+	AST::Expression::UnaryOperation const& unary_operation,
+	TypeInfo::ID                           type_id,
+	Span                                   span,
+	std::vector<IR::BasicBlock>&           basic_blocks,
+	FileContext::ID                        file_id,
+	bool                                   allow_functions
+) {
+	assert(unary_operation.operation == Token::Symbol::Star);
+	auto operand = lower_lvalue(*unary_operation.operand, basic_blocks, file_id);
+	return Spanned<IR::Place> {
+		span,
+		IR::Place::make_deref(
+			std::make_unique<Spanned<IR::Place>>(std::move(operand)),
+			reconstruct_type(type_id)
+		)
+	};
+}
+
+Spanned<IR::Place> Resolver::lower_lvalue(
+	AST::Expression::Atom const& atom,
+	TypeInfo::ID                 type_id,
+	Span                         span,
+	std::vector<IR::BasicBlock>& basic_blocks,
+	FileContext::ID              file_id,
+	bool                         allow_functions
+) {
+	return rvalue_to_lvalue(
+		lower_rvalue(atom, type_id, span, basic_blocks, file_id, allow_functions),
+		reconstruct_type(type_id),
+		type_id,
+		basic_blocks,
+		file_id
+	);
+}
+
+Spanned<IR::Place> Resolver::lower_lvalue(
 	AST::Expression::MemberAccess const& member_access,
 	TypeInfo::ID                         type_id,
 	Span                                 span,
@@ -489,17 +694,17 @@ Spanned<IR::Expression> Resolver::lower(
 	FileContext::ID                      file_id,
 	bool                                 allow_functions
 ) {
-	auto error_expression
-		= Spanned<IR::Expression> {span, IR::Expression::make_atom(IR::Expression::Atom::make_error())};
+	auto error_place
+		= Spanned<IR::Place> {span, IR::Place::make_error(IR::Type::make_atom(IR::Type::Atom::make_error()))};
 
-	auto accessee = extract_expression(*member_access.accessee, basic_blocks, file_id);
-	assert(accessee.value.is_identifier());
+	auto accessee = lower_lvalue(*member_access.accessee, basic_blocks, file_id);
 
-	if (!accessee.value.type.is_atom() || !accessee.value.type.get_atom().is_named()) return error_expression;
+	if (!accessee.value.type.is_atom() || !accessee.value.type.get_atom().is_named()) return error_place;
 	IR::Identifier    struct_id   = accessee.value.type.get_atom().get_named();
 	IR::Struct const& struct_     = std::get<IR::Struct>(symbol_pool_.at(struct_id).item);
 	size_t            field_index = 0;
 	// we know the field is in there somewhere
+	// TODO: assert that!
 	for (size_t i = 0; i < struct_.fields.size(); ++i) {
 		if (struct_.fields[i].name.value == member_access.field.value) {
 			field_index = i;
@@ -511,15 +716,14 @@ Spanned<IR::Expression> Resolver::lower(
 
 	// TODO: check if it is a function (it shouldn't be)
 	return {span,
-	        IR::Expression::make_member_access(
-			{accessee.span, accessee.value.get_identifier()},
-			std::move(accessee.value.type),
+	        IR::Place::make_access(
+			std::make_unique<Spanned<IR::Place>>(std::move(accessee)),
 			field_index,
 			std::move(type)
 		)};
 }
 
-Spanned<IR::Expression> Resolver::lower(
+Spanned<IR::Place> Resolver::lower_lvalue(
 	AST::Expression const&       expression,
 	Span                         span,
 	std::vector<IR::BasicBlock>& basic_blocks,
@@ -528,7 +732,7 @@ Spanned<IR::Expression> Resolver::lower(
 ) {
 	switch (expression.kind()) {
 	case AST::Expression::Kind::Atom:
-		return lower(
+		return lower_lvalue(
 			expression.get_atom(),
 			expression.type.value(),
 			span,
@@ -537,9 +741,16 @@ Spanned<IR::Expression> Resolver::lower(
 			allow_functions
 		);
 	case AST::Expression::Kind::FunctionCall:
-		return lower(expression.get_function_call(), span, basic_blocks, file_id, allow_functions);
+		return lower_lvalue(
+			expression.get_function_call(),
+			expression.type.value(),
+			span,
+			basic_blocks,
+			file_id,
+			allow_functions
+		);
 	case AST::Expression::Kind::MemberAccess:
-		return lower(
+		return lower_lvalue(
 			expression.get_member_access(),
 			expression.type.value(),
 			span,
@@ -548,45 +759,35 @@ Spanned<IR::Expression> Resolver::lower(
 			allow_functions
 		);
 	case AST::Expression::Kind::UnaryOperation:
-	case AST::Expression::Kind::AddressOperation: break;
+		return lower_lvalue(
+			expression.get_unary_operation(),
+			expression.type.value(),
+			span,
+			basic_blocks,
+			file_id,
+			allow_functions
+		);
+	case AST::Expression::Kind::AddressOperation:
+		return lower_lvalue(
+			expression.get_address_operation(),
+			expression.type.value(),
+			span,
+			basic_blocks,
+			file_id,
+			allow_functions
+		);
 	case AST::Expression::Kind::BinaryOperation:
-	case AST::Expression::Kind::If:               [[assume(false)]];
+	case AST::Expression::Kind::If:              [[assume(false)]];
 	}
-
-	if (expression.is_unary_operation()) {
-		assert(expression.get_unary_operation().operation == Token::Symbol::Star);
-		auto operand = extract_expression(*expression.get_unary_operation().operand, basic_blocks, file_id);
-		assert(operand.value.is_identifier());
-		return Spanned<IR::Expression> {
-			span,
-			IR::Expression::make_deref(
-				{operand.span, operand.value.get_identifier()},
-				std::move(operand.value.type)
-			)
-		};
-	}
-
-	if (expression.is_address_operation()) {
-		auto operand = extract_expression(*expression.get_address_operation().operand, basic_blocks, file_id);
-		assert(operand.value.is_identifier());
-		return Spanned<IR::Expression> {
-			span,
-			IR::Expression::make_ref(
-				{operand.span, operand.value.get_identifier()},
-				expression.get_address_operation().mutable_
-			)
-		};
-	}
-	[[assume(false)]];
 }
 
-Spanned<IR::Expression> Resolver::lower(
+Spanned<IR::Place> Resolver::lower_lvalue(
 	Spanned<AST::Expression> const& expression,
 	std::vector<IR::BasicBlock>&    basic_blocks,
 	FileContext::ID                 file_id,
 	bool                            allow_functions
 ) {
-	return lower(expression.value, expression.span, basic_blocks, file_id, allow_functions);
+	return lower_lvalue(expression.value, expression.span, basic_blocks, file_id, allow_functions);
 }
 
 std::optional<Spanned<IR::Statement>> Resolver::lower(
@@ -600,7 +801,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	auto [name, type] = std::move(data.value());
 
 	auto value = declare.value.transform([&basic_blocks, file_id, this](auto&& value) {
-		return lower(value, basic_blocks, file_id);
+		return lower_rvalue(value, basic_blocks, file_id);
 	});
 
 	if (declare.is_undefined) assert(!value.has_value());
@@ -613,7 +814,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 		.statements.emplace_back(
 			span,
 			IR::Statement::make_declare(
-				IR::Statement::Declare {name, std::move(type), std::move(declare.mutable_)}
+				IR::Statement::Declare {name, type.clone(), std::move(declare.mutable_)}
 			)
 		);
 
@@ -621,7 +822,12 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	if (!value.has_value()) return {};
 	return Spanned<IR::Statement> {
 		span,
-		IR::Statement::make_set(IR::Statement::Set {name, std::move(value.value())})
+		IR::Statement::make_set(
+			IR::Statement::Set {
+					    Spanned<IR::Place> {declare.name.span, IR::Place::make_symbol(name.value, std::move(type))},
+					    std::move(value.value())
+			}
+		)
 	};
 }
 
@@ -633,48 +839,27 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 ) {
 	// skip invalid lhs
 	if (!set.lhs.value.can_be_lhs()) return {};
-	auto lhs   = lower(set.lhs, basic_blocks, file_id);
-	auto value = lower(set.rhs, basic_blocks, file_id);
+	auto lhs   = lower_lvalue(set.lhs, basic_blocks, file_id);
+	auto value = lower_rvalue(set.rhs, basic_blocks, file_id);
 
+	// TODO: move this check elsewhere
 	if (lhs.value.is_deref()) {
-		auto        written_to      = lhs.value.get_deref().address;
-		auto const& symbol          = symbol_pool_.at(written_to.value);
-		auto        written_to_type = symbol.type;
-		if (!type_pool_.at(written_to_type).is_pointer(type_pool_)) return {};
-		if (!type_pool_.at(written_to_type).get_pointer_mutable(type_pool_)) {
+		auto const& written_to      = lhs.value.get_deref().address;
+		auto const& written_to_type = written_to->value.type;
+		if (!written_to_type.is_pointer()) return {};
+		if (!written_to_type.get_pointer().mutable_) {
 			parsed_files.at(file_id).diagnostics.push_back(
 				Diagnostic::error(
 					"tried to mutate value pointed to by constant pointer",
-					{get_type_sample(written_to_type, OutFmt::Color::Red)}
+					{Diagnostic::Sample(get_context(file_id), written_to->span, OutFmt::Color::Red)}
 				)
 			);
 		}
-
-		return Spanned<IR::Statement> {
-			span,
-			IR::Statement::make_write(IR::Statement::Write {written_to, std::move(value)})
-		};
 	}
 
-	if (lhs.value.is_member_access()) {
-		return Spanned<IR::Statement> {
-			span,
-			IR::Statement::make_write_access(
-				IR::Statement::WriteAccess {
-							    {lhs.span, std::move(lhs.value.get_member_access())},
-							    std::move(value)
-				}
-			)
-		};
-	}
-
-	assert(lhs.value.is_atom());
-	auto lhs_identifier = Spanned<IR::Identifier> {lhs.span, lhs.value.get_atom().get_identifier()};
-
-	// we check mutability later
 	return Spanned<IR::Statement> {
 		span,
-		IR::Statement::make_set(IR::Statement::Set {lhs_identifier, std::move(value)})
+		IR::Statement::make_set(IR::Statement::Set {std::move(lhs), std::move(value)})
 	};
 }
 
@@ -769,7 +954,7 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	// for expressions, it's a special case because we only care about function calls
 	// however, when we resolve expressions, we do extract all potential inner function calls
 	if (type_pool_.at(statement.value.get_expression().type.value()).is_bottom()) return {};
-	auto expression = lower(statement.value.get_expression(), statement.span, basic_blocks, file_id);
+	auto expression = lower_rvalue(statement.value.get_expression(), statement.span, basic_blocks, file_id);
 	if (!expression.value.is_function_call()) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::warning(

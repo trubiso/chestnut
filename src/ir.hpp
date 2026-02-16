@@ -377,27 +377,19 @@ struct Expression {
 		std::vector<Spanned<Atom>> arguments;
 	};
 
-	struct Deref {
-		Spanned<Identifier> address;
-		Type                type;
-	};
-
 	struct Ref {
-		Spanned<Identifier> value;
-		bool                mutable_;
+		Spanned<Place> value;
+		bool           mutable_;
 	};
 
-	struct MemberAccess {
-		Spanned<Identifier> accessee;
-		Type                accessee_type;
-		size_t              field_index;
-		Type                field_type;
+	struct Load {
+		Spanned<Place> value;
 	};
 
 	// expressions must now be either atoms or function calls
-	enum class Kind { Atom, FunctionCall, Deref, Ref, MemberAccess };
+	enum class Kind { Atom, FunctionCall, Ref, Load };
 
-	typedef std::variant<Atom, FunctionCall, Deref, Ref, MemberAccess> value_t;
+	typedef std::variant<Atom, FunctionCall, Ref, Load> value_t;
 
 	value_t value;
 
@@ -419,16 +411,7 @@ struct Expression {
 		);
 	}
 
-	inline static Expression make_deref(Spanned<Identifier>&& address, Type&& type) {
-		return Expression(
-			value_t {
-				std::in_place_index<(size_t) Kind::Deref>,
-				Deref {std::move(address), std::move(type)}
-                }
-		);
-	}
-
-	inline static Expression make_ref(Spanned<Identifier>&& value, bool mutable_) {
+	inline static Expression make_ref(Spanned<Place>&& value, bool mutable_) {
 		return Expression(
 			value_t {
 				std::in_place_index<(size_t) Kind::Ref>,
@@ -437,33 +420,17 @@ struct Expression {
 		);
 	}
 
-	inline static Expression make_member_access(
-		Spanned<Identifier>&& accessee,
-		Type&&                accessee_type,
-		size_t                field_index,
-		Type&&                field_type
-	) {
-		return Expression(
-			value_t {
-				std::in_place_index<(size_t) Kind::MemberAccess>,
-				MemberAccess {
-					      std::move(accessee),
-					      std::move(accessee_type),
-					      field_index, std::move(field_type)
-				}
-                }
-		);
+	inline static Expression make_load(Spanned<Place>&& place) {
+		return Expression(value_t {std::in_place_index<(size_t) Kind::Load>, Load {std::move(place)}});
 	}
 
 	inline bool is_atom() const { return kind() == Kind::Atom; }
 
 	inline bool is_function_call() const { return kind() == Kind::FunctionCall; }
 
-	inline bool is_deref() const { return kind() == Kind::Deref; }
-
 	inline bool is_ref() const { return kind() == Kind::Ref; }
 
-	inline bool is_member_access() const { return kind() == Kind::MemberAccess; }
+	inline bool is_load() const { return kind() == Kind::Load; }
 
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
 
@@ -473,26 +440,21 @@ struct Expression {
 
 	inline FunctionCall& get_function_call() { return std::get<(size_t) Kind::FunctionCall>(value); }
 
-	inline Deref const& get_deref() const { return std::get<(size_t) Kind::Deref>(value); }
-
-	inline Deref& get_deref() { return std::get<(size_t) Kind::Deref>(value); }
-
 	inline Ref const& get_ref() const { return std::get<(size_t) Kind::Ref>(value); }
 
 	inline Ref& get_ref() { return std::get<(size_t) Kind::Ref>(value); }
 
-	inline MemberAccess const& get_member_access() const { return std::get<(size_t) Kind::MemberAccess>(value); }
+	inline Load const& get_load() const { return std::get<(size_t) Kind::Load>(value); }
 
-	inline MemberAccess& get_member_access() { return std::get<(size_t) Kind::MemberAccess>(value); }
+	inline Load& get_load() { return std::get<(size_t) Kind::Load>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Expression::Atom::Literal const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom::StructLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
-std::ostream& operator<<(std::ostream&, Expression::Deref const&);
 std::ostream& operator<<(std::ostream&, Expression::Ref const&);
-std::ostream& operator<<(std::ostream&, Expression::MemberAccess const&);
+std::ostream& operator<<(std::ostream&, Expression::Load const&);
 std::ostream& operator<<(std::ostream&, Expression const&);
 
 struct Statement;
@@ -500,34 +462,23 @@ struct Statement;
 typedef std::vector<Spanned<Statement>> Scope;
 
 struct Statement {
+	// declaring a variable
 	struct Declare {
 		Spanned<Identifier> name;
 		Type                type;
 		Spanned<bool>       mutable_;
 	};
 
-	// set statements must set an identifier now. once we do deref sets, that will be a separate statement anyways.
+	// setting a place in memory
 	struct Set {
-		Spanned<Identifier> name;
+		Spanned<Place>      place;
 		Spanned<Expression> value;
-	};
-
-	// writing to an address
-	struct Write {
-		Spanned<Identifier> address;
-		Spanned<Expression> value;
-	};
-
-	// writing to a struct field
-	struct WriteAccess {
-		Spanned<Expression::MemberAccess> access;
-		Spanned<Expression>               value;
 	};
 
 	// expression statements are now calls and scope statements are resolved now anyways
-	enum class Kind { Declare, Set, Call, Write, WriteAccess };
+	enum class Kind { Declare, Set, Call };
 
-	typedef std::variant<Declare, Set, Expression::FunctionCall, Write, WriteAccess> value_t;
+	typedef std::variant<Declare, Set, Expression::FunctionCall> value_t;
 
 	value_t value;
 
@@ -545,14 +496,6 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Call>, std::move(call)});
 	}
 
-	inline static Statement make_write(Write&& write) {
-		return Statement(value_t {std::in_place_index<(size_t) Kind::Write>, std::move(write)});
-	}
-
-	inline static Statement make_write_access(WriteAccess&& write_access) {
-		return Statement(value_t {std::in_place_index<(size_t) Kind::WriteAccess>, std::move(write_access)});
-	}
-
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
 	inline Declare& get_declare() { return std::get<(size_t) Kind::Declare>(value); }
@@ -564,20 +507,10 @@ struct Statement {
 	inline Expression::FunctionCall const& get_call() const { return std::get<(size_t) Kind::Call>(value); }
 
 	inline Expression::FunctionCall& get_call() { return std::get<(size_t) Kind::Call>(value); }
-
-	inline Write const& get_write() const { return std::get<(size_t) Kind::Write>(value); }
-
-	inline Write& get_write() { return std::get<(size_t) Kind::Write>(value); }
-
-	inline WriteAccess const& get_write_access() const { return std::get<(size_t) Kind::WriteAccess>(value); }
-
-	inline WriteAccess& get_write_access() { return std::get<(size_t) Kind::WriteAccess>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
 std::ostream& operator<<(std::ostream&, Statement::Set const&);
-std::ostream& operator<<(std::ostream&, Statement::Write const&);
-std::ostream& operator<<(std::ostream&, Statement::WriteAccess const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
 
 struct BasicBlock {
