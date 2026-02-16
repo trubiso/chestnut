@@ -236,7 +236,6 @@ void Analyzer::check_assigned(
 	std::optional<IR::Identifier> maybe_base = get_base(ref.value.value);
 	if (!maybe_base.has_value()) return;
 	IR::Identifier base = maybe_base.value();
-	// TODO: throw diagnostic for references to dereferences (they don't do anything)
 	if (!get_mutable(ref.value.value) && ref.mutable_) {
 		Diagnostic::Sample reference_sample(
 			get_context(file_id),
@@ -305,6 +304,15 @@ void Analyzer::check_assigned(
 				)
 			);
 		}
+	}
+	if (ref.value.value.is_deref()) {
+		resolved_files.at(file_id).diagnostics.push_back(
+			Diagnostic::warning(
+				"redundant reference of dereference",
+				"taking a reference of a dereferenced value does not do anything. if you meant to copy a value, you should flip the order of the reference and dereference",
+				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Yellow)}
+			)
+		);
 	}
 }
 
