@@ -268,13 +268,10 @@ llvm::Value* CodeGenerator::call_built_in(
 }
 
 llvm::Value* CodeGenerator::get_place_pointer(IR::Place const& place) {
+	// derefs don't actually deref because pointers are pointers seemingly
 	switch (place.kind()) {
 	case IR::Place::Kind::Symbol: return variables_[place.get_symbol()];
-	case IR::Place::Kind::Deref:
-		return builder_.CreateLoad(
-			generate_type(place.type),
-			get_place_pointer(place.get_deref().address->value)
-		);
+	case IR::Place::Kind::Deref:  return get_place_pointer(place.get_deref().address->value);
 	case IR::Place::Kind::Access:
 		return builder_.CreateStructGEP(
 			generate_type(place.get_access().accessee->value.type),
