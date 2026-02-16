@@ -96,6 +96,27 @@ std::ostream& operator<<(std::ostream& os, BuiltInFunction const& built_in_funct
 	}
 }
 
+Place Place::clone() const {
+	switch (kind()) {
+	case Kind::Symbol: return make_symbol(get_symbol(), type.clone());
+	case Kind::Deref:
+		return make_deref(
+			std::make_unique<Spanned<Place>>(get_deref().address->span, get_deref().address->value.clone()),
+			type.clone()
+		);
+	case Kind::Access:
+		return make_access(
+			std::make_unique<Spanned<Place>>(
+				get_access().accessee->span,
+				get_access().accessee->value.clone()
+			),
+			get_access().field_index,
+			type.clone()
+		);
+	case Kind::Error: return make_error(type.clone());
+	}
+}
+
 std::ostream& operator<<(std::ostream& os, Place::Deref const& deref) {
 	return os << "(*" << deref.address->value << ')';
 }
@@ -110,6 +131,18 @@ std::ostream& operator<<(std::ostream& os, Place const& place) {
 	case Place::Kind::Deref:  return os << place.get_deref();
 	case Place::Kind::Access: return os << place.get_access();
 	case Place::Kind::Error:  return os << "(error)";
+	}
+}
+
+bool operator==(Place const& a, Place const& b) {
+	if (a.kind() != b.kind()) return false;
+	switch (a.kind()) {
+	case Place::Kind::Symbol: return a.get_symbol() == b.get_symbol();
+	case Place::Kind::Deref:  return a.get_deref().address->value == b.get_deref().address->value;
+	case Place::Kind::Access:
+		return a.get_access().field_index == b.get_access().field_index
+		    && a.get_access().accessee->value == b.get_access().accessee->value;
+	case Place::Kind::Error: return true;
 	}
 }
 

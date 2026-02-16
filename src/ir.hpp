@@ -278,11 +278,14 @@ struct Place {
 	inline Access const& get_access() const { return std::get<(size_t) Kind::Access>(value); }
 
 	inline Access& get_access() { return std::get<(size_t) Kind::Access>(value); }
+
+	Place clone() const;
 };
 
 std::ostream& operator<<(std::ostream&, Place::Deref const&);
 std::ostream& operator<<(std::ostream&, Place::Access const&);
 std::ostream& operator<<(std::ostream&, Place const&);
+bool operator==(Place const&, Place const&);
 
 struct Expression {
 	// atoms must now be either variables or literals

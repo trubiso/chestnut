@@ -7,12 +7,12 @@ func fibonacci(count: uint64) {
 	mut i = 0;
 'loop:
 	i = i + 1;
-	print_integer(a);
+	print_integer(*&const a);
 	putchar(' ');
-	const c = a + b;
+	const c = a + *&const b;
 	a = b;
 	b = c;
-	if (i < count) goto 'loop;
+	if (*&const i < *&const count) goto 'loop;
 }
 
 /*
@@ -29,6 +29,7 @@ func skip_vardecl() {
 struct Test { field: bool }
 struct Jest { field: uint8; test: Test }
 
+/*
 func refs() {
 	const my_immutable = 3;
 	const mutable = &mut my_immutable;
@@ -39,6 +40,7 @@ func refs() {
 	const cant = &mut (*&const actual).field;
 }
 
+*/
 func move() {
 	const a = 3;
 	const b = a;
@@ -54,8 +56,8 @@ func main() {
 	const b = undefined;
 	b = 4;
 	const test = Test { field: false };
-	print_bool(test.field);
-	const jest = Jest { field: 32, test: test };
+	print_bool(*&const test.field);
+	mut jest = Jest { field: 32, test: test };
 	print_bool(jest.test.field);
 	jest.field = 64;
 	jest.test.field = true;

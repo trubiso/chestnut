@@ -38,7 +38,7 @@ private:
 
 	using PredsMap    = std::unordered_map<IR::BasicBlock::ID, std::unordered_set<IR::BasicBlock::ID>>;
 	using AssignedMap = std::unordered_map<IR::Identifier, std::optional<Span>>;
-	using MovedMap    = std::unordered_map<IR::Identifier, Span>;
+	using MovedMap    = std::vector<std::tuple<IR::Place, Span>>;
 
 	std::optional<IR::Identifier> get_base(IR::Place const&);
 
@@ -46,8 +46,18 @@ private:
 
 	Spanned<IR::Place> const* get_immutability_culprit(Spanned<IR::Place> const&);
 
+	struct MoveInfo {
+		Span span;
+		bool partial;
+	};
+	std::optional<bool> check_moved(IR::Place const& checked, IR::Place const&);
+	std::optional<MoveInfo> check_moved(IR::Place const&, MovedMap const&);
+
+	void undo_move(IR::Place const&, MovedMap&);
+	void do_move(IR::Place const&, Span, FileContext::ID, MovedMap&);
+
 	void check_assigned(IR::Identifier, Span, FileContext::ID, AssignedMap const&, MovedMap&, bool moves);
-	void check_assigned(Spanned<IR::Identifier> const&, FileContext::ID, AssignedMap const&, MovedMap&, bool moves);
+	void check_assigned(Spanned<IR::Identifier> const&, FileContext::ID, AssignedMap const&, MovedMap&);
 	void check_assigned(Spanned<IR::Place> const&, FileContext::ID, AssignedMap const&, MovedMap&, bool moves);
 
 	void check_assigned(IR::Expression::Atom const&, Span, FileContext::ID, AssignedMap const&, MovedMap&);
@@ -56,7 +66,7 @@ private:
 	void check_assigned(Spanned<IR::Expression::Atom> const&, FileContext::ID, AssignedMap const&, MovedMap&);
 	void check_assigned(Spanned<IR::Expression> const&, FileContext::ID, AssignedMap const&, MovedMap&);
 
-	void check_assigned(IR::Statement::Declare&, FileContext::ID, AssignedMap&);
+	void check_assigned(IR::Statement::Declare&, FileContext::ID, AssignedMap&, MovedMap&);
 	void check_assigned(IR::Statement::Set&, FileContext::ID, AssignedMap&, MovedMap&);
 	void check_assigned(IR::Statement&, Span, FileContext::ID, AssignedMap&, MovedMap&);
 

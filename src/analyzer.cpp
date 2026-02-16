@@ -153,6 +153,72 @@ Spanned<IR::Place> const* Analyzer::get_immutability_culprit(Spanned<IR::Place> 
 	}
 }
 
+std::optional<bool> Analyzer::check_moved(IR::Place const& checked, IR::Place const& moved) {
+	if (checked.is_error() || moved.is_error()) return std::nullopt;
+
+	// TODO: check if we're some member access's accessee or some deref's base
+
+	if (checked.is_symbol()) {
+		if (!moved.is_symbol()) return std::nullopt;
+		if (checked.get_symbol() == moved.get_symbol()) return {true};
+		return std::nullopt;
+	}
+
+	if (checked.is_deref()) {
+		if (!moved.is_deref()) return std::nullopt;
+		return check_moved(checked.get_deref().address->value, moved.get_deref().address->value);
+	}
+
+	if (!moved.is_access()) return std::nullopt;
+	std::optional<bool> accessee
+		= check_moved(checked.get_access().accessee->value, moved.get_access().accessee->value);
+	if (checked.get_access().field_index != moved.get_access().field_index) return std::nullopt;
+	if (!accessee.has_value()) return std::nullopt;
+
+	// TODO: exhaustively check to determine full move
+	return {false};
+}
+
+std::optional<Analyzer::MoveInfo> Analyzer::check_moved(IR::Place const& checked, MovedMap const& moved) {
+	for (auto const& [moved_place, span] : moved) {
+		std::optional<bool> move_info = check_moved(checked, moved_place);
+		if (move_info.has_value()) return MoveInfo {span, move_info.value()};
+	}
+	return std::nullopt;
+}
+
+void Analyzer::undo_move(IR::Place const& place, MovedMap& moved) {
+	std::erase_if(moved, [&place](std::tuple<IR::Place, Span> const& value) {
+		return place == std::get<IR::Place>(value);
+	});
+}
+
+void Analyzer::do_move(IR::Place const& place, Span span, FileContext::ID file_id, MovedMap& moved) {
+	// TODO: automatically copy bools, chars and integers smaller than a ptr
+	std::optional<MoveInfo> move_level = check_moved(place, moved);
+	if (move_level.has_value()) {
+		resolved_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				move_level.value().partial ? "used partially moved value" : "used moved value",
+				{Diagnostic::Sample(
+					 get_context(file_id),
+					 "move",
+					 {Diagnostic::Sample::Label(
+						 move_level.value().span,
+						 "moved here",
+						 OutFmt::Color::Cyan
+					 )}
+				 ),
+		                 Diagnostic::Sample(
+					 get_context(file_id),
+					 "usage",
+					 {Diagnostic::Sample::Label(span, "used here", OutFmt::Color::Red)}
+				 )}
+			)
+		);
+	} else moved.push_back({place.clone(), span});
+}
+
 void Analyzer::check_assigned(
 	IR::Identifier     identifier,
 	Span               span,
@@ -161,31 +227,11 @@ void Analyzer::check_assigned(
 	MovedMap&          moved,
 	bool               moves
 ) {
-	if (moves) {
-		// TODO: automatically copy bools, chars and integers smaller than a ptr
-		// TODO: inform about partial moves more accurately
-		if (moved.contains(identifier)) {
-			resolved_files.at(file_id).diagnostics.push_back(
-				Diagnostic::error(
-					"used moved value",
-					{Diagnostic::Sample(
-						 get_context(file_id),
-						 "move",
-						 {Diagnostic::Sample::Label(
-							 moved.at(identifier),
-							 "moved here",
-							 OutFmt::Color::Cyan
-						 )}
-					 ),
-			                 Diagnostic::Sample(
-						 get_context(file_id),
-						 "usage",
-						 {Diagnostic::Sample::Label(span, "used here", OutFmt::Color::Red)}
-					 )}
-				)
-			);
-		} else moved.insert({identifier, span});
-	}
+	if (moves)
+		do_move(IR::Place::make_symbol(identifier, IR::Type::make_atom(IR::Type::Atom::make_error())),
+		        span,
+		        file_id,
+		        moved);
 	// FIXME: if it is not contained but it is from the scope/function, that should throw a diagnostic, because we
 	// are using a variable whose declaration we skipped over
 	if (!assigned.contains(identifier)) return;
@@ -211,10 +257,9 @@ void Analyzer::check_assigned(
 	Spanned<IR::Identifier> const& identifier,
 	FileContext::ID                file_id,
 	AssignedMap const&             assigned,
-	MovedMap&                      moved,
-	bool                           moves
+	MovedMap&                      moved
 ) {
-	return check_assigned(identifier.value, identifier.span, file_id, assigned, moved, moves);
+	return check_assigned(identifier.value, identifier.span, file_id, assigned, moved, false);
 }
 
 void Analyzer::check_assigned(
@@ -224,13 +269,16 @@ void Analyzer::check_assigned(
 	MovedMap&                 moved,
 	bool                      moves
 ) {
+	// derefs copy!
+	if (!place.value.is_deref() && moves) do_move(place.value, place.span, file_id, moved);
+	// do not propagate moves down
 	switch (place.value.kind()) {
 	case IR::Place::Kind::Symbol:
-		return check_assigned(place.value.get_symbol(), place.span, file_id, assigned, moved, moves);
+		return check_assigned(place.value.get_symbol(), place.span, file_id, assigned, moved, false);
 	case IR::Place::Kind::Deref:
-		return check_assigned(*place.value.get_deref().address, file_id, assigned, moved, moves);
+		return check_assigned(*place.value.get_deref().address, file_id, assigned, moved, false);
 	case IR::Place::Kind::Access:
-		return check_assigned(*place.value.get_access().accessee, file_id, assigned, moved, moves);
+		return check_assigned(*place.value.get_access().accessee, file_id, assigned, moved, false);
 	case IR::Place::Kind::Error: return;
 	}
 }
@@ -262,13 +310,7 @@ void Analyzer::check_assigned(
 	MovedMap&                           moved
 ) {
 	if (std::holds_alternative<Spanned<IR::Identifier>>(function_call.callee))
-		check_assigned(
-			std::get<Spanned<IR::Identifier>>(function_call.callee),
-			file_id,
-			assigned,
-			moved,
-			false
-		);
+		check_assigned(std::get<Spanned<IR::Identifier>>(function_call.callee), file_id, assigned, moved);
 	for (auto const& argument : function_call.arguments) check_assigned(argument, file_id, assigned, moved);
 }
 
@@ -390,9 +432,15 @@ void Analyzer::check_assigned(
 	}
 }
 
-void Analyzer::check_assigned(IR::Statement::Declare& declare, FileContext::ID file_id, AssignedMap& assigned) {
+void Analyzer::check_assigned(
+	IR::Statement::Declare& declare,
+	FileContext::ID         file_id,
+	AssignedMap&            assigned,
+	MovedMap&               moved
+) {
 	// we must replace the value, so if we go through a declaration more than once, it removes the value
 	assigned.insert_or_assign(declare.name.value, std::nullopt);
+	undo_move(IR::Place::make_symbol(declare.name.value, declare.type.clone()), moved);
 }
 
 void Analyzer::check_assigned(
@@ -402,6 +450,7 @@ void Analyzer::check_assigned(
 	MovedMap&           moved
 ) {
 	check_assigned(set.value, file_id, assigned, moved);
+	undo_move(set.place.value, moved);
 	std::optional<IR::Identifier> maybe_base = get_base(set.place.value);
 	if (!maybe_base.has_value()) return;
 	IR::Identifier base = maybe_base.value();
@@ -520,7 +569,7 @@ void Analyzer::check_assigned(
 	MovedMap&       moved
 ) {
 	switch (statement.kind()) {
-	case IR::Statement::Kind::Declare: return check_assigned(statement.get_declare(), file_id, assigned);
+	case IR::Statement::Kind::Declare: return check_assigned(statement.get_declare(), file_id, assigned, moved);
 	case IR::Statement::Kind::Set:     return check_assigned(statement.get_set(), file_id, assigned, moved);
 	case IR::Statement::Kind::Call:    return check_assigned(statement.get_call(), file_id, assigned, moved);
 	}
@@ -554,7 +603,8 @@ void Analyzer::check_assigned(
 			preds.at(branch.true_).insert(basic_block.id);
 			// we copy to avoid info leak from the true branch onto the false branch
 			AssignedMap assigned_copy = assigned;
-			MovedMap    moved_copy    = moved;
+			MovedMap    moved_copy {};
+			for (auto const& [place, span] : moved) { moved_copy.push_back({place.clone(), span}); }
 			check_assigned(
 				function.find_block(branch.true_),
 				function,
