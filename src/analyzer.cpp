@@ -157,8 +157,35 @@ void Analyzer::check_assigned(
 	IR::Identifier     identifier,
 	Span               span,
 	FileContext::ID    file_id,
-	AssignedMap const& assigned
+	AssignedMap const& assigned,
+	MovedMap&          moved,
+	bool               moves
 ) {
+	if (moves) {
+		// TODO: automatically copy bools, chars and integers smaller than a ptr
+		// TODO: inform about partial moves more accurately
+		if (moved.contains(identifier)) {
+			resolved_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"used moved value",
+					{Diagnostic::Sample(
+						 get_context(file_id),
+						 "move",
+						 {Diagnostic::Sample::Label(
+							 moved.at(identifier),
+							 "moved here",
+							 OutFmt::Color::Cyan
+						 )}
+					 ),
+			                 Diagnostic::Sample(
+						 get_context(file_id),
+						 "usage",
+						 {Diagnostic::Sample::Label(span, "used here", OutFmt::Color::Red)}
+					 )}
+				)
+			);
+		} else moved.insert({identifier, span});
+	}
 	// FIXME: if it is not contained but it is from the scope/function, that should throw a diagnostic, because we
 	// are using a variable whose declaration we skipped over
 	if (!assigned.contains(identifier)) return;
@@ -183,17 +210,28 @@ void Analyzer::check_assigned(
 void Analyzer::check_assigned(
 	Spanned<IR::Identifier> const& identifier,
 	FileContext::ID                file_id,
-	AssignedMap const&             assigned
+	AssignedMap const&             assigned,
+	MovedMap&                      moved,
+	bool                           moves
 ) {
-	return check_assigned(identifier.value, identifier.span, file_id, assigned);
+	return check_assigned(identifier.value, identifier.span, file_id, assigned, moved, moves);
 }
 
-void Analyzer::check_assigned(Spanned<IR::Place> const& place, FileContext::ID file_id, AssignedMap const& assigned) {
+void Analyzer::check_assigned(
+	Spanned<IR::Place> const& place,
+	FileContext::ID           file_id,
+	AssignedMap const&        assigned,
+	MovedMap&                 moved,
+	bool                      moves
+) {
 	switch (place.value.kind()) {
-	case IR::Place::Kind::Symbol: return check_assigned(place.value.get_symbol(), place.span, file_id, assigned);
-	case IR::Place::Kind::Deref:  return check_assigned(*place.value.get_deref().address, file_id, assigned);
-	case IR::Place::Kind::Access: return check_assigned(*place.value.get_access().accessee, file_id, assigned);
-	case IR::Place::Kind::Error:  return;
+	case IR::Place::Kind::Symbol:
+		return check_assigned(place.value.get_symbol(), place.span, file_id, assigned, moved, moves);
+	case IR::Place::Kind::Deref:
+		return check_assigned(*place.value.get_deref().address, file_id, assigned, moved, moves);
+	case IR::Place::Kind::Access:
+		return check_assigned(*place.value.get_access().accessee, file_id, assigned, moved, moves);
+	case IR::Place::Kind::Error: return;
 	}
 }
 
@@ -201,38 +239,47 @@ void Analyzer::check_assigned(
 	IR::Expression::Atom const& atom,
 	Span                        span,
 	FileContext::ID             file_id,
-	AssignedMap const&          assigned
+	AssignedMap const&          assigned,
+	MovedMap&                   moved
 ) {
 	switch (atom.kind()) {
 	case IR::Expression::Atom::Kind::Literal:
 	case IR::Expression::Atom::Kind::Bool:
 	case IR::Expression::Atom::Kind::Error:   return;
 	case IR::Expression::Atom::Kind::Identifier:
-		return check_assigned(atom.get_identifier(), span, file_id, assigned);
+		return check_assigned(atom.get_identifier(), span, file_id, assigned, moved, true);
 	case IR::Expression::Atom::Kind::StructLiteral: break;
 	}
 
 	// for struct literals, we must check all field values
-	for (auto const& field : atom.get_struct_literal().fields) check_assigned(field, file_id, assigned);
+	for (auto const& field : atom.get_struct_literal().fields) check_assigned(field, file_id, assigned, moved);
 }
 
 void Analyzer::check_assigned(
 	IR::Expression::FunctionCall const& function_call,
 	FileContext::ID                     file_id,
-	AssignedMap const&                  assigned
+	AssignedMap const&                  assigned,
+	MovedMap&                           moved
 ) {
 	if (std::holds_alternative<Spanned<IR::Identifier>>(function_call.callee))
-		check_assigned(std::get<Spanned<IR::Identifier>>(function_call.callee), file_id, assigned);
-	for (auto const& argument : function_call.arguments) check_assigned(argument, file_id, assigned);
+		check_assigned(
+			std::get<Spanned<IR::Identifier>>(function_call.callee),
+			file_id,
+			assigned,
+			moved,
+			false
+		);
+	for (auto const& argument : function_call.arguments) check_assigned(argument, file_id, assigned, moved);
 }
 
 void Analyzer::check_assigned(
 	IR::Expression::Ref const& ref,
 	Span                       span,
 	FileContext::ID            file_id,
-	AssignedMap const&         assigned
+	AssignedMap const&         assigned,
+	MovedMap&                  moved
 ) {
-	check_assigned(ref.value, file_id, assigned);
+	check_assigned(ref.value, file_id, assigned, moved, false);
 	std::optional<IR::Identifier> maybe_base = get_base(ref.value.value);
 	if (!maybe_base.has_value()) return;
 	IR::Identifier base = maybe_base.value();
@@ -319,24 +366,27 @@ void Analyzer::check_assigned(
 void Analyzer::check_assigned(
 	Spanned<IR::Expression::Atom> const& atom,
 	FileContext::ID                      file_id,
-	AssignedMap const&                   assigned
+	AssignedMap const&                   assigned,
+	MovedMap&                            moved
 ) {
-	return check_assigned(atom.value, atom.span, file_id, assigned);
+	return check_assigned(atom.value, atom.span, file_id, assigned, moved);
 }
 
 void Analyzer::check_assigned(
 	Spanned<IR::Expression> const& expression,
 	FileContext::ID                file_id,
-	AssignedMap const&             assigned
+	AssignedMap const&             assigned,
+	MovedMap&                      moved
 ) {
 	switch (expression.value.kind()) {
 	case IR::Expression::Kind::Atom:
-		return check_assigned(expression.value.get_atom(), expression.span, file_id, assigned);
+		return check_assigned(expression.value.get_atom(), expression.span, file_id, assigned, moved);
 	case IR::Expression::Kind::FunctionCall:
-		return check_assigned(expression.value.get_function_call(), file_id, assigned);
+		return check_assigned(expression.value.get_function_call(), file_id, assigned, moved);
 	case IR::Expression::Kind::Ref:
-		return check_assigned(expression.value.get_ref(), expression.span, file_id, assigned);
-	case IR::Expression::Kind::Load: return check_assigned(expression.value.get_load().value, file_id, assigned);
+		return check_assigned(expression.value.get_ref(), expression.span, file_id, assigned, moved);
+	case IR::Expression::Kind::Load:
+		return check_assigned(expression.value.get_load().value, file_id, assigned, moved, true);
 	}
 }
 
@@ -345,8 +395,13 @@ void Analyzer::check_assigned(IR::Statement::Declare& declare, FileContext::ID f
 	assigned.insert_or_assign(declare.name.value, std::nullopt);
 }
 
-void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, AssignedMap& assigned) {
-	check_assigned(set.value, file_id, assigned);
+void Analyzer::check_assigned(
+	IR::Statement::Set& set,
+	FileContext::ID     file_id,
+	AssignedMap&        assigned,
+	MovedMap&           moved
+) {
+	check_assigned(set.value, file_id, assigned, moved);
 	std::optional<IR::Identifier> maybe_base = get_base(set.place.value);
 	if (!maybe_base.has_value()) return;
 	IR::Identifier base = maybe_base.value();
@@ -457,11 +512,17 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 	}
 }
 
-void Analyzer::check_assigned(IR::Statement& statement, Span span, FileContext::ID file_id, AssignedMap& assigned) {
+void Analyzer::check_assigned(
+	IR::Statement&  statement,
+	Span            span,
+	FileContext::ID file_id,
+	AssignedMap&    assigned,
+	MovedMap&       moved
+) {
 	switch (statement.kind()) {
 	case IR::Statement::Kind::Declare: return check_assigned(statement.get_declare(), file_id, assigned);
-	case IR::Statement::Kind::Set:     return check_assigned(statement.get_set(), file_id, assigned);
-	case IR::Statement::Kind::Call:    return check_assigned(statement.get_call(), file_id, assigned);
+	case IR::Statement::Kind::Set:     return check_assigned(statement.get_set(), file_id, assigned, moved);
+	case IR::Statement::Kind::Call:    return check_assigned(statement.get_call(), file_id, assigned, moved);
 	}
 }
 
@@ -470,11 +531,12 @@ void Analyzer::check_assigned(
 	IR::Function&                                                                   function,
 	FileContext::ID                                                                 file_id,
 	AssignedMap&                                                                    assigned,
+	MovedMap&                                                                       moved,
 	std::unordered_map<IR::BasicBlock::ID, std::unordered_set<IR::BasicBlock::ID>>& preds
 ) {
 	// first, we check every statement
 	for (Spanned<IR::Statement>& statement : basic_block.statements)
-		check_assigned(statement.value, statement.span, file_id, assigned);
+		check_assigned(statement.value, statement.span, file_id, assigned, moved);
 
 	// finally, we need to check how this fares in each of our possible jumps out
 	if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
@@ -482,38 +544,47 @@ void Analyzer::check_assigned(
 		// we don't want to check a basic block we've already checked from this basic block
 		if (preds.at(destination).contains(basic_block.id)) return;
 		preds.at(destination).insert(basic_block.id);
-		return check_assigned(function.find_block(destination), function, file_id, assigned, preds);
+		return check_assigned(function.find_block(destination), function, file_id, assigned, moved, preds);
 	} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
 		IR::BasicBlock::Branch& branch = std::get<IR::BasicBlock::Branch>(basic_block.jump);
 		// check the value
-		check_assigned(branch.condition, file_id, assigned);
+		check_assigned(branch.condition, file_id, assigned, moved);
 		// check both branches
 		if (!preds.at(branch.true_).contains(basic_block.id)) {
 			preds.at(branch.true_).insert(basic_block.id);
 			// we copy to avoid info leak from the true branch onto the false branch
 			AssignedMap assigned_copy = assigned;
-			check_assigned(function.find_block(branch.true_), function, file_id, assigned_copy, preds);
+			MovedMap    moved_copy    = moved;
+			check_assigned(
+				function.find_block(branch.true_),
+				function,
+				file_id,
+				assigned_copy,
+				moved_copy,
+				preds
+			);
 		}
 		if (!preds.at(branch.false_).contains(basic_block.id)) {
 			preds.at(branch.false_).insert(basic_block.id);
-			check_assigned(function.find_block(branch.false_), function, file_id, assigned, preds);
+			check_assigned(function.find_block(branch.false_), function, file_id, assigned, moved, preds);
 		}
 		return;
 	} else if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
 		// this doesn't jump anywhere but we still have to check the value
 		auto const& return_ = std::get<IR::BasicBlock::Return>(basic_block.jump);
 		if (!return_.value.has_value()) return;
-		check_assigned(return_.value.value(), file_id, assigned);
+		check_assigned(return_.value.value(), file_id, assigned, moved);
 	}
 }
 
 void Analyzer::check_assigned(IR::Function& function, FileContext::ID file_id) {
 	if (function.body.empty()) return;
 	AssignedMap assigned {};
+	MovedMap    moved {};
 
 	std::unordered_map<IR::BasicBlock::ID, std::unordered_set<IR::BasicBlock::ID>> preds {};
 	for (IR::BasicBlock::ID id = 0; id < function.body.size(); ++id) preds.insert({id, {}});
-	check_assigned(function.body.at(0), function, file_id, assigned, preds);
+	check_assigned(function.body.at(0), function, file_id, assigned, moved, preds);
 }
 
 void Analyzer::check_assigned(IR::Module& module, FileContext::ID file_id) {

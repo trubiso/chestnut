@@ -39,6 +39,12 @@ func refs() {
 	const cant = &mut (*&const actual).field;
 }
 
+func move() {
+	const a = 3;
+	const b = a;
+	const q = a;
+}
+
 @extern
 func print_bool(anon _: bool);
 
