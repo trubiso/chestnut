@@ -24,15 +24,20 @@ func skip_vardecl() {
 	a = 3;
 	const q = a;
 }
-
-func refs() {
-	const my_immutable = 3;
-	const mutable = &mut my_immutable;
-}
 */
 
 struct Test { field: bool }
 struct Jest { field: uint8; test: Test }
+
+func refs() {
+	const my_immutable = 3;
+	const mutable = &mut my_immutable;
+	const struct = Jest { field: 8, test: Test { field: false } };
+	const another = &mut struct.test.field;
+	mut actual = Test { field: false };
+	const cant = &mut *&const actual.field;
+	const cant = &mut (*&const actual).field;
+}
 
 @extern
 func print_bool(anon _: bool);

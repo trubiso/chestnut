@@ -233,29 +233,78 @@ void Analyzer::check_assigned(
 	AssignedMap const&         assigned
 ) {
 	check_assigned(ref.value, file_id, assigned);
-	std::optional<IR::Identifier> base = get_base(ref.value.value);
-	if (!base.has_value()) return;
-	IR::Symbol const& symbol = symbols.at(base.value());
-	// TODO: vary the diagnostic based on what the place actually is
+	std::optional<IR::Identifier> maybe_base = get_base(ref.value.value);
+	if (!maybe_base.has_value()) return;
+	IR::Identifier base = maybe_base.value();
+	// TODO: throw diagnostic for references to dereferences (they don't do anything)
 	if (!get_mutable(ref.value.value) && ref.mutable_) {
-		std::stringstream subtitle {};
-		subtitle << "symbol `" << symbol.name << "` was declared as constant";
-		resolved_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"tried to take mutable reference of immutable symbol",
-				subtitle.str(),
-				{Diagnostic::Sample(
-					 get_context(symbol.file_id),
-					 "declaration",
-					 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
-				 ),
-		                 Diagnostic::Sample(
-					 get_context(file_id),
-					 "reference",
-					 {Diagnostic::Sample::Label(span, OutFmt::Color::Red)}
-				 )}
-			)
+		Diagnostic::Sample reference_sample(
+			get_context(file_id),
+			"reference",
+			{Diagnostic::Sample::Label(span, OutFmt::Color::Red)}
 		);
+		if (ref.value.value.is_symbol()) {
+			std::stringstream subtitle {};
+			IR::Symbol const& symbol = symbols.at(base);
+			subtitle
+				<< "symbol `"
+				<< symbol.name
+				<< "` was declared as constant, so a mutable reference cannot be taken";
+			resolved_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"tried to take mutable reference of immutable symbol",
+					subtitle.str(),
+					{Diagnostic::Sample(
+						 get_context(symbol.file_id),
+						 "declaration",
+						 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
+					 ),
+			                 std::move(reference_sample)}
+				)
+			);
+		} else if (ref.value.value.is_deref()) {
+			resolved_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"tried to take mutable reference of dereferenced immutable pointer",
+					"the value inside of a pointer declared as `*const` is not mutable, so a mutable reference cannot be taken",
+					{std::move(reference_sample)}
+				)
+			);
+		} else if (ref.value.value.is_access()) {
+			Spanned<IR::Place> const&       culprit = *get_immutability_culprit(ref.value);
+			std::stringstream               subtitle {};
+			std::vector<Diagnostic::Sample> samples {};
+			if (culprit.value.is_symbol()) {
+				IR::Symbol const& symbol = symbols.at(culprit.value.get_symbol());
+				subtitle
+					<< "variable `"
+					<< symbol.name
+					<< "` must be declared as `mut` for its fields to allow mutation and, therefore, a mutable reference to be taken";
+				samples.push_back(
+					Diagnostic::Sample(
+						get_context(symbol.file_id),
+						"declaration",
+						{Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
+					)
+				);
+			}
+			samples.push_back(std::move(reference_sample));
+			if (culprit.value.is_deref()) {
+				subtitle
+					<< "dereferenced pointer must be declared as `*mut` for its fields to allow mutation and, therefore, a mutable reference to be taken";
+				samples.at(0).labels.at(0).span.start = culprit.span.end;
+				samples.at(0).labels.push_back(
+					Diagnostic::Sample::Label(culprit.span, "dereference", OutFmt::Color::Cyan)
+				);
+			}
+			resolved_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"tried to take mutable reference of immutable field",
+					subtitle.str(),
+					std::move(samples)
+				)
+			);
+		}
 	}
 }
 
