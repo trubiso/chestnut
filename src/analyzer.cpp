@@ -143,6 +143,16 @@ bool Analyzer::get_mutable(IR::Place const& place) {
 	return type.get_pointer().mutable_;
 }
 
+Spanned<IR::Place> const* Analyzer::get_immutability_culprit(Spanned<IR::Place> const& place) {
+	switch (place.value.kind()) {
+	case IR::Place::Kind::Symbol:
+		return &place;  // there are no subitems so we can safely assume this is the culprit
+	case IR::Place::Kind::Deref:  return &place;  // since get_mutable stops at the first pointer, we can do so too!
+	case IR::Place::Kind::Access: return get_immutability_culprit(*place.value.get_access().accessee);
+	case IR::Place::Kind::Error:  return nullptr;
+	}
+}
+
 void Analyzer::check_assigned(
 	IR::Identifier     identifier,
 	Span               span,
@@ -285,52 +295,99 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 	IR::Identifier base = maybe_base.value();
 	if (assigned.contains(base)) {
 		if (assigned.at(base).has_value() && !get_mutable(set.place.value)) {
-			// mutability violation
-			// TODO: bring back the correct diagnostics, these only work if the place is a symbol
-			bool              declare_and_set_is_same = symbols.at(base).span == assigned.at(base);
-			IR::Symbol const& symbol                  = symbols.at(base);
-			std::stringstream subtitle {};
-			subtitle << "variable `" << symbol.name << "` was declared as constant";
-			if (declare_and_set_is_same)
-				subtitle
-					<< ".\ntip: you can set the variable's value to `undefined` in the declaration and set its value exactly once after declaration if you want an immutable variable decided, for example, by a condition.";
-			else
-				// if they're not the same, the variable must have originally been undefined
-				subtitle
-					<< ", set to undefined and given a value after its declaration; but it was modified again afterwards.";
-			std::vector<Diagnostic::Sample> samples {};
-			samples.push_back(
-				Diagnostic::Sample(
-					get_context(symbol.file_id),
-					"declaration",
-					{Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
-				)
+			// mutability violation! time to throw the correct diagnostic
+			Diagnostic::Sample mutation_sample(
+				get_context(file_id),
+				"mutation",
+				{Diagnostic::Sample::Label(set.place.span, OutFmt::Color::Red)}
 			);
-			if (!declare_and_set_is_same)
+
+			if (set.place.value.is_symbol()) {
+				bool              declare_and_set_is_same = symbols.at(base).span == assigned.at(base);
+				IR::Symbol const& symbol                  = symbols.at(base);
+				std::stringstream subtitle {};
+				subtitle << "variable `" << symbol.name << "` was declared as constant";
+				if (declare_and_set_is_same)
+					subtitle
+						<< ".\ntip: you can set the variable's value to `undefined` in the declaration and set its value exactly once after declaration if you want an immutable variable decided, for example, by a condition.";
+				else
+					// if they're not the same, the variable must have originally been undefined
+					subtitle
+						<< ", set to undefined and given a value after its declaration; but it was modified again afterwards.";
+				std::vector<Diagnostic::Sample> samples {};
 				samples.push_back(
 					Diagnostic::Sample(
 						get_context(symbol.file_id),
-						"value",
-						{Diagnostic::Sample::Label(
-							assigned.at(base).value(),
-							OutFmt::Color::Magenta
-						)}
+						"declaration",
+						{Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
 					)
 				);
-			samples.push_back(
-				Diagnostic::Sample(
-					get_context(file_id),
-					"mutation",
-					{Diagnostic::Sample::Label(set.place.span, OutFmt::Color::Red)}
-				)
-			);
-			resolved_files.at(file_id).diagnostics.push_back(
-				Diagnostic::error(
-					"tried to mutate immutable variable",
-					subtitle.str(),
-					std::move(samples)
-				)
-			);
+				if (!declare_and_set_is_same)
+					samples.push_back(
+						Diagnostic::Sample(
+							get_context(symbol.file_id),
+							"value",
+							{Diagnostic::Sample::Label(
+								assigned.at(base).value(),
+								OutFmt::Color::Magenta
+							)}
+						)
+					);
+				samples.push_back(std::move(mutation_sample));
+				resolved_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"tried to mutate immutable variable",
+						subtitle.str(),
+						std::move(samples)
+					)
+				);
+			} else if (set.place.value.is_deref()) {
+				resolved_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"tried to mutate immutable pointer",
+						"the value inside of a pointer declared as `*const` cannot be mutated, only accessed. for mutation, you need a pointer declared as `*mut`",
+						{std::move(mutation_sample)}
+					)
+				);
+			} else if (set.place.value.is_access()) {
+				Spanned<IR::Place> const&       culprit = *get_immutability_culprit(set.place);
+				std::stringstream               subtitle {};
+				std::vector<Diagnostic::Sample> samples {};
+				if (culprit.value.is_symbol()) {
+					IR::Symbol const& symbol = symbols.at(culprit.value.get_symbol());
+					subtitle
+						<< "variable `"
+						<< symbol.name
+						<< "` must be declared as `mut` for its fields to allow mutation";
+					samples.push_back(
+						Diagnostic::Sample(
+							get_context(symbol.file_id),
+							"declaration",
+							{Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
+						)
+					);
+				}
+				samples.push_back(std::move(mutation_sample));
+				if (culprit.value.is_deref()) {
+					subtitle
+						<< "dereferenced pointer must be declared as `*mut` for its fields to allow mutation";
+					samples.at(0).labels.at(0).span.start = culprit.span.end;
+					samples.at(0).labels.push_back(
+						Diagnostic::Sample::Label(
+							culprit.span,
+							"dereference",
+							OutFmt::Color::Cyan
+						)
+					);
+				}
+				resolved_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"tried to mutate immutable field",
+						subtitle.str(),
+						std::move(samples)
+					)
+				);
+			}
 		} else assigned.at(base) = set.place.span;
 	} else {
 		resolved_files.at(file_id).diagnostics.push_back(

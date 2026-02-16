@@ -44,11 +44,12 @@ func main() {
 	b = 4;
 	const test = Test { field: false };
 	print_bool(test.field);
-	mut jest = Jest { field: 32, test: test };
+	const jest = Jest { field: 32, test: test };
 	print_bool(jest.test.field);
 	jest.field = 64;
 	jest.test.field = true;
 	print_bool(jest.test.field);
 	jest.test.field = false;
+	(*&const jest.test).field = true;
 	print_bool(jest.test.field);
 }

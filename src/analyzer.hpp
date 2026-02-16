@@ -40,6 +40,7 @@ private:
 
 	std::optional<IR::Identifier> get_base(IR::Place const&);
 	bool get_mutable(IR::Place const&);
+	Spanned<IR::Place> const* get_immutability_culprit(Spanned<IR::Place> const&);
 
 	void check_assigned(IR::Identifier, Span, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(Spanned<IR::Identifier> const&, FileContext::ID, AssignedMap const& assigned);
