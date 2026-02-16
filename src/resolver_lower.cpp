@@ -842,21 +842,6 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	auto lhs   = lower_lvalue(set.lhs, basic_blocks, file_id);
 	auto value = lower_rvalue(set.rhs, basic_blocks, file_id);
 
-	// TODO: move this check elsewhere
-	if (lhs.value.is_deref()) {
-		auto const& written_to      = lhs.value.get_deref().address;
-		auto const& written_to_type = written_to->value.type;
-		if (!written_to_type.is_pointer()) return {};
-		if (!written_to_type.get_pointer().mutable_) {
-			parsed_files.at(file_id).diagnostics.push_back(
-				Diagnostic::error(
-					"tried to mutate value pointed to by constant pointer",
-					{Diagnostic::Sample(get_context(file_id), written_to->span, OutFmt::Color::Red)}
-				)
-			);
-		}
-	}
-
 	return Spanned<IR::Statement> {
 		span,
 		IR::Statement::make_set(IR::Statement::Set {std::move(lhs), std::move(value)})

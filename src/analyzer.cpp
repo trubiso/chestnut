@@ -120,6 +120,29 @@ void Analyzer::optimize_blocks() {
 	for (ResolvedFile& file : resolved_files) optimize_blocks(file.module);
 }
 
+std::optional<IR::Identifier> Analyzer::get_base(IR::Place const& place) {
+	switch (place.kind()) {
+	case IR::Place::Kind::Symbol: return place.get_symbol();
+	case IR::Place::Kind::Deref:  return get_base(place.get_deref().address->value);
+	case IR::Place::Kind::Access: return get_base(place.get_access().accessee->value);
+	case IR::Place::Kind::Error:  return std::nullopt;
+	}
+}
+
+bool Analyzer::get_mutable(IR::Place const& place) {
+	switch (place.kind()) {
+	case IR::Place::Kind::Symbol: return symbols.at(place.get_symbol()).mutable_;
+	case IR::Place::Kind::Deref:  break;
+	case IR::Place::Kind::Access: return get_mutable(place.get_access().accessee->value);
+	case IR::Place::Kind::Error:  return true;
+	}
+
+	// for deref, we must check the pointer itself
+	IR::Type const& type = place.get_deref().address->value.type;
+	if (!type.is_pointer()) return true;
+	return type.get_pointer().mutable_;
+}
+
 void Analyzer::check_assigned(
 	IR::Identifier     identifier,
 	Span               span,
@@ -155,6 +178,15 @@ void Analyzer::check_assigned(
 	return check_assigned(identifier.value, identifier.span, file_id, assigned);
 }
 
+void Analyzer::check_assigned(Spanned<IR::Place> const& place, FileContext::ID file_id, AssignedMap const& assigned) {
+	switch (place.value.kind()) {
+	case IR::Place::Kind::Symbol: return check_assigned(place.value.get_symbol(), place.span, file_id, assigned);
+	case IR::Place::Kind::Deref:  return check_assigned(*place.value.get_deref().address, file_id, assigned);
+	case IR::Place::Kind::Access: return check_assigned(*place.value.get_access().accessee, file_id, assigned);
+	case IR::Place::Kind::Error:  return;
+	}
+}
+
 void Analyzer::check_assigned(
 	IR::Expression::Atom const& atom,
 	Span                        span,
@@ -185,22 +217,17 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::Deref const& deref,
-	FileContext::ID              file_id,
-	AssignedMap const&           assigned
-) {
-	check_assigned(deref.address, file_id, assigned);
-}
-
-void Analyzer::check_assigned(
 	IR::Expression::Ref const& ref,
 	Span                       span,
 	FileContext::ID            file_id,
 	AssignedMap const&         assigned
 ) {
 	check_assigned(ref.value, file_id, assigned);
-	IR::Symbol const& symbol = symbols.at(ref.value.value);
-	if (!symbol.mutable_ && ref.mutable_) {
+	std::optional<IR::Identifier> base = get_base(ref.value.value);
+	if (!base.has_value()) return;
+	IR::Symbol const& symbol = symbols.at(base.value());
+	// TODO: vary the diagnostic based on what the place actually is
+	if (!get_mutable(ref.value.value) && ref.mutable_) {
 		std::stringstream subtitle {};
 		subtitle << "symbol `" << symbol.name << "` was declared as constant";
 		resolved_files.at(file_id).diagnostics.push_back(
@@ -223,14 +250,6 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::MemberAccess const& member_access,
-	FileContext::ID                     file_id,
-	AssignedMap const&                  assigned
-) {
-	check_assigned(member_access.accessee, file_id, assigned);
-}
-
-void Analyzer::check_assigned(
 	Spanned<IR::Expression::Atom> const& atom,
 	FileContext::ID                      file_id,
 	AssignedMap const&                   assigned
@@ -248,11 +267,9 @@ void Analyzer::check_assigned(
 		return check_assigned(expression.value.get_atom(), expression.span, file_id, assigned);
 	case IR::Expression::Kind::FunctionCall:
 		return check_assigned(expression.value.get_function_call(), file_id, assigned);
-	case IR::Expression::Kind::Deref: return check_assigned(expression.value.get_deref(), file_id, assigned);
 	case IR::Expression::Kind::Ref:
 		return check_assigned(expression.value.get_ref(), expression.span, file_id, assigned);
-	case IR::Expression::Kind::MemberAccess:
-		return check_assigned(expression.value.get_member_access(), file_id, assigned);
+	case IR::Expression::Kind::Load: return check_assigned(expression.value.get_load().value, file_id, assigned);
 	}
 }
 
@@ -263,11 +280,15 @@ void Analyzer::check_assigned(IR::Statement::Declare& declare, FileContext::ID f
 
 void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, AssignedMap& assigned) {
 	check_assigned(set.value, file_id, assigned);
-	if (assigned.contains(set.name.value)) {
-		if (assigned.at(set.name.value).has_value() && !symbols.at(set.name.value).mutable_) {
+	std::optional<IR::Identifier> maybe_base = get_base(set.place.value);
+	if (!maybe_base.has_value()) return;
+	IR::Identifier base = maybe_base.value();
+	if (assigned.contains(base)) {
+		if (assigned.at(base).has_value() && !get_mutable(set.place.value)) {
 			// mutability violation
-			bool declare_and_set_is_same = symbols.at(set.name.value).span == assigned.at(set.name.value);
-			IR::Symbol const& symbol     = symbols.at(set.name.value);
+			// TODO: bring back the correct diagnostics, these only work if the place is a symbol
+			bool              declare_and_set_is_same = symbols.at(base).span == assigned.at(base);
+			IR::Symbol const& symbol                  = symbols.at(base);
 			std::stringstream subtitle {};
 			subtitle << "variable `" << symbol.name << "` was declared as constant";
 			if (declare_and_set_is_same)
@@ -291,7 +312,7 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 						get_context(symbol.file_id),
 						"value",
 						{Diagnostic::Sample::Label(
-							assigned.at(set.name.value).value(),
+							assigned.at(base).value(),
 							OutFmt::Color::Magenta
 						)}
 					)
@@ -300,7 +321,7 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 				Diagnostic::Sample(
 					get_context(file_id),
 					"mutation",
-					{Diagnostic::Sample::Label(set.name.span, OutFmt::Color::Red)}
+					{Diagnostic::Sample::Label(set.place.span, OutFmt::Color::Red)}
 				)
 			);
 			resolved_files.at(file_id).diagnostics.push_back(
@@ -310,55 +331,16 @@ void Analyzer::check_assigned(IR::Statement::Set& set, FileContext::ID file_id, 
 					std::move(samples)
 				)
 			);
-		} else assigned.at(set.name.value) = set.name.span;
+		} else assigned.at(base) = set.place.span;
 	} else {
 		resolved_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"tried to mutate undeclared variable",
 				"this variable is declared in this scope, but that declaration does not occur before the variable is set, because it was skipped using low-level control flow constructs, i.e. goto/branch",
-				{Diagnostic::Sample(get_context(file_id), set.name.span, OutFmt::Color::Red)}
+				{Diagnostic::Sample(get_context(file_id), set.place.span, OutFmt::Color::Red)}
 			)
 		);
 	}
-}
-
-void Analyzer::check_assigned(IR::Statement::Write& write, FileContext::ID file_id, AssignedMap& assigned) {
-	// the pointer we're writing to must be assigned
-	check_assigned(write.address, file_id, assigned);
-	check_assigned(write.value, file_id, assigned);
-	// mutability is already checked during lowering
-}
-
-void Analyzer::check_assigned(
-	IR::Statement::WriteAccess& write_access,
-	Span                        span,
-	FileContext::ID             file_id,
-	AssignedMap&                assigned
-) {
-	// we do not support partial initialization, so the struct must be set
-	check_assigned(write_access.access.value, file_id, assigned);
-	IR::Symbol const& symbol = symbols.at(write_access.access.value.accessee.value);
-	if (!symbol.mutable_) {
-		std::stringstream subtitle {};
-		subtitle << "variable `" << symbol.name << "` was declared as constant";
-		resolved_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"tried to mutate field of immutable variable",
-				subtitle.str(),
-				{Diagnostic::Sample(
-					 get_context(symbol.file_id),
-					 "declaration",
-					 {Diagnostic::Sample::Label(symbol.span, OutFmt::Color::Cyan)}
-				 ),
-		                 Diagnostic::Sample(
-					 get_context(file_id),
-					 "mutation",
-					 {Diagnostic::Sample::Label(span, OutFmt::Color::Red)}
-				 )}
-			)
-		);
-	}
-	check_assigned(write_access.value, file_id, assigned);
 }
 
 void Analyzer::check_assigned(IR::Statement& statement, Span span, FileContext::ID file_id, AssignedMap& assigned) {
@@ -366,9 +348,6 @@ void Analyzer::check_assigned(IR::Statement& statement, Span span, FileContext::
 	case IR::Statement::Kind::Declare: return check_assigned(statement.get_declare(), file_id, assigned);
 	case IR::Statement::Kind::Set:     return check_assigned(statement.get_set(), file_id, assigned);
 	case IR::Statement::Kind::Call:    return check_assigned(statement.get_call(), file_id, assigned);
-	case IR::Statement::Kind::Write:   return check_assigned(statement.get_write(), file_id, assigned);
-	case IR::Statement::Kind::WriteAccess:
-		return check_assigned(statement.get_write_access(), span, file_id, assigned);
 	}
 }
 

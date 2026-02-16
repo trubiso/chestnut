@@ -38,20 +38,23 @@ private:
 
 	using AssignedMap = std::unordered_map<IR::Identifier, std::optional<Span>>;
 
+	std::optional<IR::Identifier> get_base(IR::Place const&);
+	bool get_mutable(IR::Place const&);
+
 	void check_assigned(IR::Identifier, Span, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(Spanned<IR::Identifier> const&, FileContext::ID, AssignedMap const& assigned);
+	void check_assigned(Spanned<IR::Place> const&, FileContext::ID, AssignedMap const& assigned);
+
 	void check_assigned(IR::Expression::Atom const&, Span, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(IR::Expression::FunctionCall const&, FileContext::ID, AssignedMap const& assigned);
-	void check_assigned(IR::Expression::Deref const&, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(IR::Expression::Ref const&, Span, FileContext::ID, AssignedMap const& assigned);
-	void check_assigned(IR::Expression::MemberAccess const&, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(Spanned<IR::Expression::Atom> const&, FileContext::ID, AssignedMap const& assigned);
 	void check_assigned(Spanned<IR::Expression> const&, FileContext::ID, AssignedMap const& assigned);
+
 	void check_assigned(IR::Statement::Declare&, FileContext::ID, AssignedMap& assigned);
 	void check_assigned(IR::Statement::Set&, FileContext::ID, AssignedMap& assigned);
-	void check_assigned(IR::Statement::Write&, FileContext::ID, AssignedMap& assigned);
-	void check_assigned(IR::Statement::WriteAccess&, Span, FileContext::ID, AssignedMap& assigned);
 	void check_assigned(IR::Statement&, Span, FileContext::ID, AssignedMap& assigned);
+
 	void check_assigned(
 		IR::BasicBlock&,
 		IR::Function&,
