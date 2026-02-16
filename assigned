@@ -48,6 +48,7 @@ func main() {
 	print_bool(jest.test.field);
 	jest.field = 64;
 	jest.test.field = true;
-	// FIXME: this does not print true
+	print_bool(jest.test.field);
+	jest.test.field = false;
 	print_bool(jest.test.field);
 }
