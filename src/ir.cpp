@@ -96,6 +96,23 @@ std::ostream& operator<<(std::ostream& os, BuiltInFunction const& built_in_funct
 	}
 }
 
+std::ostream& operator<<(std::ostream& os, Place::Deref const& deref) {
+	return os << "(*" << deref.address->value << ')';
+}
+
+std::ostream& operator<<(std::ostream& os, Place::Access const& access) {
+	return os << '(' << access.accessee->value << ".+" << access.field_index << ')';
+}
+
+std::ostream& operator<<(std::ostream& os, Place const& place) {
+	switch (place.kind()) {
+	case Place::Kind::Symbol: return os << '@' << place.get_symbol();
+	case Place::Kind::Deref:  return os << place.get_deref();
+	case Place::Kind::Access: return os << place.get_access();
+	case Place::Kind::Error:  return os << "(error)";
+	}
+}
+
 Expression::Atom Expression::Atom::clone() const {
 	switch (kind()) {
 	case Kind::Identifier:    return make_identifier(get_identifier(), type.clone());

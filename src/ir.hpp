@@ -222,6 +222,68 @@ enum class BuiltInFunction {
 
 std::ostream& operator<<(std::ostream&, BuiltInFunction const&);
 
+/// Represents a compound expression pointing to a place in memory, that is, an lvalue.
+struct Place {
+	enum class Kind { Symbol, Deref, Access, Error };
+
+	struct Deref {
+		std::unique_ptr<Spanned<Place>> address;
+	};
+
+	struct Access {
+		std::unique_ptr<Spanned<Place>> accessee;
+		size_t                          field_index;
+	};
+
+	typedef std::variant<Identifier, Deref, Access, std::monostate> value_t;
+
+	value_t value;
+	Type    type;
+
+	inline constexpr Kind kind() const { return (Kind) value.index(); }
+
+	inline static Place make_symbol(Identifier identifier, Type&& type) {
+		return Place {identifier, std::move(type)};
+	}
+
+	inline static Place make_deref(std::unique_ptr<Spanned<Place>>&& address, Type&& type) {
+		return Place {Deref {std::move(address)}, std::move(type)};
+	}
+
+	inline static Place make_access(std::unique_ptr<Spanned<Place>>&& accessee, size_t field_index, Type&& type) {
+		return Place {
+			Access {std::move(accessee), field_index},
+			std::move(type)
+		};
+	}
+
+	inline static Place make_error(Type&& type) { return Place {std::monostate {}, std::move(type)}; }
+
+	inline bool is_symbol() const { return kind() == Kind::Symbol; }
+
+	inline bool is_deref() const { return kind() == Kind::Deref; }
+
+	inline bool is_access() const { return kind() == Kind::Access; }
+
+	inline bool is_error() const { return kind() == Kind::Error; }
+
+	inline Identifier const& get_symbol() const { return std::get<(size_t) Kind::Symbol>(value); }
+
+	inline Identifier& get_symbol() { return std::get<(size_t) Kind::Symbol>(value); }
+
+	inline Deref const& get_deref() const { return std::get<(size_t) Kind::Deref>(value); }
+
+	inline Deref& get_deref() { return std::get<(size_t) Kind::Deref>(value); }
+
+	inline Access const& get_access() const { return std::get<(size_t) Kind::Access>(value); }
+
+	inline Access& get_access() { return std::get<(size_t) Kind::Access>(value); }
+};
+
+std::ostream& operator<<(std::ostream&, Place::Deref const&);
+std::ostream& operator<<(std::ostream&, Place::Access const&);
+std::ostream& operator<<(std::ostream&, Place const&);
+
 struct Expression {
 	// atoms must now be either variables or literals
 	struct Atom {
