@@ -154,37 +154,45 @@ Spanned<IR::Place> const* Analyzer::get_immutability_culprit(Spanned<IR::Place> 
 }
 
 std::optional<bool> Analyzer::check_moved(IR::Place const& checked, IR::Place const& moved) {
+	// FIXME: we need some way to know whether pointers own or not, because right now we can't guarantee that we own
+	// the pointer and thus we can't move values from accesses. therefore, right now, we assume copying, which is
+	// silly.
+
+	// if either is an error, we do not consider moves
 	if (checked.is_error() || moved.is_error()) return std::nullopt;
 
-	// TODO: check if we're some member access's accessee or some deref's base
+	// if the base of the access is different, nothing was moved!
+	auto const &checked_base = checked.get_access_base(), &moved_base = moved.get_access_base();
+	if (checked_base != moved_base) return std::nullopt;
 
-	if (checked.is_symbol()) {
-		if (!moved.is_symbol()) return std::nullopt;
-		if (checked.get_symbol() == moved.get_symbol()) return {true};
-		return std::nullopt;
-	}
+	// if the moved value is a prefix of (or equal to) the one being checked, that means that we moved the value
+	// fully! (e.g. if we moved a.b.c and we're checking a.b.c.d, a.b.c.d was fully moved when a.b.c was)
+	if (moved.is_prefix_of(checked)) return false;
 
-	if (checked.is_deref()) {
-		if (!moved.is_deref()) return std::nullopt;
-		return check_moved(checked.get_deref().address->value, moved.get_deref().address->value);
-	}
+	// if the checked value is a prefix of the one which has been moved, this is only a partial move (e.g. if we
+	// moved a.b.c.d and we're checking a.b.c, a.b.c was only partially moved)
+	if (checked.is_prefix_of(moved)) return true;
 
-	if (!moved.is_access()) return std::nullopt;
-	std::optional<bool> accessee
-		= check_moved(checked.get_access().accessee->value, moved.get_access().accessee->value);
-	if (checked.get_access().field_index != moved.get_access().field_index) return std::nullopt;
-	if (!accessee.has_value()) return std::nullopt;
-
-	// TODO: exhaustively check to determine full move
-	return {false};
+	// if neither is true, no move happened (e.g. a.b and a.c)
+	return std::nullopt;
 }
 
 std::optional<Analyzer::MoveInfo> Analyzer::check_moved(IR::Place const& checked, MovedMap const& moved) {
+	// TODO: if all fields of a struct are moved, it should become fully moved. we can actually check that here at
+	// some point!
+	std::optional<MoveInfo> value {};
 	for (auto const& [moved_place, span] : moved) {
 		std::optional<bool> move_info = check_moved(checked, moved_place);
-		if (move_info.has_value()) return MoveInfo {span, move_info.value()};
+		if (move_info.has_value()) {
+			if (!move_info.value()) {
+				return MoveInfo {{span}, false};
+			} else {
+				if (!value.has_value()) value = MoveInfo {{span}, true};
+				else value.value().span.push_back(span);
+			}
+		}
 	}
-	return std::nullopt;
+	return value;
 }
 
 void Analyzer::undo_move(IR::Place const& place, MovedMap& moved) {
@@ -195,25 +203,48 @@ void Analyzer::undo_move(IR::Place const& place, MovedMap& moved) {
 
 void Analyzer::do_move(IR::Place const& place, Span span, FileContext::ID file_id, MovedMap& moved) {
 	// TODO: automatically copy bools, chars and integers smaller than a ptr
-	std::optional<MoveInfo> move_level = check_moved(place, moved);
-	if (move_level.has_value()) {
+	std::optional<MoveInfo> maybe_move = check_moved(place, moved);
+	if (maybe_move.has_value()) {
+		MoveInfo move_info = std::move(maybe_move.value());
+
+		std::vector<Diagnostic::Sample> samples {};
+		if (move_info.span.size() == 1)
+			samples.push_back(
+				Diagnostic::Sample(
+					get_context(file_id),
+					"move",
+					{Diagnostic::Sample::Label(
+						move_info.span.at(0),
+						"moved here",
+						OutFmt::Color::Cyan
+					)}
+				)
+			);
+		else
+			for (size_t i = 0; i < move_info.span.size(); ++i)
+				samples.push_back(
+					Diagnostic::Sample(
+						get_context(file_id),
+						std::format("partial move #{}", i + 1),
+						{Diagnostic::Sample::Label(
+							move_info.span[i],
+							"partially moved here",
+							OutFmt::Color::Cyan
+						)}
+					)
+				);
+		samples.push_back(
+			Diagnostic::Sample(
+				get_context(file_id),
+				"usage",
+				{Diagnostic::Sample::Label(span, "used here", OutFmt::Color::Red)}
+			)
+		);
 		resolved_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
-				move_level.value().partial ? "used partially moved value" : "used moved value",
-				{Diagnostic::Sample(
-					 get_context(file_id),
-					 "move",
-					 {Diagnostic::Sample::Label(
-						 move_level.value().span,
-						 "moved here",
-						 OutFmt::Color::Cyan
-					 )}
-				 ),
-		                 Diagnostic::Sample(
-					 get_context(file_id),
-					 "usage",
-					 {Diagnostic::Sample::Label(span, "used here", OutFmt::Color::Red)}
-				 )}
+				move_info.partial ? "used partially moved value" : "used moved value",
+				std::nullopt,
+				std::move(samples)
 			)
 		);
 	} else moved.push_back({place.clone(), span});

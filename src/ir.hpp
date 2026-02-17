@@ -280,6 +280,9 @@ struct Place {
 	inline Access& get_access() { return std::get<(size_t) Kind::Access>(value); }
 
 	Place clone() const;
+
+	bool is_prefix_of(Place const&) const;
+	Place const& get_access_base() const;
 };
 
 std::ostream& operator<<(std::ostream&, Place::Deref const&);

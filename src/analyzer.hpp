@@ -47,10 +47,11 @@ private:
 	Spanned<IR::Place> const* get_immutability_culprit(Spanned<IR::Place> const&);
 
 	struct MoveInfo {
-		Span span;
-		bool partial;
+		std::vector<Span> span;
+		bool              partial;
 	};
-	std::optional<bool> check_moved(IR::Place const& checked, IR::Place const&);
+
+	std::optional<bool>     check_moved(IR::Place const& checked, IR::Place const&);
 	std::optional<MoveInfo> check_moved(IR::Place const&, MovedMap const&);
 
 	void undo_move(IR::Place const&, MovedMap&);

@@ -1,0 +1,21 @@
+struct A { a: uint8; b: uint32 }
+struct B { a: A; b: A; c: bool }
+
+func consume(anon _: uint8) {}
+func consume(anon _: uint32) {}
+func consume(anon _: bool) {}
+func consume(anon _: A) {}
+func consume(anon _: B) {}
+
+func main() {
+	mut my_value = B { a: A { a: 1, b: 2 }, b: A { a: 3, b: 4 }, c: false };
+	consume(my_value.a.a);
+	consume(my_value.a.b);
+	consume(my_value.b.a);
+	consume(my_value.b.b);
+	my_value.a.b = 90;
+	consume(my_value);
+	const x = &const my_value.a;
+	consume((*x).b);
+	consume(*x);
+}

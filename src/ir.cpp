@@ -117,6 +117,23 @@ Place Place::clone() const {
 	}
 }
 
+bool Place::is_prefix_of(Place const& other) const {
+	// if we're equal, the condition holds true
+	if (*this == other) return true;
+
+	// if the other place is an access, we can "peel back" the access by reducing it to the accessee, i.e. we remove
+	// the outermost dot access
+	if (other.is_access()) return is_prefix_of(other.get_access().accessee->value);
+
+	// if none of these checks holds, there is simply no way for other to be a prefix of this. this also means that
+	// dereferencing is skipped, since it copies!
+	return false;
+}
+
+Place const& Place::get_access_base() const {
+	return is_access() ? get_access().accessee->value.get_access_base() : *this;
+}
+
 std::ostream& operator<<(std::ostream& os, Place::Deref const& deref) {
 	return os << "(*" << deref.address->value << ')';
 }
