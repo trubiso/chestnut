@@ -1704,10 +1704,10 @@ void Resolver::decide_remaining_types() {
 	}
 
 	// if no type was filled in, there is no hope left
-	if (!changes_made) return;
-
-	// if any type was filled in, though, let's try again!
-	if (try_decide_remaining_types()) return;
+	if (changes_made) {
+		// if any type was filled in, though, let's try again!
+		if (try_decide_remaining_types()) return;
+	}
 
 	// if we did not manage to decide any overload, we gotta throw diagnostics (we literally tried everything we can
 	// at this point :P)
