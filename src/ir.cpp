@@ -163,7 +163,7 @@ bool operator==(Place const& a, Place const& b) {
 	}
 }
 
-Expression::Atom Expression::Atom::clone() const {
+Value::Atom Value::Atom::clone() const {
 	switch (kind()) {
 	case Kind::Identifier:    return make_identifier(get_identifier(), type.clone());
 	case Kind::Literal:       return {get_literal(), type.clone()};
@@ -186,16 +186,16 @@ Expression::Atom Expression::Atom::clone() const {
 	};
 }
 
-std::ostream& operator<<(std::ostream& os, Expression::Atom::Literal const& literal) {
+std::ostream& operator<<(std::ostream& os, Value::Atom::Literal const& literal) {
 	switch (literal.kind) {
-	case Expression::Atom::Literal::Kind::Number: os << "(number) "; break;
-	case Expression::Atom::Literal::Kind::String: os << "(string) "; break;
-	case Expression::Atom::Literal::Kind::Char:   os << "(char) "; break;
+	case Value::Atom::Literal::Kind::Number: os << "(number) "; break;
+	case Value::Atom::Literal::Kind::String: os << "(string) "; break;
+	case Value::Atom::Literal::Kind::Char:   os << "(char) "; break;
 	}
 	return os << literal.literal;
 }
 
-std::ostream& operator<<(std::ostream& os, Expression::Atom::StructLiteral const& struct_literal) {
+std::ostream& operator<<(std::ostream& os, Value::Atom::StructLiteral const& struct_literal) {
 	os << "[struct literal of type @" << struct_literal.name.value << " with ";
 	if (struct_literal.fields.empty()) return os << "no fields]";
 	os << "fields ";
@@ -207,18 +207,18 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom::StructLiteral const
 	return os << ']';
 }
 
-std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
+std::ostream& operator<<(std::ostream& os, Value::Atom const& atom) {
 	switch (atom.kind()) {
-	case Expression::Atom::Kind::Identifier:    return os << '@' << atom.get_identifier();
-	case Expression::Atom::Kind::Literal:       return os << atom.get_literal();
-	case Expression::Atom::Kind::Bool:          return os << "(bool) " << (atom.get_bool() ? "true" : "false");
-	case Expression::Atom::Kind::StructLiteral: return os << atom.get_struct_literal();
-	case Expression::Atom::Kind::Error:         return os << "(error)";
+	case Value::Atom::Kind::Identifier:    return os << '@' << atom.get_identifier();
+	case Value::Atom::Kind::Literal:       return os << atom.get_literal();
+	case Value::Atom::Kind::Bool:          return os << "(bool) " << (atom.get_bool() ? "true" : "false");
+	case Value::Atom::Kind::StructLiteral: return os << atom.get_struct_literal();
+	case Value::Atom::Kind::Error:         return os << "(error)";
 	}
 	[[assume(false)]];
 }
 
-std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call) {
+std::ostream& operator<<(std::ostream& os, Value::FunctionCall const& call) {
 	os << "(call ";
 	if (std::holds_alternative<Spanned<Identifier>>(call.callee))
 		os << '@' << std::get<Spanned<Identifier>>(call.callee).value;
@@ -234,20 +234,20 @@ std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call)
 	return os << ')';
 }
 
-std::ostream& operator<<(std::ostream& os, Expression::Ref const& ref) {
+std::ostream& operator<<(std::ostream& os, Value::Ref const& ref) {
 	return os << "(&" << (ref.mutable_ ? "mut" : "const") << " (" << ref.value.value << "))";
 }
 
-std::ostream& operator<<(std::ostream& os, Expression::Load const& load) {
+std::ostream& operator<<(std::ostream& os, Value::Load const& load) {
 	return os << load.value.value;
 }
 
-std::ostream& operator<<(std::ostream& os, Expression const& expression) {
-	switch (expression.kind()) {
-	case Expression::Kind::Atom:         return os << expression.get_atom();
-	case Expression::Kind::FunctionCall: return os << expression.get_function_call();
-	case Expression::Kind::Ref:          return os << expression.get_ref();
-	case Expression::Kind::Load:         return os << expression.get_load();
+std::ostream& operator<<(std::ostream& os, Value const& value) {
+	switch (value.kind()) {
+	case Value::Kind::Atom:         return os << value.get_atom();
+	case Value::Kind::FunctionCall: return os << value.get_function_call();
+	case Value::Kind::Ref:          return os << value.get_ref();
+	case Value::Kind::Load:         return os << value.get_load();
 	}
 	[[assume(false)]];
 }

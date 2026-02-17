@@ -61,11 +61,11 @@ private:
 	void check_assigned(Spanned<IR::Identifier> const&, FileContext::ID, AssignedMap const&, MovedMap&);
 	void check_assigned(Spanned<IR::Place> const&, FileContext::ID, AssignedMap const&, MovedMap&, bool moves);
 
-	void check_assigned(IR::Expression::Atom const&, Span, FileContext::ID, AssignedMap const&, MovedMap&);
-	void check_assigned(IR::Expression::FunctionCall const&, FileContext::ID, AssignedMap const&, MovedMap&);
-	void check_assigned(IR::Expression::Ref const&, Span, FileContext::ID, AssignedMap const&, MovedMap&);
-	void check_assigned(Spanned<IR::Expression::Atom> const&, FileContext::ID, AssignedMap const&, MovedMap&);
-	void check_assigned(Spanned<IR::Expression> const&, FileContext::ID, AssignedMap const&, MovedMap&);
+	void check_assigned(IR::Value::Atom const&, Span, FileContext::ID, AssignedMap const&, MovedMap&);
+	void check_assigned(IR::Value::FunctionCall const&, FileContext::ID, AssignedMap const&, MovedMap&);
+	void check_assigned(IR::Value::Ref const&, Span, FileContext::ID, AssignedMap const&, MovedMap&);
+	void check_assigned(Spanned<IR::Value::Atom> const&, FileContext::ID, AssignedMap const&, MovedMap&);
+	void check_assigned(Spanned<IR::Value> const&, FileContext::ID, AssignedMap const&, MovedMap&);
 
 	void check_assigned(IR::Statement::Declare&, FileContext::ID, AssignedMap&, MovedMap&);
 	void check_assigned(IR::Statement::Set&, FileContext::ID, AssignedMap&, MovedMap&);

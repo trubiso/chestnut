@@ -88,7 +88,7 @@ void Analyzer::optimize_blocks(IR::Function& function) {
 				} else if (std::holds_alternative<IR::BasicBlock::Return>(jump)) {
 					basic_block.jump = IR::BasicBlock::Return {
 						std::get<IR::BasicBlock::Return>(jump).value.transform(
-							[](Spanned<IR::Expression::Atom> const& value) {
+							[](Spanned<IR::Value::Atom> const& value) {
 								return Spanned {value.span, value.value.clone()};
 							}
 						)
@@ -315,19 +315,19 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::Atom const& atom,
-	Span                        span,
-	FileContext::ID             file_id,
-	AssignedMap const&          assigned,
-	MovedMap&                   moved
+	IR::Value::Atom const& atom,
+	Span                   span,
+	FileContext::ID        file_id,
+	AssignedMap const&     assigned,
+	MovedMap&              moved
 ) {
 	switch (atom.kind()) {
-	case IR::Expression::Atom::Kind::Literal:
-	case IR::Expression::Atom::Kind::Bool:
-	case IR::Expression::Atom::Kind::Error:   return;
-	case IR::Expression::Atom::Kind::Identifier:
+	case IR::Value::Atom::Kind::Literal:
+	case IR::Value::Atom::Kind::Bool:
+	case IR::Value::Atom::Kind::Error:   return;
+	case IR::Value::Atom::Kind::Identifier:
 		return check_assigned(atom.get_identifier(), span, file_id, assigned, moved, true);
-	case IR::Expression::Atom::Kind::StructLiteral: break;
+	case IR::Value::Atom::Kind::StructLiteral: break;
 	}
 
 	// for struct literals, we must check all field values
@@ -335,10 +335,10 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::FunctionCall const& function_call,
-	FileContext::ID                     file_id,
-	AssignedMap const&                  assigned,
-	MovedMap&                           moved
+	IR::Value::FunctionCall const& function_call,
+	FileContext::ID                file_id,
+	AssignedMap const&             assigned,
+	MovedMap&                      moved
 ) {
 	if (std::holds_alternative<Spanned<IR::Identifier>>(function_call.callee))
 		check_assigned(std::get<Spanned<IR::Identifier>>(function_call.callee), file_id, assigned, moved);
@@ -346,11 +346,11 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	IR::Expression::Ref const& ref,
-	Span                       span,
-	FileContext::ID            file_id,
-	AssignedMap const&         assigned,
-	MovedMap&                  moved
+	IR::Value::Ref const& ref,
+	Span                  span,
+	FileContext::ID       file_id,
+	AssignedMap const&    assigned,
+	MovedMap&             moved
 ) {
 	check_assigned(ref.value, file_id, assigned, moved, false);
 	std::optional<IR::Identifier> maybe_base = get_base(ref.value.value);
@@ -437,29 +437,26 @@ void Analyzer::check_assigned(
 }
 
 void Analyzer::check_assigned(
-	Spanned<IR::Expression::Atom> const& atom,
-	FileContext::ID                      file_id,
-	AssignedMap const&                   assigned,
-	MovedMap&                            moved
+	Spanned<IR::Value::Atom> const& atom,
+	FileContext::ID                 file_id,
+	AssignedMap const&              assigned,
+	MovedMap&                       moved
 ) {
 	return check_assigned(atom.value, atom.span, file_id, assigned, moved);
 }
 
 void Analyzer::check_assigned(
-	Spanned<IR::Expression> const& expression,
-	FileContext::ID                file_id,
-	AssignedMap const&             assigned,
-	MovedMap&                      moved
+	Spanned<IR::Value> const& value,
+	FileContext::ID           file_id,
+	AssignedMap const&        assigned,
+	MovedMap&                 moved
 ) {
-	switch (expression.value.kind()) {
-	case IR::Expression::Kind::Atom:
-		return check_assigned(expression.value.get_atom(), expression.span, file_id, assigned, moved);
-	case IR::Expression::Kind::FunctionCall:
-		return check_assigned(expression.value.get_function_call(), file_id, assigned, moved);
-	case IR::Expression::Kind::Ref:
-		return check_assigned(expression.value.get_ref(), expression.span, file_id, assigned, moved);
-	case IR::Expression::Kind::Load:
-		return check_assigned(expression.value.get_load().value, file_id, assigned, moved, true);
+	switch (value.value.kind()) {
+	case IR::Value::Kind::Atom: return check_assigned(value.value.get_atom(), value.span, file_id, assigned, moved);
+	case IR::Value::Kind::FunctionCall:
+		return check_assigned(value.value.get_function_call(), file_id, assigned, moved);
+	case IR::Value::Kind::Ref:  return check_assigned(value.value.get_ref(), value.span, file_id, assigned, moved);
+	case IR::Value::Kind::Load: return check_assigned(value.value.get_load().value, file_id, assigned, moved, true);
 	}
 }
 

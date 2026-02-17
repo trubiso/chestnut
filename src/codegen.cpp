@@ -139,15 +139,15 @@ llvm::Type* CodeGenerator::generate_type(IR::Type const& type) {
 }
 
 llvm::Value* CodeGenerator::call_built_in(
-	IR::BuiltInFunction                               function,
-	std::vector<Spanned<IR::Expression::Atom>> const& function_arguments
+	IR::BuiltInFunction                          function,
+	std::vector<Spanned<IR::Value::Atom>> const& function_arguments
 ) {
 	std::vector<llvm::Value*> arguments {};
 	std::transform(
 		function_arguments.cbegin(),
 		function_arguments.cend(),
 		std::back_inserter(arguments),
-		[this](auto const& argument) { return generate_expression(argument.value); }
+		[this](auto const& argument) { return generate_value(argument.value); }
 	);
 	switch (function) {
 	case IR::BuiltInFunction::AddUIntegers:
@@ -282,14 +282,14 @@ llvm::Value* CodeGenerator::get_place_pointer(IR::Place const& place) {
 	}
 }
 
-llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom) {
+llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom) {
 	switch (atom.kind()) {
-	case IR::Expression::Atom::Kind::Identifier:
+	case IR::Value::Atom::Kind::Identifier:
 		return builder_.CreateLoad(generate_type(atom.type), variables_[atom.get_identifier()]);
-	case IR::Expression::Atom::Kind::Literal:       break;
-	case IR::Expression::Atom::Kind::Bool:          return builder_.getInt1(atom.get_bool());
-	case IR::Expression::Atom::Kind::StructLiteral: break;
-	case IR::Expression::Atom::Kind::Error:         [[assume(false)]];
+	case IR::Value::Atom::Kind::Literal:       break;
+	case IR::Value::Atom::Kind::Bool:          return builder_.getInt1(atom.get_bool());
+	case IR::Value::Atom::Kind::StructLiteral: break;
+	case IR::Value::Atom::Kind::Error:         [[assume(false)]];
 	}
 
 	if (atom.is_struct_literal()) {
@@ -299,7 +299,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 			atom.get_struct_literal().fields.cbegin(),
 			atom.get_struct_literal().fields.cend(),
 			std::back_inserter(fields),
-			[&](Spanned<IR::Expression::Atom> const& value) { return generate_expression(value.value); }
+			[&](Spanned<IR::Value::Atom> const& value) { return generate_value(value.value); }
 		);
 		auto type = llvm::StructType::getTypeByName(context_, get_name(atom.type.get_atom().get_named()));
 
@@ -312,10 +312,10 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 	}
 
 	// literals vary depending on their type
-	IR::Expression::Atom::Literal const& literal = atom.get_literal();
+	IR::Value::Atom::Literal const& literal = atom.get_literal();
 
 	switch (literal.kind) {
-	case IR::Expression::Atom::Literal::Kind::Number:
+	case IR::Value::Atom::Literal::Kind::Number:
 		// this is a bit verbose :P
 		switch (atom.type.get_atom().kind()) {
 		case IR::Type::Atom::Kind::Integer:
@@ -382,10 +382,10 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 			std::exit(0);
 		}
 
-	case IR::Expression::Atom::Literal::Kind::String:
+	case IR::Value::Atom::Literal::Kind::String:
 		std::cout << "unsupported string literal lol!!" << std::endl;
 		std::exit(0);
-	case IR::Expression::Atom::Literal::Kind::Char: break;
+	case IR::Value::Atom::Literal::Kind::Char: break;
 	}
 
 	// for chars, we need to look up the codepoint
@@ -396,7 +396,7 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::Atom const& atom
 	return builder_.getInt8(codepoint);
 }
 
-llvm::Value* CodeGenerator::generate_expression(IR::Expression::FunctionCall const& function_call) {
+llvm::Value* CodeGenerator::generate_value(IR::Value::FunctionCall const& function_call) {
 	// we might be calling a built-in function
 	if (std::holds_alternative<IR::BuiltInFunction>(function_call.callee))
 		return call_built_in(std::get<IR::BuiltInFunction>(function_call.callee), function_call.arguments);
@@ -414,25 +414,25 @@ llvm::Value* CodeGenerator::generate_expression(IR::Expression::FunctionCall con
 		function_call.arguments.cbegin(),
 		function_call.arguments.cend(),
 		std::back_inserter(arguments),
-		[this](auto const& argument) { return generate_expression(argument.value); }
+		[this](auto const& argument) { return generate_value(argument.value); }
 	);
 	return builder_.CreateCall(callee, arguments);
 }
 
-llvm::Value* CodeGenerator::generate_expression(IR::Expression::Ref const& ref) {
+llvm::Value* CodeGenerator::generate_value(IR::Value::Ref const& ref) {
 	return get_place_pointer(ref.value.value);
 }
 
-llvm::Value* CodeGenerator::generate_expression(IR::Expression::Load const& load) {
+llvm::Value* CodeGenerator::generate_value(IR::Value::Load const& load) {
 	return builder_.CreateLoad(generate_type(load.value.value.type), get_place_pointer(load.value.value));
 }
 
-llvm::Value* CodeGenerator::generate_expression(IR::Expression const& expression) {
-	switch (expression.kind()) {
-	case IR::Expression::Kind::Atom:         return generate_expression(expression.get_atom());
-	case IR::Expression::Kind::FunctionCall: return generate_expression(expression.get_function_call());
-	case IR::Expression::Kind::Ref:          return generate_expression(expression.get_ref());
-	case IR::Expression::Kind::Load:         return generate_expression(expression.get_load());
+llvm::Value* CodeGenerator::generate_value(IR::Value const& value) {
+	switch (value.kind()) {
+	case IR::Value::Kind::Atom:         return generate_value(value.get_atom());
+	case IR::Value::Kind::FunctionCall: return generate_value(value.get_function_call());
+	case IR::Value::Kind::Ref:          return generate_value(value.get_ref());
+	case IR::Value::Kind::Load:         return generate_value(value.get_load());
 	}
 }
 
@@ -444,7 +444,7 @@ void CodeGenerator::emit_statement(IR::Statement::Declare const& declare, llvm::
 }
 
 void CodeGenerator::emit_statement(IR::Statement::Set const& set) {
-	llvm::Value* value = generate_expression(set.value.value);
+	llvm::Value* value = generate_value(set.value.value);
 	builder_.CreateStore(value, get_place_pointer(set.place.value));
 }
 
@@ -452,7 +452,7 @@ void CodeGenerator::emit_statement(IR::Statement const& statement, llvm::BasicBl
 	switch (statement.kind()) {
 	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare(), block);
 	case IR::Statement::Kind::Set:     return emit_statement(statement.get_set());
-	case IR::Statement::Kind::Call:    generate_expression(statement.get_call()); return;
+	case IR::Statement::Kind::Call:    generate_value(statement.get_call()); return;
 	}
 }
 
@@ -470,7 +470,7 @@ void CodeGenerator::emit_basic_block_jump(
 		builder_.CreateBr(blocks.at(goto_.id));
 	} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
 		IR::BasicBlock::Branch const& branch    = std::get<IR::BasicBlock::Branch>(basic_block.jump);
-		llvm::Value*                  condition = generate_expression(branch.condition.value);
+		llvm::Value*                  condition = generate_value(branch.condition.value);
 		builder_.CreateCondBr(condition, blocks.at(branch.true_), blocks.at(branch.false_));
 	} else if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
 		IR::BasicBlock::Return const& return_ = std::get<IR::BasicBlock::Return>(basic_block.jump);
@@ -478,7 +478,7 @@ void CodeGenerator::emit_basic_block_jump(
 			builder_.CreateRetVoid();
 			return;
 		}
-		llvm::Value* value = generate_expression(return_.value.value().value);
+		llvm::Value* value = generate_value(return_.value.value().value);
 		if (value->getType()->isVoidTy()) {
 			builder_.CreateRetVoid();
 			return;

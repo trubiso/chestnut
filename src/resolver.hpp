@@ -668,7 +668,7 @@ private:
 	Spanned<IR::Type> lower_type(Spanned<AST::Type>, FileContext::ID);
 
 	/// Gets the default value for the given type.
-	Spanned<IR::Expression> lower_get_default_value(IR::Type const&, Span, FileContext::ID);
+	Spanned<IR::Value> lower_get_default_value(IR::Type const&, Span, FileContext::ID);
 
 	/// Lowers any identifier into its IR equivalent and type.
 	std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>> lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
@@ -680,31 +680,31 @@ private:
 	// FIXME: clang-format goes BALLISTIC over these function declarations
 	// TODO: fix allow_functions
 	// TODO: clean this mess up
-	Spanned<std::tuple<IR::Identifier, IR::Type>> extract_rvalue_id(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Identifier> extract_rvalue_id(IR::Expression&&, Span, IR::Type&&, TypeInfo::ID, std::vector<IR::BasicBlock>&, FileContext::ID);
-	Spanned<IR::Place> rvalue_to_lvalue(Spanned<IR::Expression>&&, IR::Type&&, TypeInfo::ID, std::vector<IR::BasicBlock>&, FileContext::ID);
-	Spanned<IR::Expression::Atom> extract_expression(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression::Atom> extract_expression(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	IR::Expression::Atom lower_atom(AST::Expression::Atom::StructLiteral const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	IR::Expression::Atom lower_atom(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<std::tuple<IR::Identifier, IR::Type>> extract_value_id(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Identifier> extract_value_id(IR::Value&&, Span, IR::Type&&, TypeInfo::ID, std::vector<IR::BasicBlock>&, FileContext::ID);
+	Spanned<IR::Place> place_from_value(Spanned<IR::Value>&&, IR::Type&&, TypeInfo::ID, std::vector<IR::BasicBlock>&, FileContext::ID);
+	Spanned<IR::Value::Atom> extract_value(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Value::Atom> extract_value(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	IR::Value::Atom lower_atom(AST::Expression::Atom::StructLiteral const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	IR::Value::Atom lower_atom(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 
-	Spanned<IR::Expression> lower_rvalue(AST::Expression::AddressOperation const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression> lower_rvalue(AST::Expression::FunctionCall const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression> lower_rvalue(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Expression> lower_rvalue(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Value> lower_value(AST::Expression::AddressOperation const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Value> lower_value(AST::Expression::FunctionCall const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Value> lower_value(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Value> lower_value(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 
-	/// Lowers an rvalue expression, that is, one found anywhere but the left hand side of a Set statement.
-	Spanned<IR::Expression> lower_rvalue(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	/// Lowers a value expression, that is, one found anywhere but the left hand side of a Set statement.
+	Spanned<IR::Value> lower_value(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 
-	Spanned<IR::Place> lower_lvalue(AST::Expression::AddressOperation const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Place> lower_lvalue(AST::Expression::FunctionCall const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Place> lower_lvalue(AST::Expression::UnaryOperation const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Place> lower_lvalue(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Place> lower_lvalue(AST::Expression::MemberAccess const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Place> lower_lvalue(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Place> lower_place(AST::Expression::AddressOperation const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Place> lower_place(AST::Expression::FunctionCall const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Place> lower_place(AST::Expression::UnaryOperation const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Place> lower_place(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Place> lower_place(AST::Expression::MemberAccess const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Place> lower_place(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 
-	/// Lowers an lvalue expression, that is, one found at the left hand side of a Set statement.
-	Spanned<IR::Place> lower_lvalue(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	/// Lowers a place expression, that is, one found at the left hand side of a Set statement.
+	Spanned<IR::Place> lower_place(Spanned<AST::Expression> const&, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 
 	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Declare const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID);
 	std::optional<Spanned<IR::Statement>> lower(AST::Statement::Set const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID);

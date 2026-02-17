@@ -35,15 +35,15 @@ private:
 	llvm::Type* generate_type(IR::Type::Atom const&);
 	llvm::Type* generate_type(IR::Type const&);
 
-	llvm::Value* call_built_in(IR::BuiltInFunction, std::vector<Spanned<IR::Expression::Atom>> const& arguments);
+	llvm::Value* call_built_in(IR::BuiltInFunction, std::vector<Spanned<IR::Value::Atom>> const& arguments);
 
 	llvm::Value* get_place_pointer(IR::Place const&);
 
-	llvm::Value* generate_expression(IR::Expression::Atom const&);
-	llvm::Value* generate_expression(IR::Expression::FunctionCall const&);
-	llvm::Value* generate_expression(IR::Expression::Ref const&);
-	llvm::Value* generate_expression(IR::Expression::Load const&);
-	llvm::Value* generate_expression(IR::Expression const&);
+	llvm::Value* generate_value(IR::Value::Atom const&);
+	llvm::Value* generate_value(IR::Value::FunctionCall const&);
+	llvm::Value* generate_value(IR::Value::Ref const&);
+	llvm::Value* generate_value(IR::Value::Load const&);
+	llvm::Value* generate_value(IR::Value const&);
 
 	void emit_statement(IR::Statement::Declare const&, llvm::BasicBlock*);
 	void emit_statement(IR::Statement::Set const&);

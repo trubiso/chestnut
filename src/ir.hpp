@@ -281,16 +281,16 @@ struct Place {
 
 	Place clone() const;
 
-	bool is_prefix_of(Place const&) const;
+	bool         is_prefix_of(Place const&) const;
 	Place const& get_access_base() const;
 };
 
 std::ostream& operator<<(std::ostream&, Place::Deref const&);
 std::ostream& operator<<(std::ostream&, Place::Access const&);
 std::ostream& operator<<(std::ostream&, Place const&);
-bool operator==(Place const&, Place const&);
+bool          operator==(Place const&, Place const&);
 
-struct Expression {
+struct Value {
 	// atoms must now be either variables or literals
 	struct Atom {
 		enum class Kind {
@@ -401,15 +401,15 @@ struct Expression {
 
 	inline constexpr Kind kind() const { return (Kind) value.index(); }
 
-	inline static Expression make_atom(Atom&& atom) {
-		return Expression(value_t {std::in_place_index<(size_t) Kind::Atom>, std::move(atom)});
+	inline static Value make_atom(Atom&& atom) {
+		return Value(value_t {std::in_place_index<(size_t) Kind::Atom>, std::move(atom)});
 	}
 
-	inline static Expression make_function_call(
+	inline static Value make_function_call(
 		std::variant<Spanned<Identifier>, BuiltInFunction>&& callee,
 		std::vector<Spanned<Atom>>&&                         arguments
 	) {
-		return Expression(
+		return Value(
 			value_t {
 				std::in_place_index<(size_t) Kind::FunctionCall>,
 				FunctionCall {std::move(callee), std::move(arguments)}
@@ -417,8 +417,8 @@ struct Expression {
 		);
 	}
 
-	inline static Expression make_ref(Spanned<Place>&& value, bool mutable_) {
-		return Expression(
+	inline static Value make_ref(Spanned<Place>&& value, bool mutable_) {
+		return Value(
 			value_t {
 				std::in_place_index<(size_t) Kind::Ref>,
 				Ref {std::move(value), mutable_}
@@ -426,8 +426,8 @@ struct Expression {
 		);
 	}
 
-	inline static Expression make_load(Spanned<Place>&& place) {
-		return Expression(value_t {std::in_place_index<(size_t) Kind::Load>, Load {std::move(place)}});
+	inline static Value make_load(Spanned<Place>&& place) {
+		return Value(value_t {std::in_place_index<(size_t) Kind::Load>, Load {std::move(place)}});
 	}
 
 	inline bool is_atom() const { return kind() == Kind::Atom; }
@@ -455,13 +455,13 @@ struct Expression {
 	inline Load& get_load() { return std::get<(size_t) Kind::Load>(value); }
 };
 
-std::ostream& operator<<(std::ostream&, Expression::Atom::Literal const&);
-std::ostream& operator<<(std::ostream&, Expression::Atom::StructLiteral const&);
-std::ostream& operator<<(std::ostream&, Expression::Atom const&);
-std::ostream& operator<<(std::ostream&, Expression::FunctionCall const&);
-std::ostream& operator<<(std::ostream&, Expression::Ref const&);
-std::ostream& operator<<(std::ostream&, Expression::Load const&);
-std::ostream& operator<<(std::ostream&, Expression const&);
+std::ostream& operator<<(std::ostream&, Value::Atom::Literal const&);
+std::ostream& operator<<(std::ostream&, Value::Atom::StructLiteral const&);
+std::ostream& operator<<(std::ostream&, Value::Atom const&);
+std::ostream& operator<<(std::ostream&, Value::FunctionCall const&);
+std::ostream& operator<<(std::ostream&, Value::Ref const&);
+std::ostream& operator<<(std::ostream&, Value::Load const&);
+std::ostream& operator<<(std::ostream&, Value const&);
 
 struct Statement;
 
@@ -477,14 +477,14 @@ struct Statement {
 
 	// setting a place in memory
 	struct Set {
-		Spanned<Place>      place;
-		Spanned<Expression> value;
+		Spanned<Place> place;
+		Spanned<Value> value;
 	};
 
 	// expression statements are now calls and scope statements are resolved now anyways
 	enum class Kind { Declare, Set, Call };
 
-	typedef std::variant<Declare, Set, Expression::FunctionCall> value_t;
+	typedef std::variant<Declare, Set, Value::FunctionCall> value_t;
 
 	value_t value;
 
@@ -498,7 +498,7 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Set>, std::move(set)});
 	}
 
-	inline static Statement make_call(Expression::FunctionCall&& call) {
+	inline static Statement make_call(Value::FunctionCall&& call) {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::Call>, std::move(call)});
 	}
 
@@ -510,9 +510,9 @@ struct Statement {
 
 	inline Set& get_set() { return std::get<(size_t) Kind::Set>(value); }
 
-	inline Expression::FunctionCall const& get_call() const { return std::get<(size_t) Kind::Call>(value); }
+	inline Value::FunctionCall const& get_call() const { return std::get<(size_t) Kind::Call>(value); }
 
-	inline Expression::FunctionCall& get_call() { return std::get<(size_t) Kind::Call>(value); }
+	inline Value::FunctionCall& get_call() { return std::get<(size_t) Kind::Call>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
@@ -531,14 +531,14 @@ struct BasicBlock {
 	};
 
 	struct Branch {
-		Spanned<Expression::Atom> condition;
+		Spanned<Value::Atom> condition;
 
 		ID true_;
 		ID false_;
 	};
 
 	struct Return {
-		std::optional<Spanned<Expression::Atom>> value;
+		std::optional<Spanned<Value::Atom>> value;
 	};
 
 	std::variant<Goto, Branch, Return, std::monostate> jump;
