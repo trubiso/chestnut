@@ -1127,7 +1127,7 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 				)}
 			)
 		);
-		
+
 		// we need to set the type to bottom to avoid causing more issues
 		type_pool_.at(undecided_member_access) = TypeInfo::make_bottom();
 		return true;
@@ -1746,7 +1746,37 @@ void Resolver::decide_remaining_types() {
 		}
 	}
 
-	// TODO: also throw diagnostics for member accesses
+	if (!undecided_member_accesses.empty()) {
+		for (TypeInfo::ID undecided_member_access : undecided_member_accesses) {
+			// we need to determine what led to the member access to not be decided. there are two
+			// possibilities
+			TypeInfo::MemberAccess& member_access
+				= type_pool_.at(undecided_member_access).get_member_access();
+			Diagnostic::Sample sample  = get_type_sample(member_access.accessee, OutFmt::Color::Red);
+			FileContext::ID    file_id = get_type_file_id(undecided_member_access);
+
+			// the first is that there is not a single underlying type
+			if (!type_pool_.at(member_access.accessee).get_single_underlying(type_pool_).has_value()) {
+				parsed_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"could not resolve member access",
+						"the underlying type of the accessee could not be decided",
+						{std::move(sample)}
+					)
+				);
+				continue;
+			}
+
+			// the second is that the type cannot have fields
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"could not resolve member access",
+					"the underlying type of the accessee does not have any fields",
+					{std::move(sample)}
+				)
+			);
+		}
+	}
 }
 
 void Resolver::infer_types() {
