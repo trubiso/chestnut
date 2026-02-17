@@ -1006,8 +1006,6 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 }
 
 bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
-	// TODO: change type to bottom on fail
-
 	// filter the candidates
 	std::vector<UndecidedOverload::Candidate> new_candidates {};
 	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
@@ -1049,6 +1047,9 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 
 		// we need to "unresolve" the callee identifier just in case
 		if (undecided_overload.identifier.has_value()) undecided_overload.identifier.value()->id = {};
+
+		// we also need to set the type to bottom to avoid causing more issues
+		type_pool_.at(undecided_overload.expr_type) = TypeInfo::make_bottom();
 
 		return true;
 	}
@@ -1126,6 +1127,9 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 				)}
 			)
 		);
+		
+		// we need to set the type to bottom to avoid causing more issues
+		type_pool_.at(undecided_member_access) = TypeInfo::make_bottom();
 		return true;
 	}
 
