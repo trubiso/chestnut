@@ -81,6 +81,7 @@ std::ostream& operator<<(std::ostream& os, Expression::BinaryOperation const& op
 
 std::ostream& operator<<(std::ostream& os, Expression::FunctionCall const& call) {
 	os << "(call " << call.callee->value;
+	if (call.generic_list.has_value()) os << " w/ generics " << call.generic_list.value();
 	if (!call.arguments.labeled.empty() || !call.arguments.ordered.empty()) {
 		os << " w/ args: (";
 		for (size_t i = 0; i < call.arguments.ordered.size(); ++i) {

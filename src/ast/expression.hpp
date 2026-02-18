@@ -1,5 +1,6 @@
 #pragma once
 #include "../token.hpp"
+#include "generics.hpp"
 #include "identifier.hpp"
 
 #include <memory>
@@ -195,6 +196,8 @@ struct Expression {
 			std::vector<OrderedArgument> ordered;
 			std::vector<LabeledArgument> labeled;
 		} arguments;
+
+		std::optional<GenericList> generic_list;
 	};
 
 	struct If {
@@ -257,12 +260,13 @@ struct Expression {
 
 	inline static Expression make_function_call(
 		std::unique_ptr<Spanned<Expression>>&& callee,
-		Expression::FunctionCall::Arguments&&  arguments
+		Expression::FunctionCall::Arguments&&  arguments,
+		std::optional<GenericList>             generic_list = std::nullopt
 	) {
 		return Expression(
 			value_t {
 				std::in_place_index<(size_t) Kind::FunctionCall>,
-				FunctionCall {std::move(callee), std::move(arguments)}
+				FunctionCall {std::move(callee), std::move(arguments), std::move(generic_list)}
                 }
 		);
 	}

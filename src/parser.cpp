@@ -401,7 +401,22 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 	if (!maybe_callee.has_value()) return {};
 	Spanned<Expression> callee = std::move(maybe_callee.value());
 
-	while (consume_symbol(Token::Symbol::LParen)) {
+	while (peek_symbol(Token::Symbol::Lt) || peek_symbol(Token::Symbol::LParen)) {
+		std::optional<GenericList> generic_list = std::nullopt;
+		// if we got a generic list, handle it and get us past the opening parenthesis
+		if (peek_symbol(Token::Symbol::Lt)) {
+			// disambiguate via whitespace :o
+			if (callee.span.end != tokens_.peek().value().span().start) break;
+			generic_list = expect_generic_list(
+				"expected generic list after opening angle bracket (if you wanted a comparison operator, add a space before `<`)"
+			);
+			if (!generic_list.has_value()) break;
+			if (!expect_symbol(
+				    "expected opening parenthesis to begin argument list",
+				    Token::Symbol::LParen
+			    ))
+				break;
+		} else consume_symbol(Token::Symbol::LParen);
 		std::optional<Expression::FunctionCall::Argument> argument {};
 		Expression::FunctionCall::Arguments               arguments {};
 
@@ -475,7 +490,8 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 			call_span,
 			Expression::make_function_call(
 				std::make_unique<Spanned<Expression>>(std::move(callee)),
-				std::move(arguments)
+				std::move(arguments),
+				std::move(generic_list)
 			)
 		};
 
@@ -765,6 +781,7 @@ std::optional<GenericList> Parser::consume_generic_list() {
 	if (!consume_symbol(Token::Symbol::Lt)) return {};
 	std::optional<GenericList::Generic> generic {};
 
+	// TODO: might be useful to be able to quit with an error here so the expect_ method makes sense :P
 	std::vector<GenericList::LabeledGeneric> labeled_generics {};
 	std::vector<GenericList::OrderedGeneric> ordered_generics {};
 
@@ -1163,6 +1180,10 @@ std::optional<Expression> Parser::expect_expression(std::string_view reason) {
 	EXPECT(consume_expression, "expression");
 }
 
+std::optional<GenericList> Parser::expect_generic_list(std::string_view reason) {
+	EXPECT(consume_generic_list, "generic list");
+}
+
 std::optional<Statement> Parser::expect_statement(std::string_view reason) {
 	EXPECT(consume_statement, "statement");
 }
@@ -1365,7 +1386,13 @@ std::optional<Function> Parser::parse_function() {
 		if (!body.has_value()) expect_semicolon("expected semicolon after function declaration without body");
 	}
 
-	return Function {name.value(), std::move(generic_declaration), std::move(arguments), std::move(return_type), std::move(body)};
+	return Function {
+		name.value(),
+		std::move(generic_declaration),
+		std::move(arguments),
+		std::move(return_type),
+		std::move(body)
+	};
 }
 
 std::optional<Alias> Parser::parse_alias() {

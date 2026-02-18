@@ -1,3 +1,8 @@
 struct GenericContainer<anon T> { item: T }
 
-func generic_choice<anon T, anon U>(anon t: T, anon u: U, which: bool) => if (which) u else t;
+func generic_choice<anon T>(anon x: T, anon y: T, which: bool) => if (which) x else y;
+
+@extern
+func main() {
+	generic_choice<uint8>(1, 2, true);
+}

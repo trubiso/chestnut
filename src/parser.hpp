@@ -195,6 +195,8 @@ private:
 	std::optional<Expression> expect_expression_binop_l4(std::string_view reason);
 	std::optional<Expression> expect_expression(std::string_view reason);
 
+	std::optional<GenericList> expect_generic_list(std::string_view reason);
+
 	std::optional<Statement> expect_statement(std::string_view reason);
 
 	std::optional<Scope> expect_scope(std::string_view reason);
