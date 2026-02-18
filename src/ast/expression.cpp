@@ -43,6 +43,8 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom::CharLiteral const& 
 
 std::ostream& operator<<(std::ostream& os, Expression::Atom::StructLiteral const& struct_literal) {
 	os << "[struct literal of type " << struct_literal.name.value << " with ";
+	if (struct_literal.generic_list.has_value())
+		os << "generics " << struct_literal.generic_list.value() << " and ";
 	if (struct_literal.fields.empty()) return os << "no fields]";
 	os << "fields ";
 	size_t count = 0;
