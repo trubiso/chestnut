@@ -14,8 +14,8 @@ Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom, bo
 	case AST::Type::Atom::Kind::Char:  return make_known_char();
 	case AST::Type::Atom::Kind::Bool:  return make_known_bool();
 	case AST::Type::Atom::Kind::Named:
-		return partial ? make_named_partial(&atom.get_named())
-		               : make_named_known(atom.get_named().id.value().at(0));
+		return partial ? make_named_partial(&atom.get_named().name.value)
+		               : make_named_known(atom.get_named().name.value.id.value().at(0));
 	case AST::Type::Atom::Kind::Inferred: return make_unknown();
 	case AST::Type::Atom::Kind::Integer:  break;
 	}

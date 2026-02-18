@@ -159,16 +159,16 @@ std::optional<Tag> Parser::consume_tag() {
 }
 
 std::optional<Type> Parser::consume_type_atom() {
-	std::optional<Identifier> maybe_name = consume_identifier();
+	std::optional<Spanned<Identifier>> maybe_name = SPANNED(consume_identifier);
 	if (!maybe_name.has_value()) return {};
 
 	// if it's a qualified identifier, it's definitely named
-	if (!maybe_name.value().is_unqualified()) {
-		return Type::make_atom(Type::Atom::make_named(std::move(maybe_name.value())));
+	if (!maybe_name.value().value.is_unqualified()) {
+		return Type::make_atom(Type::Atom::make_named(Type::Atom::Named {std::move(maybe_name.value())}));
 	}
 
 	// if it's not a qualified identifier, it's a built-in or a named one in scope
-	std::string name = maybe_name.value().name();
+	std::string name = maybe_name.value().value.name();
 
 	// variables have to declared at the top so c++ won't wail
 	bool                               starts_with_u, starts_with_i;
@@ -214,7 +214,7 @@ std::optional<Type> Parser::consume_type_atom() {
 
 none_match:
 	// if none match, it's once more a named type
-	return Type::make_atom(Type::Atom::make_named(std::move(maybe_name.value())));
+	return Type::make_atom(Type::Atom::make_named(Type::Atom::Named {std::move(maybe_name.value())}));
 }
 
 std::optional<Type> Parser::consume_type() {
@@ -778,13 +778,14 @@ std::optional<GenericList::Generic> Parser::consume_generic_list_generic() {
 	std::optional<Spanned<Type>> generic_lhs = SPANNED(consume_type);
 	if (!generic_lhs.has_value()) return {};
 	// check if it's a bare unqualified identifier followed by a colon
+	// TODO: also check that there are no generics
 	if (generic_lhs.value().value.is_atom()
 	    && generic_lhs.value().value.get_atom().is_named()
-	    && generic_lhs.value().value.get_atom().get_named().is_unqualified()
+	    && generic_lhs.value().value.get_atom().get_named().name.value.is_unqualified()
 	    && consume_symbol(Token::Symbol::Colon)) {
 		Spanned<std::string> label {
 			generic_lhs.value().span,
-			generic_lhs.value().value.get_atom().get_named().name()
+			generic_lhs.value().value.get_atom().get_named().name.value.name()
 		};
 		// now we need the actual generic
 		std::optional<Spanned<Type>> generic_rhs

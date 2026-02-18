@@ -80,6 +80,10 @@ struct Type {
 			}
 		};
 
+		struct Named {
+			Spanned<Identifier> name;
+		};
+
 		enum class Kind { Integer, Float, Void, Char, Bool, Named, Inferred };
 
 		typedef std::variant<
@@ -88,7 +92,7 @@ struct Type {
 			std::monostate,
 			std::monostate,
 			std::monostate,
-			Identifier,
+			Named,
 			std::monostate>
 			value_t;
 
@@ -118,8 +122,8 @@ struct Type {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Bool>, std::monostate {}});
 		}
 
-		inline static Atom make_named(AST::Identifier&& name) {
-			return Atom(value_t {std::in_place_index<(size_t) Kind::Named>, std::move(name)});
+		inline static Atom make_named(Named&& named) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Named>, std::move(named)});
 		}
 
 		inline static Atom make_inferred() {
@@ -144,9 +148,9 @@ struct Type {
 
 		inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
 
-		inline AST::Identifier const& get_named() const { return std::get<(size_t) Kind::Named>(value); }
+		inline Named const& get_named() const { return std::get<(size_t) Kind::Named>(value); }
 
-		inline AST::Identifier& get_named() { return std::get<(size_t) Kind::Named>(value); }
+		inline Named& get_named() { return std::get<(size_t) Kind::Named>(value); }
 	};
 
 	struct Pointer {
@@ -179,6 +183,7 @@ struct Type {
 	inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
 };
 
+std::ostream& operator<<(std::ostream&, Type::Atom::Named const&);
 std::ostream& operator<<(std::ostream&, Type::Atom const&);
 std::ostream& operator<<(std::ostream&, Type::Pointer const&);
 std::ostream& operator<<(std::ostream&, Type const&);

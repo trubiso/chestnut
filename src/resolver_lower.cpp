@@ -193,9 +193,10 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom atom, Span span, FileCont
 		}
 	} else if (atom.is_named()) {
 		// the resolver will already have thrown diagnostics, so let's error
-		if (!atom.get_named().id.has_value() || atom.get_named().id.value().empty())
+		if (!atom.get_named().name.value.id.has_value() || atom.get_named().name.value.id.value().empty())
 			return {span, IR::Type::make_atom(IR::Type::Atom::make_error())};
-		return {span, IR::Type::make_atom(IR::Type::Atom::make_named(atom.get_named().id.value()[0]))};
+		return {span,
+		        IR::Type::make_atom(IR::Type::Atom::make_named(atom.get_named().name.value.id.value()[0]))};
 	} else if (atom.is_inferred()) {
 		// this is invalid!! top level types must not be inferred
 		parsed_files.at(file_id).diagnostics.push_back(

@@ -261,18 +261,18 @@ void Resolver::resolve(
 
 void Resolver::resolve(AST::Type::Atom& atom, Span span, Scope const& scope, FileContext::ID file_id) {
 	if (!atom.is_named()) return;
-	resolve(atom.get_named(), span, scope, file_id);
+	resolve(atom.get_named().name, scope, file_id);
 
 	// check that we actually got a type
-	if (atom.get_named().id.has_value()) {
-		if (atom.get_named().id.value().empty()) return;
-		if (atom.get_named().id.value().size() > 1) {
+	if (atom.get_named().name.value.id.has_value()) {
+		if (atom.get_named().name.value.id.value().empty()) return;
+		if (atom.get_named().name.value.id.value().size() > 1) {
 			// TODO: diagnostic (although this likely happens if you use a function name as a type name, in
 			// which case we should punish the author of the code)
 			std::cout << "ambiguous type, what did you do???" << std::endl;
 			std::exit(0);
 		}
-		if (!std::holds_alternative<AST::Struct*>(get_single_symbol(atom.get_named()).item)) {
+		if (!std::holds_alternative<AST::Struct*>(get_single_symbol(atom.get_named().name.value).item)) {
 			// TODO: proper diagnostic instead of guilt-tripping
 			std::cout << "why did you use a non-struct as a type? :(" << std::endl;
 			std::exit(0);
@@ -358,10 +358,12 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 
 		// we transfer the name to a type to resolve it and then back to maintain the ID
 		// in the future, we will have to ensure that this is a struct, but for now resolve already does that
-		AST::Type temp_type
-			= AST::Type::make_atom(AST::Type::Atom::make_named(std::move(struct_literal.name.value)));
-		resolve(temp_type, struct_literal.name.span, scope, file_id);
-		struct_literal.name.value = std::move(temp_type.get_atom().get_named());
+		// TODO: deal with generics
+		AST::Type temp_type = AST::Type::make_atom(
+			AST::Type::Atom::make_named(AST::Type::Atom::Named {std::move(struct_literal.name)})
+		);
+		resolve(temp_type, temp_type.get_atom().get_named().name.span, scope, file_id);
+		struct_literal.name = std::move(temp_type.get_atom().get_named().name);
 
 		// now, we check if all given fields exist in the struct and we resolve all of them, regardless of
 		// whether they exist or not
@@ -510,8 +512,8 @@ void Resolver::resolve(AST::Struct& struct_, Scope const& scope, FileContext::ID
 		// detect immediately recursive types (we allow pointers though, for now)
 		if (field.type.value.is_atom()
 		    && field.type.value.get_atom().is_named()
-		    && field.type.value.get_atom().get_named().id.value().size() == 1
-		    && field.type.value.get_atom().get_named().id.value().at(0)
+		    && field.type.value.get_atom().get_named().name.value.id.value().size() == 1
+		    && field.type.value.get_atom().get_named().name.value.id.value().at(0)
 		               == struct_.name.value.id.value().at(0)) {
 			// TODO: move this somewhere else, probably during an IR pass, because we can't really detect
 			// mutually recursive types this way, and we don't know how the other type will use this, etc

@@ -2,6 +2,10 @@
 
 namespace AST {
 
+std::ostream& operator<<(std::ostream& os, Type::Atom::Named const& named) {
+	return os << named.name.value;
+}
+
 std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	switch (atom.kind()) {
 	case Type::Atom::Kind::Integer:  break;
