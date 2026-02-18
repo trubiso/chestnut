@@ -28,6 +28,7 @@ std::ostream& operator<<(std::ostream& os, GenericList const& generic_list) {
 
 std::ostream& operator<<(std::ostream& os, Type::Atom::Named const& named) {
 	os << named.name.value;
+	if (named.generic_list.has_value()) os << named.generic_list.value();
 	return os;
 }
 

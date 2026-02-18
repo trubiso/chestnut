@@ -108,6 +108,8 @@ struct Type {
 
 		struct Named {
 			Spanned<Identifier> name;
+
+			std::optional<GenericList> generic_list;
 		};
 
 		enum class Kind { Integer, Float, Void, Char, Bool, Named, Inferred };

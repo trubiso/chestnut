@@ -163,58 +163,65 @@ std::optional<Type> Parser::consume_type_atom() {
 	if (!maybe_name.has_value()) return {};
 
 	// if it's a qualified identifier, it's definitely named
-	if (!maybe_name.value().value.is_unqualified()) {
-		return Type::make_atom(Type::Atom::make_named(Type::Atom::Named {std::move(maybe_name.value())}));
+	if (!maybe_name.value().value.is_unqualified()) goto named_type;
+
+	{
+		// if it's not a qualified identifier, it's a built-in or a named one in scope
+		std::string name = maybe_name.value().value.name();
+
+		// variables have to declared at the top so c++ won't wail
+		bool                               starts_with_u, starts_with_i;
+		uint32_t                           width;
+		std::from_chars_result             res;
+		std::optional<Type::Atom::Integer> int_ {};
+		size_t                             base_length = 0;
+
+		// "easy" types
+		if (name == "void") return Type::make_atom(Type::Atom::make_void());
+		if (name == "char") return Type::make_atom(Type::Atom::make_char());
+		if (name == "bool") return Type::make_atom(Type::Atom::make_bool());
+		if (name == "_") return Type::make_atom(Type::Atom::make_inferred());
+
+		// float types (can be bruteforced)
+		if (name.starts_with("float")) {
+			if (name == "float16")
+				return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F16));
+			if (name == "float32")
+				return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F32));
+			if (name == "float64")
+				return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F64));
+			if (name == "float128")
+				return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F128));
+			goto named_type;
+		}
+
+		// just the integer types left
+		starts_with_u = name.starts_with("uint");
+		starts_with_i = name.starts_with("int");
+		if (!starts_with_u && !starts_with_i) goto named_type;
+		// get rid of the easy cases
+		base_length = starts_with_u ? 4 : 3;
+		if (name.length() == base_length)
+			return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::any(starts_with_i)));
+		if (name.length() == base_length + 3 && name.ends_with("ptr"))
+			return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::ptr(starts_with_i)));
+		if (name.length() == base_length + 4 && name.ends_with("size"))
+			return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::size(starts_with_i)));
+		// we know the name is at least base_length long, so the following is valid
+		res = std::from_chars(name.data() + base_length, name.data() + name.size(), width);
+		if (res.ec != std::errc() || res.ptr != name.data() + name.size()) goto named_type;
+		int_ = Type::Atom::Integer::with_width(width, starts_with_i);
+		if (!int_.has_value()) goto named_type;
+		return Type::make_atom(Type::Atom::make_integer(std::move(int_.value())));
 	}
 
-	// if it's not a qualified identifier, it's a built-in or a named one in scope
-	std::string name = maybe_name.value().value.name();
-
-	// variables have to declared at the top so c++ won't wail
-	bool                               starts_with_u, starts_with_i;
-	uint32_t                           width;
-	std::from_chars_result             res;
-	std::optional<Type::Atom::Integer> int_ {};
-	size_t                             base_length = 0;
-
-	// "easy" types
-	if (name == "void") return Type::make_atom(Type::Atom::make_void());
-	if (name == "char") return Type::make_atom(Type::Atom::make_char());
-	if (name == "bool") return Type::make_atom(Type::Atom::make_bool());
-	if (name == "_") return Type::make_atom(Type::Atom::make_inferred());
-
-	// float types (can be bruteforced)
-	if (name.starts_with("float")) {
-		// TODO: support arbitrary sized floats (should we?)
-		if (name == "float16") return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F16));
-		if (name == "float32") return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F32));
-		if (name == "float64") return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F64));
-		if (name == "float128") return Type::make_atom(Type::Atom::make_float(Type::Atom::Float::Width::F128));
-		goto none_match;
-	}
-
-	// just the integer types left
-	starts_with_u = name.starts_with("uint");
-	starts_with_i = name.starts_with("int");
-	if (!starts_with_u && !starts_with_i) goto none_match;
-	// get rid of the easy cases
-	base_length = starts_with_u ? 4 : 3;
-	if (name.length() == base_length)
-		return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::any(starts_with_i)));
-	if (name.length() == base_length + 3 && name.ends_with("ptr"))
-		return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::ptr(starts_with_i)));
-	if (name.length() == base_length + 4 && name.ends_with("size"))
-		return Type::make_atom(Type::Atom::make_integer(Type::Atom::Integer::size(starts_with_i)));
-	// we know the name is at least base_length long, so the following is valid
-	res = std::from_chars(name.data() + base_length, name.data() + name.size(), width);
-	if (res.ec != std::errc() || res.ptr != name.data() + name.size()) goto none_match;
-	int_ = Type::Atom::Integer::with_width(width, starts_with_i);
-	if (!int_.has_value()) goto none_match;
-	return Type::make_atom(Type::Atom::make_integer(std::move(int_.value())));
-
-none_match:
-	// if none match, it's once more a named type
-	return Type::make_atom(Type::Atom::make_named(Type::Atom::Named {std::move(maybe_name.value())}));
+named_type:
+	// if none match or it's qualified, it's a named type
+	// therefore, we'll try parsing generics!
+	std::optional<GenericList> generic_list = consume_generic_list();
+	return Type::make_atom(
+		Type::Atom::make_named(Type::Atom::Named {std::move(maybe_name.value()), std::move(generic_list)})
+	);
 }
 
 std::optional<Type> Parser::consume_type() {
