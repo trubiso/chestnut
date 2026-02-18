@@ -1,7 +1,7 @@
 #pragma once
 #include "../token.hpp"
-#include "generics.hpp"
 #include "identifier.hpp"
+#include "type.hpp"
 
 #include <memory>
 #include <optional>

@@ -1,7 +1,6 @@
 #pragma once
 #include "ast/expression.hpp"
 #include "ast/function.hpp"
-#include "ast/generics.hpp"
 #include "ast/identifier.hpp"
 #include "ast/module.hpp"
 #include "ast/statement.hpp"

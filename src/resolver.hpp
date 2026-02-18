@@ -663,9 +663,9 @@ private:
 	/// values and expressions, as it does not allow functions or modules to be values directly.
 	IR::Type reconstruct_type(TypeInfo::ID, bool allow_functions = false);
 	/// Lowers a type atom known since parsing, turning non-specific types specific.
-	Spanned<IR::Type> lower_type(AST::Type::Atom, Span, FileContext::ID);
+	Spanned<IR::Type> lower_type(AST::Type::Atom&&, Span, FileContext::ID);
 	/// Lowers a type known since parsing, turning non-specific types specific.
-	Spanned<IR::Type> lower_type(Spanned<AST::Type>, FileContext::ID);
+	Spanned<IR::Type> lower_type(Spanned<AST::Type>&&, FileContext::ID);
 
 	/// Gets the default value for the given type.
 	Spanned<IR::Value> lower_get_default_value(IR::Type const&, Span, FileContext::ID);

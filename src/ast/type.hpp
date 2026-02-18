@@ -10,6 +10,32 @@
 
 namespace AST {
 
+struct Type;
+
+struct GenericDeclaration {
+	struct Generic {
+		Spanned<Identifier> name;  // unqualified
+		// TODO: trait constraints
+		bool anonymous;
+	};
+
+	std::vector<Generic> generics;
+};
+
+std::ostream& operator<<(std::ostream&, GenericDeclaration const&);
+
+struct GenericList {
+	typedef Spanned<Type>                                    OrderedGeneric;
+	typedef std::tuple<Spanned<std::string>, OrderedGeneric> LabeledGeneric;
+
+	typedef std::variant<OrderedGeneric, LabeledGeneric> Generic;
+
+	std::vector<OrderedGeneric> ordered;
+	std::vector<LabeledGeneric> labeled;
+};
+
+std::ostream& operator<<(std::ostream&, GenericList const&);
+
 struct Type {
 	struct Atom {
 		// TODO: eventually support types which are identifiers. for now, we won't, as there is no way to create
@@ -86,15 +112,9 @@ struct Type {
 
 		enum class Kind { Integer, Float, Void, Char, Bool, Named, Inferred };
 
-		typedef std::variant<
-			Integer,
-			Float,
-			std::monostate,
-			std::monostate,
-			std::monostate,
-			Named,
-			std::monostate>
-			value_t;
+		typedef std::
+			variant<Integer, Float, std::monostate, std::monostate, std::monostate, Named, std::monostate>
+				value_t;
 
 		value_t value;
 
@@ -167,7 +187,7 @@ struct Type {
 	inline constexpr Kind kind() const { return (Kind) value.index(); }
 
 	inline static Type make_atom(Atom&& atom) {
-		return Type(value_t {std::in_place_index<(size_t) Kind::Atom>, atom});
+		return Type(value_t {std::in_place_index<(size_t) Kind::Atom>, std::move(atom)});
 	}
 
 	inline static Type make_pointer(Pointer&& pointer) {

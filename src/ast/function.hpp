@@ -1,6 +1,5 @@
 #pragma once
 #include "../span.hpp"
-#include "generics.hpp"
 #include "identifier.hpp"
 #include "statement.hpp"
 #include "type.hpp"

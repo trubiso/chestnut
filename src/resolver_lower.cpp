@@ -148,7 +148,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, bool allow_functions) 
 	return reconstruct_type(type_id, type_id, allow_functions);
 }
 
-Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom atom, Span span, FileContext::ID file_id) {
+Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom&& atom, Span span, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Type::Atom::Kind::Float:
 		return {span,
@@ -210,10 +210,10 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom atom, Span span, FileCont
 	}
 }
 
-Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type> spanned_type, FileContext::ID file_id) {
+Spanned<IR::Type> Resolver::lower_type(Spanned<AST::Type>&& spanned_type, FileContext::ID file_id) {
 	auto [span, type] = std::move(spanned_type);
 	switch (type.kind()) {
-	case AST::Type::Kind::Atom: return lower_type(type.get_atom(), span, file_id);
+	case AST::Type::Kind::Atom: return lower_type(std::move(type.get_atom()), span, file_id);
 	case AST::Type::Kind::Pointer:
 		return {span,
 		        IR::Type::make_pointer(

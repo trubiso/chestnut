@@ -1,5 +1,4 @@
 #pragma once
-#include "generics.hpp"
 #include "identifier.hpp"
 #include "type.hpp"
 
