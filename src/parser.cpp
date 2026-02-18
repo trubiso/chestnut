@@ -279,7 +279,23 @@ std::optional<Expression> Parser::consume_expression_atom() {
 		}
 
 		// special case for struct literals
-		if (consume_symbol(Token::Symbol::LBrace)) {
+		if (peek_symbol(Token::Symbol::Lt) || peek_symbol(Token::Symbol::LBrace)) {
+			size_t                     index        = tokens_.index();
+			std::optional<GenericList> generic_list = std::nullopt;
+			// this might still not be a struct literal, but a function call!
+			// we check it here because the function call calls this for its callee, meaning that the
+			// function call won't check for generics before we do.
+			if (peek_symbol(Token::Symbol::Lt)) {
+				// we don't have to check for whitespace, because there's no reason why you would do
+				// A<B, C>{...} since there are no scope expressions :-)
+				generic_list = consume_generic_list();
+				// we bail if it's invalid
+				if (!generic_list.has_value() || !peek_symbol(Token::Symbol::LBrace)) {
+					tokens_.set_index(index);
+					goto bail;
+				}
+			}
+			assert(consume_symbol(Token::Symbol::LBrace));
 			std::optional<Expression::Atom::StructLiteral::Field> maybe_field;
 			std::vector<Expression::Atom::StructLiteral::Field>   fields {};
 
@@ -323,10 +339,15 @@ std::optional<Expression> Parser::consume_expression_atom() {
 			expect_symbol("expected closing brace to end struct literal", Token::Symbol::RBrace);
 
 			return Expression::make_atom(
-				Expression::Atom::make_struct_literal(std::move(identifier.value()), std::move(fields))
+				Expression::Atom::make_struct_literal(
+					std::move(identifier.value()),
+					std::move(generic_list),
+					std::move(fields)
+				)
 			);
 		}
 
+	bail:
 		return Expression::make_atom(Expression::Atom::make_identifier(std::move(identifier.value().value)));
 	}
 

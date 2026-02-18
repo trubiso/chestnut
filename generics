@@ -5,4 +5,5 @@ func generic_choice<anon T>(anon x: T, anon y: T, which: bool) => if (which) x e
 @extern
 func main() {
 	generic_choice<uint8>(1, 2, true);
+	const generic_container = GenericContainer<uint8> { item: 8 };
 }
