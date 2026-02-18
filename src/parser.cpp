@@ -13,10 +13,9 @@ namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
 // FIXME: clang-format won't stop jiggling this macro around LOL
-#define SPANNED_REASON(fn, reason)                                                               \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
-		return (fn) (reason);                                                            \
-	})
+#define SPANNED_REASON(fn, reason)                                                                                     \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
+		                                                                      this] { return (fn) (reason); })
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -673,6 +672,158 @@ std::optional<Expression> Parser::consume_expression() {
 		std::make_unique<Spanned<Expression>>(std::move(maybe_true.value())),
 		std::make_unique<Spanned<Expression>>(std::move(maybe_false.value()))
 	);
+}
+
+std::optional<GenericDeclaration::Generic> Parser::consume_generic_declaration_generic() {
+	// ["anon" <name>]
+	auto generic_name = SPANNED(consume_unqualified_identifier);
+	if (!generic_name.has_value()) return {};
+
+	// name might actually just be anon
+	bool anonymous = false;
+	if (generic_name.value().value.name() == "anon" && peek_unqualified_identifier()) {
+		anonymous    = true;
+		generic_name = SPANNED(consume_unqualified_identifier);
+	}
+
+	return GenericDeclaration::Generic {std::move(generic_name.value()), anonymous};
+}
+
+std::optional<GenericDeclaration> Parser::consume_generic_declaration() {
+	// "<" <generic> ["," <generic>]* ">"
+	if (!consume_symbol(Token::Symbol::Lt)) return {};
+	std::vector<GenericDeclaration::Generic> generics {};
+
+	std::optional<GenericDeclaration::Generic> generic;
+	while ((generic = consume_generic_declaration_generic()).has_value()) {
+		auto generic_name      = generic.value().name.value.name();
+		auto duplicate_generic = std::find_if(
+			generics.cbegin(),
+			generics.cend(),
+			[&generic_name](GenericDeclaration::Generic const& given_generic) {
+				return given_generic.name.value.name() == generic_name;
+			}
+		);
+
+		if (duplicate_generic != generics.cend()) {
+			diagnostics_.push_back(
+				Diagnostic::error(
+					"duplicate generic name",
+					"generic name used twice in generic declaration",
+					{Diagnostic::Sample(
+						context_,
+						{Diagnostic::Sample::Label(
+							 generic.value().name.span,
+							 OutFmt::Color::Red
+						 ),
+			                         Diagnostic::Sample::Label(
+							 duplicate_generic->name.span,
+							 "first used here",
+							 OutFmt::Color::Cyan
+						 )}
+					)}
+				)
+			);
+		} else {
+			// we only push the generic if it's not duplicate to avoid confusing later stages
+			generics.push_back(std::move(generic.value()));
+		}
+
+		if (!consume_single_comma_or_more()) break;
+	}
+
+	expect_symbol("expected closing angle bracket to end generic declaration", Token::Symbol::Gt);
+	return GenericDeclaration {std::move(generics)};
+}
+
+std::optional<GenericList::Generic> Parser::consume_generic_list_generic() {
+	// <type> or <name> ":" <type>
+	std::optional<Spanned<Type>> generic_lhs = SPANNED(consume_type);
+	if (!generic_lhs.has_value()) return {};
+	// check if it's a bare unqualified identifier followed by a colon
+	if (generic_lhs.value().value.is_atom()
+	    && generic_lhs.value().value.get_atom().is_named()
+	    && generic_lhs.value().value.get_atom().get_named().is_unqualified()
+	    && consume_symbol(Token::Symbol::Colon)) {
+		Spanned<std::string> label {
+			generic_lhs.value().span,
+			generic_lhs.value().value.get_atom().get_named().name()
+		};
+		// now we need the actual generic
+		std::optional<Spanned<Type>> generic_rhs
+			= SPANNED_REASON(expect_type, "expected type after generic label");
+		// we don't really have anything to return if there's no generic
+		if (!generic_rhs.has_value()) return {};
+		return GenericList::LabeledGeneric {std::move(label), std::move(generic_rhs.value())};
+	}
+	// otherwise it's just a regular generic
+	return GenericList::OrderedGeneric {std::move(generic_lhs.value())};
+}
+
+std::optional<GenericList> Parser::consume_generic_list() {
+	// "<" <generic> ["," <generic>]* ">"
+	if (!consume_symbol(Token::Symbol::Lt)) return {};
+	std::optional<GenericList::Generic> generic {};
+
+	std::vector<GenericList::LabeledGeneric> labeled_generics {};
+	std::vector<GenericList::OrderedGeneric> ordered_generics {};
+
+	while ((generic = consume_generic_list_generic()).has_value()) {
+		if (std::holds_alternative<GenericList::LabeledGeneric>(generic.value())) {
+			auto labeled_generic = std::move(std::get<GenericList::LabeledGeneric>(generic.value()));
+
+			auto duplicate_generic = std::find_if(
+				labeled_generics.cbegin(),
+				labeled_generics.cend(),
+				[&labeled_generic](auto const& existing_generic) {
+					return std::get<0>(existing_generic).value
+				            == std::get<0>(labeled_generic).value;
+				}
+			);
+
+			if (duplicate_generic != labeled_generics.cend()) {
+				diagnostics_.push_back(
+					Diagnostic::error(
+						"duplicate generic name",
+						"generic name used twice in generic list",
+						{Diagnostic::Sample(
+							context_,
+							{Diagnostic::Sample::Label(
+								 std::get<0>(labeled_generic).span,
+								 OutFmt::Color::Red
+							 ),
+				                         Diagnostic::Sample::Label(
+								 std::get<0>(*duplicate_generic).span,
+								 "first used here",
+								 OutFmt::Color::Cyan
+							 )}
+						)}
+					)
+				);
+			} else {
+				// we only push the generic if it's not duplicate to avoid confusing later
+				// stages
+				labeled_generics.push_back(std::move(labeled_generic));
+			}
+		} else {
+			auto ordered_generic = std::move(std::get<GenericList::OrderedGeneric>(generic.value()));
+			if (!labeled_generics.empty()) {
+				diagnostics_.push_back(
+					Diagnostic::error(
+						"cannot specify ordered generic after labeled generic(s)",
+						"labeled generics should be specified after all ordered generics, so no ordered generics can appear between the labeled generics",
+						{Diagnostic::Sample(context_, ordered_generic.span)}
+					)
+				);
+			} else {
+				ordered_generics.push_back(std::move(ordered_generic));
+			}
+		}
+		if (!consume_single_comma_or_more()) break;
+	}
+
+	expect_symbol("expected closing angle bracket to end generic list", Token::Symbol::Gt);
+	return GenericList {std::move(ordered_generics), std::move(labeled_generics)};
 }
 
 std::optional<Statement> Parser::consume_statement_declare() {

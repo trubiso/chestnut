@@ -1,6 +1,7 @@
 #pragma once
 #include "ast/expression.hpp"
 #include "ast/function.hpp"
+#include "ast/generics.hpp"
 #include "ast/identifier.hpp"
 #include "ast/module.hpp"
 #include "ast/statement.hpp"
@@ -133,6 +134,12 @@ private:
 	std::optional<Expression> consume_expression_binop_l3();
 	std::optional<Expression> consume_expression_binop_l4();
 	std::optional<Expression> consume_expression();
+
+	std::optional<GenericDeclaration::Generic> consume_generic_declaration_generic();
+	std::optional<GenericDeclaration>          consume_generic_declaration();
+
+	std::optional<GenericList::Generic> consume_generic_list_generic();
+	std::optional<GenericList>          consume_generic_list();
 
 	std::optional<Statement> consume_statement_declare();
 	std::optional<Statement> consume_statement_set();
