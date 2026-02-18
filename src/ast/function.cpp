@@ -3,7 +3,9 @@
 namespace AST {
 
 std::ostream& operator<<(std::ostream& os, Function const& function) {
-	os << "declare function " << function.name.value << " w/ args (";
+	os << "declare function " << function.name.value;
+	if (function.generic_declaration.has_value()) os << " w/ generics " << function.generic_declaration.value();
+	os << " w/ args (";
 	size_t count = 0;
 	for (auto const& arg : function.arguments) {
 		if (arg.anonymous) os << "(anonymous \"" << arg.name.value << "\")";

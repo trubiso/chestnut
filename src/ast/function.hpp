@@ -1,5 +1,6 @@
 #pragma once
 #include "../span.hpp"
+#include "generics.hpp"
 #include "identifier.hpp"
 #include "statement.hpp"
 #include "type.hpp"
@@ -16,9 +17,10 @@ struct Function {
 		bool                mutable_;
 	};
 
-	Spanned<Identifier>   name;  // unqualified
-	std::vector<Argument> arguments;
-	Spanned<Type>         return_type;
+	Spanned<Identifier>               name;  // unqualified
+	std::optional<GenericDeclaration> generic_declaration;
+	std::vector<Argument>             arguments;
+	Spanned<Type>                     return_type;
 
 	std::optional<Scope> body;
 

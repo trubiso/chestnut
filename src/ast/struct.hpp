@@ -1,4 +1,5 @@
 #pragma once
+#include "generics.hpp"
 #include "identifier.hpp"
 #include "type.hpp"
 
@@ -6,6 +7,8 @@ namespace AST {
 
 struct Struct {
 	Spanned<Identifier> name;
+
+	std::optional<GenericDeclaration> generic_declaration;
 
 	struct Field {
 		// TODO: public/private

@@ -1,0 +1,3 @@
+struct GenericContainer<anon T> { item: T }
+
+func generic_choice<anon T, anon U>(anon t: T, anon u: U, which: bool) => if (which) u else t;

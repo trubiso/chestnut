@@ -1210,6 +1210,7 @@ std::optional<Struct> Parser::parse_struct() {
 	if (!consume_keyword(Keyword::Struct)) return {};
 	auto name = SPANNED_REASON(expect_identifier, "expected struct name");
 	if (!name.has_value()) return {};
+	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
 
 	if (!expect_symbol("expected opening brace to begin struct body", Token::Symbol::LBrace)) return {};
 	skip_semis();
@@ -1221,13 +1222,14 @@ std::optional<Struct> Parser::parse_struct() {
 	skip_semis();
 	expect_symbol("expected closing brace to end struct body", Token::Symbol::RBrace);
 
-	return Struct {std::move(name.value()), std::move(fields)};
+	return Struct {std::move(name.value()), std::move(generic_declaration), std::move(fields)};
 }
 
 std::optional<Function> Parser::parse_function() {
 	if (!consume_keyword(Keyword::Func)) return {};
 	auto name = SPANNED_REASON(expect_identifier, "expected function name");
 	if (!name.has_value()) return {};
+	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
 
 	if (!expect_symbol("expected opening parenthesis to begin argument list", Token::Symbol::LParen)) return {};
 	// parse args
@@ -1363,7 +1365,7 @@ std::optional<Function> Parser::parse_function() {
 		if (!body.has_value()) expect_semicolon("expected semicolon after function declaration without body");
 	}
 
-	return Function {name.value(), std::move(arguments), std::move(return_type), std::move(body)};
+	return Function {name.value(), std::move(generic_declaration), std::move(arguments), std::move(return_type), std::move(body)};
 }
 
 std::optional<Alias> Parser::parse_alias() {
