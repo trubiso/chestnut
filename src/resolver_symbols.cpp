@@ -170,8 +170,11 @@ void Resolver::resolve(
 				}
 				cannot_traverse_further = true;
 			} else if (std::holds_alternative<AST::Struct>(value)) {
-				pointed_items.push_back(&get_single_symbol(std::get<AST::Struct>(value).name.value));
-				added_items++;
+				assert(std::get<AST::Struct>(value).name.value.id.has_value());
+				for (AST::SymbolID id : std::get<AST::Struct>(value).name.value.id.value()) {
+					pointed_items.push_back(&get_single_symbol(id));
+					added_items++;
+				}
 				cannot_traverse_further = true;
 			} else if (std::holds_alternative<AST::Module>(value)) {
 				root_module = &std::get<AST::Module>(value);
@@ -262,22 +265,7 @@ void Resolver::resolve(
 void Resolver::resolve(AST::Type::Atom& atom, Span span, Scope const& scope, FileContext::ID file_id) {
 	if (!atom.is_named()) return;
 	resolve(atom.get_named().name, scope, file_id);
-
-	// check that we actually got a type
-	if (atom.get_named().name.value.id.has_value()) {
-		if (atom.get_named().name.value.id.value().empty()) return;
-		if (atom.get_named().name.value.id.value().size() > 1) {
-			// TODO: diagnostic (although this likely happens if you use a function name as a type name, in
-			// which case we should punish the author of the code)
-			std::cout << "ambiguous type, what did you do???" << std::endl;
-			std::exit(0);
-		}
-		if (!std::holds_alternative<AST::Struct*>(get_single_symbol(atom.get_named().name.value).item)) {
-			// TODO: proper diagnostic instead of guilt-tripping
-			std::cout << "why did you use a non-struct as a type? :(" << std::endl;
-			std::exit(0);
-		}
-	}
+	// TODO: prune non-type items
 }
 
 void Resolver::resolve(AST::Type& type, Span span, Scope const& scope, FileContext::ID file_id) {
@@ -367,6 +355,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 
 		// now, we check if all given fields exist in the struct and we resolve all of them, regardless of
 		// whether they exist or not
+		// TODO: this may be more than one type!!! we cannot really check this in here :P
 		AST::Struct* struct_
 			= std::get<AST::Struct*>(symbol_pool_.at(struct_literal.name.value.id.value().at(0)).item);
 		for (auto& field : struct_literal.fields) {
@@ -607,7 +596,10 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			}
 		} else if (std::holds_alternative<AST::Struct>(value)) {
 			auto& struct_ = std::get<AST::Struct>(value);
-			child_scope.symbols.emplace(struct_.name.value.name(), struct_.name.value.id.value());
+			if (child_scope.symbols.contains(struct_.name.value.name()))
+				child_scope.symbols.at(struct_.name.value.name())
+					.push_back(struct_.name.value.id.value()[0]);
+			else child_scope.symbols.emplace(struct_.name.value.name(), struct_.name.value.id.value());
 		}
 	}
 
