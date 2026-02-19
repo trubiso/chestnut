@@ -1221,6 +1221,10 @@ std::optional<Scope> Parser::expect_scope(std::string_view reason) {
 	EXPECT(consume_scope, "scope");
 }
 
+std::optional<Trait::Constraint> Parser::expect_trait_constraint(std::string_view reason) {
+	EXPECT(parse_trait_constraint, "trait constraint");
+}
+
 char const* Parser::get_variant_name(Keyword keyword) {
 	switch (keyword) {
 	case Keyword::Def:    return "def";
@@ -1237,6 +1241,7 @@ char const* Parser::get_variant_name(Keyword keyword) {
 	case Keyword::If:     return "if";
 	case Keyword::Else:   return "else";
 	case Keyword::Struct: return "struct";
+	case Keyword::Trait:  return "trait";
 	}
 }
 
@@ -1244,6 +1249,117 @@ void Parser::skip_semis() {
 	tokens_.consume_while([](Token token) {
 		return token.is_symbol() && token.get_symbol() == Token::Symbol::Semicolon;
 	});
+}
+
+std::optional<Trait::Constraint> Parser::parse_trait_constraint() {
+	auto identifier = SPANNED(consume_identifier);
+	if (!identifier.has_value()) return {};
+	if (identifier.value().value.is_unqualified() && identifier.value().value.name() == "has") {
+		// this is a has constraint
+		auto name = SPANNED_REASON(expect_identifier, "expected function name for existential clause");
+		if (!name.has_value()) return {};
+
+		std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
+
+		if (!expect_symbol("expected opening parenthesis to begin argument list", Token::Symbol::LParen))
+			return {};
+
+		// parse args
+		// TODO: do not allow any type in function signatures to be non-specific uint/int.
+		std::vector<Trait::Has::Argument> arguments {};
+		while (true) {
+			auto argument_name = SPANNED(consume_unqualified_identifier);
+			if (!argument_name.has_value()) break;
+			// arguments in trait function constraints may be anonymous
+			bool anonymous = false;
+			if (argument_name.value().value.name() == "anon" && peek_unqualified_identifier()) {
+				anonymous = true;
+
+				argument_name = SPANNED(consume_unqualified_identifier);
+			}
+
+			if (!expect_symbol("expected `:` to specify argument type", Token::Symbol::Colon)) return {};
+			auto argument_type = SPANNED_REASON(expect_type, "expected argument type");
+			if (!argument_type.has_value()) return {};
+
+			auto duplicate_argument = std::find_if(
+				arguments.cbegin(),
+				arguments.cend(),
+				[&argument_name](Trait::Has::Argument const& argument) {
+					return argument.name.value.name() == argument_name.value().value.name();
+				}
+			);
+
+			if (duplicate_argument != arguments.cend()) {
+				diagnostics_.push_back(
+					Diagnostic::error(
+						"duplicate argument name",
+						"argument name used twice in function declaration",
+						{Diagnostic::Sample(
+							context_,
+							{Diagnostic::Sample::Label(
+								 argument_name.value().span,
+								 OutFmt::Color::Red
+							 ),
+				                         Diagnostic::Sample::Label(
+								 duplicate_argument->name.span,
+								 "first used here",
+								 OutFmt::Color::Cyan
+							 )}
+						)}
+					)
+				);
+			} else {
+				// we only push the argument if it's not duplicate to avoid confusing later stages
+				arguments.emplace_back(
+					argument_name.value(),
+					std::move(argument_type.value()),
+					anonymous
+				);
+			}
+			if (!consume_single_comma_or_more()) break;
+		}
+
+		if (!expect_symbol("expected closing parenthesis to end argument list", Token::Symbol::RParen))
+			return {};
+
+		// default to void
+		auto return_type
+			= SPANNED(consume_type)
+		                  .value_or(Spanned {name.value().span, Type::make_atom(Type::Atom::make_void())});
+
+		return Trait::Has {
+			std::move(name.value()),
+			std::move(generic_declaration),
+			std::move(arguments),
+			std::move(return_type)
+		};
+	} else {
+		// this is a named constraint
+		return Trait::Named {std::move(identifier.value())};
+	}
+}
+
+std::optional<Trait> Parser::parse_trait() {
+	if (!consume_keyword(Keyword::Trait)) return {};
+	auto name = SPANNED_REASON(expect_identifier, "expected trait name");
+	if (!name.has_value()) return {};
+	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
+	expect_symbol("expected `:` to begin constraint list for trait", Token::Symbol::Colon);
+
+	std::optional<Trait::Constraint> constraint = expect_trait_constraint("expected trait constraint after `:`");
+	if (!constraint.has_value()) return {};
+	std::vector<Trait::Constraint> constraints {};
+	constraints.push_back(std::move(constraint.value()));
+	if (!peek_symbol(Token::Symbol::Comma)) goto return_;
+	assert(consume_single_comma_or_more());
+
+	while ((constraint = parse_trait_constraint()).has_value()) {
+		constraints.push_back(std::move(constraint.value()));
+		if (!consume_single_comma_or_more()) break;
+	}
+return_:
+	return Trait {std::move(name.value()), std::move(generic_declaration), std::move(constraints)};
 }
 
 std::optional<Struct::Field> Parser::parse_struct_field() {

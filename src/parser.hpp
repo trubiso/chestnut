@@ -6,6 +6,7 @@
 #include "ast/statement.hpp"
 #include "ast/struct.hpp"
 #include "ast/tag.hpp"
+#include "ast/trait.hpp"
 #include "ast/type.hpp"
 #include "lexer.hpp"
 #include "span.hpp"
@@ -64,6 +65,7 @@ private:
 		If,
 		Else,
 		Struct,
+		Trait,
 	};
 
 	FileContext   context_;
@@ -200,17 +202,21 @@ private:
 
 	std::optional<Scope> expect_scope(std::string_view reason);
 
+	std::optional<Trait::Constraint> expect_trait_constraint(std::string_view reason);
+
 	// skip semicolons
 	void skip_semis();
 
-	std::optional<Struct::Field> parse_struct_field();
-	std::optional<Struct>        parse_struct();
-	std::optional<Function>      parse_function();
-	std::optional<Alias>         parse_alias();
-	std::optional<Import>        parse_import();
-	std::optional<Module>        parse_module();
-	std::optional<Module::Item>  parse_module_item();
-	std::optional<Module::Body>  parse_module_body(bool bare = false);
+	std::optional<Trait::Constraint> parse_trait_constraint();
+	std::optional<Trait>             parse_trait();
+	std::optional<Struct::Field>     parse_struct_field();
+	std::optional<Struct>            parse_struct();
+	std::optional<Function>          parse_function();
+	std::optional<Alias>             parse_alias();
+	std::optional<Import>            parse_import();
+	std::optional<Module>            parse_module();
+	std::optional<Module::Item>      parse_module_item();
+	std::optional<Module::Body>      parse_module_body(bool bare = false);
 };
 
 }  // namespace AST
