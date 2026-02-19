@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = `llvm-config --system-libs --cppflags --ldflags --libs core` -std=c++23 -lboost_program_options -Wall -Wextra -Wpedantic -g
 
-OBJS = analyzer.o codegen.o diagnostic.o ir.o levenshtein.o lexer.o main.o out_fmt.o parser.o resolver.o resolver_desugar.o resolver_identify.o resolver_lower.o resolver_symbols.o resolver_types.o test.o token.o ast/expression.o ast/function.o ast/identifier.o ast/module.o ast/statement.o ast/struct.o ast/tag.o ast/type.o
+OBJS = analyzer.o codegen.o diagnostic.o ir.o levenshtein.o lexer.o main.o out_fmt.o parser.o resolver.o resolver_desugar.o resolver_identify.o resolver_lower.o resolver_symbols.o resolver_types.o test.o token.o ast/expression.o ast/function.o ast/identifier.o ast/module.o ast/statement.o ast/struct.o ast/tag.o ast/trait.o ast/type.o
 
 BUILD_DIR := build
 SRC_DIR   := src
