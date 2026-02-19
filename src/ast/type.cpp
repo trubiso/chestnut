@@ -8,6 +8,14 @@ std::ostream& operator<<(std::ostream& os, GenericDeclaration const& generic_dec
 	for (auto const& generic : generic_declaration.generics) {
 		if (generic.anonymous) os << "anon ";
 		os << generic.name.value.name();
+		if (!generic.constraints.empty()) {
+			size_t subcount = 0;
+			os << ": ";
+			for (auto const& constraint : generic.constraints) {
+				os << constraint.value;
+				if (++subcount < generic.constraints.size()) os << ", ";
+			}
+		}
 		if (++count < generic_declaration.generics.size()) os << ", ";
 	}
 	return os << '>';

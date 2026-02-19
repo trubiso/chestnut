@@ -13,9 +13,10 @@ namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
 // FIXME: clang-format won't stop jiggling this macro around LOL
-#define SPANNED_REASON(fn, reason)                                                                                     \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
-		                                                                      this] { return (fn) (reason); })
+#define SPANNED_REASON(fn, reason)                                                               \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
+		return (fn) (reason);                                                            \
+	})
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -719,7 +720,7 @@ std::optional<Expression> Parser::consume_expression() {
 }
 
 std::optional<GenericDeclaration::Generic> Parser::consume_generic_declaration_generic() {
-	// ["anon" <name>]
+	// ["anon"] <name> [":" <generic>,*]
 	auto generic_name = SPANNED(consume_unqualified_identifier);
 	if (!generic_name.has_value()) return {};
 
@@ -730,7 +731,23 @@ std::optional<GenericDeclaration::Generic> Parser::consume_generic_declaration_g
 		generic_name = SPANNED(consume_unqualified_identifier);
 	}
 
-	return GenericDeclaration::Generic {std::move(generic_name.value()), anonymous};
+	std::vector<Spanned<Identifier>> constraints {};
+	if (consume_symbol(Token::Symbol::Colon)) {
+		std::optional<Spanned<Identifier>> constraint
+			= SPANNED_REASON(expect_identifier, "expected trait name after `:`");
+		if (!constraint.has_value()) goto return_;
+		constraints.push_back(std::move(constraint.value()));
+		if (!peek_symbol(Token::Symbol::Comma)) goto return_;
+		assert(consume_single_comma_or_more());
+
+		while ((constraint = SPANNED(consume_identifier)).has_value()) {
+			constraints.push_back(std::move(constraint.value()));
+			if (!consume_single_comma_or_more()) break;
+		}
+	}
+
+return_:
+	return GenericDeclaration::Generic {std::move(generic_name.value()), std::move(constraints), anonymous};
 }
 
 std::optional<GenericDeclaration> Parser::consume_generic_declaration() {

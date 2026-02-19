@@ -15,7 +15,9 @@ struct Type;
 struct GenericDeclaration {
 	struct Generic {
 		Spanned<Identifier> name;  // unqualified
-		// TODO: trait constraints
+
+		std::vector<Spanned<Identifier>> constraints;
+
 		bool anonymous;
 	};
 

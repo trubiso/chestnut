@@ -8,3 +8,15 @@ func do_something_else(anon _: uint8, anon my_other_arg: bool) uint8;
 func do_something_else(anon _: uint8, anon my_other_arg: uint8) uint8;
 
 trait CanDoSomethingElse<T>: CanDoSomething, has do_something_else(anon _: This, anon other: T);
+
+func want_to_do_something<T: CanDoSomething>(x: T) => do_something(x);
+
+func do_whatever(anon _: uint8);
+
+trait CanDoWhatever: has do_whatever(anon _: This);
+
+func want_to_do_everything<T: CanDoWhatever, CanDoSomethingElse>(x: T) {
+	do_something(*&const x);
+	do_whatever(*&const x);
+	return do_something_else(x);
+}
