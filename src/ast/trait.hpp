@@ -1,3 +1,4 @@
+#pragma once
 #include "identifier.hpp"
 #include "type.hpp"
 

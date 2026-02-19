@@ -16,6 +16,7 @@ std::ostream& operator<<(std::ostream& os, Module::InnerItem const& item) {
 	else if (std::holds_alternative<Alias>(item)) return os << std::get<Alias>(item);
 	else if (std::holds_alternative<Import>(item)) return os << std::get<Import>(item);
 	else if (std::holds_alternative<Struct>(item)) return os << std::get<Struct>(item);
+	else if (std::holds_alternative<Trait>(item)) return os << std::get<Trait>(item);
 	[[assume(false)]];
 }
 
@@ -46,6 +47,8 @@ std::string const& Module::get_name(InnerItem const& inner_item) {
 		return std::get<AST::Alias>(inner_item).name.value.name();
 	else if (std::holds_alternative<AST::Struct>(inner_item))
 		return std::get<AST::Struct>(inner_item).name.value.name();
+	else if (std::holds_alternative<AST::Trait>(inner_item))
+		return std::get<AST::Trait>(inner_item).name.value.name();
 	// this segfaults on purpose because i don't want anyone to call this for imports
 	else if (std::holds_alternative<AST::Import>(inner_item)) return "";
 	[[assume(false)]];

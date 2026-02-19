@@ -1,0 +1,10 @@
+func do_something(anon _: uint8);
+func do_something(anon _: uint16);
+func do_something(anon _: char);
+
+trait CanDoSomething: has do_something(anon _: This);
+
+func do_something_else(anon _: uint8, anon my_other_arg: bool) uint8;
+func do_something_else(anon _: uint8, anon my_other_arg: uint8) uint8;
+
+trait CanDoSomethingElse<T>: CanDoSomething, has do_something_else(anon _: This, anon other: T);

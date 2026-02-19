@@ -1627,6 +1627,10 @@ std::optional<Module::Item> Parser::parse_module_item() {
 		item = parse_struct().transform([tags = std::move(tags), exported](auto&& value) {
 			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
+	} else if (peek_keyword(Keyword::Trait)) {
+		item = parse_trait().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
+		});
 	}
 
 	return item;
