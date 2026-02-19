@@ -737,12 +737,12 @@ std::optional<GenericDeclaration::Generic> Parser::consume_generic_declaration_g
 			= SPANNED_REASON(expect_identifier, "expected trait name after `:`");
 		if (!constraint.has_value()) goto return_;
 		constraints.push_back(std::move(constraint.value()));
-		if (!peek_symbol(Token::Symbol::Comma)) goto return_;
-		assert(consume_single_comma_or_more());
+		if (!peek_symbol(Token::Symbol::Plus)) goto return_;
+		assert(consume_symbol(Token::Symbol::Plus));
 
 		while ((constraint = SPANNED(consume_identifier)).has_value()) {
 			constraints.push_back(std::move(constraint.value()));
-			if (!consume_single_comma_or_more()) break;
+			if (!consume_symbol(Token::Symbol::Plus)) break;
 		}
 	}
 
@@ -1368,12 +1368,12 @@ std::optional<Trait> Parser::parse_trait() {
 	if (!constraint.has_value()) return {};
 	std::vector<Trait::Constraint> constraints {};
 	constraints.push_back(std::move(constraint.value()));
-	if (!peek_symbol(Token::Symbol::Comma)) goto return_;
-	assert(consume_single_comma_or_more());
+	if (!peek_symbol(Token::Symbol::Plus)) goto return_;
+	assert(consume_symbol(Token::Symbol::Plus));
 
 	while ((constraint = parse_trait_constraint()).has_value()) {
 		constraints.push_back(std::move(constraint.value()));
-		if (!consume_single_comma_or_more()) break;
+		if (!consume_symbol(Token::Symbol::Plus)) break;
 	}
 return_:
 	return Trait {std::move(name.value()), std::move(generic_declaration), std::move(constraints)};
