@@ -128,6 +128,7 @@ void Resolver::debug_print_type(TypeInfo type) const {
 	case TypeInfo::Kind::PartialFloat:   std::cout << "(float)"; return;
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::Generic:
 	case TypeInfo::Kind::MemberAccess:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
@@ -155,6 +156,49 @@ void Resolver::debug_print_type(TypeInfo type) const {
 			if (++count < type.get_same_as().ids.size()) std::cout << " | ";
 		}
 		std::cout << ")";
+	} else if (type.is_generic()) {
+		TypeInfo::Generic const& generic = type.get_generic();
+		std::cout << symbol_pool_.at(generic.name).name;
+		if (!generic.declared_constraints.empty()) {
+			std::cout << ": ";
+			size_t count = 0;
+			for (auto const& constraint : generic.declared_constraints) {
+				std::cout << symbol_pool_.at(constraint.name).name;
+				if (!constraint.arguments.empty()) {
+					std::cout << '<';
+					size_t subcount = 0;
+					for (TypeInfo::ID subtype : constraint.arguments) {
+						debug_print_type(subtype);
+						if (++subcount < constraint.arguments.size()) std::cout << ", ";
+					}
+					std::cout << '>';
+				}
+				if (++count < generic.declared_constraints.size()) std::cout << " + ";
+			}
+		}
+		if (!generic.imposed_constraints.empty()) {
+			std::cout << " (imposed: ";
+			size_t count = 0;
+			for (auto const& constraint : generic.imposed_constraints) {
+				if (std::holds_alternative<TypeInfo::Generic::TraitConstraint>(constraint)) {
+					auto const& trait_constraint
+						= std::get<TypeInfo::Generic::TraitConstraint>(constraint);
+					std::cout << symbol_pool_.at(trait_constraint.name).name;
+					if (!trait_constraint.arguments.empty()) {
+						std::cout << '<';
+						size_t subcount = 0;
+						for (TypeInfo::ID subtype : trait_constraint.arguments) {
+							debug_print_type(subtype);
+							if (++subcount < trait_constraint.arguments.size())
+								std::cout << ", ";
+						}
+						std::cout << '>';
+					}
+				} else debug_print_type(std::get<TypeInfo::Generic::TypeConstraint>(constraint).type);
+				if (++count < generic.declared_constraints.size()) std::cout << " + ";
+			}
+			std::cout << ')';
+		}
 	} else if (type.is_member_access()) {
 		TypeInfo::MemberAccess const& member_access = type.get_member_access();
 		debug_print_type(member_access.accessee);
@@ -204,6 +248,7 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	case TypeInfo::Kind::PartialFloat:   return "float";
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::Generic:
 	case TypeInfo::Kind::MemberAccess:
 	case TypeInfo::Kind::NamedKnown:
 	case TypeInfo::Kind::Pointer:
@@ -232,6 +277,26 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 			if (++count < type.get_same_as().ids.size()) output << " | ";
 		}
 		if (type.get_same_as().ids.size() > 1) output << ')';
+	} else if (type.is_generic()) {
+		TypeInfo::Generic const& generic = type.get_generic();
+		output << symbol_pool_.at(generic.name).name;
+		if (!generic.declared_constraints.empty()) {
+			output << ": ";
+			size_t count = 0;
+			for (auto const& constraint : generic.declared_constraints) {
+				output << symbol_pool_.at(constraint.name).name;
+				if (!constraint.arguments.empty()) {
+					output << '<';
+					size_t subcount = 0;
+					for (TypeInfo::ID subtype : constraint.arguments) {
+						output << get_type_name(subtype);
+						if (++subcount < constraint.arguments.size()) output << ", ";
+					}
+					output << '>';
+				}
+				if (++count < generic.declared_constraints.size()) output << " + ";
+			}
+		}
 	} else if (type.is_member_access()) {
 		TypeInfo::MemberAccess const& member_access = type.get_member_access();
 		output << get_type_name(member_access.accessee) << '.' << member_access.field;
@@ -398,6 +463,33 @@ bool Resolver::unify_basic_known(
 	if (!a_matches) a = TypeInfo::make_bottom();
 	if (!b_matches) b = TypeInfo::make_bottom();
 	return true;
+}
+
+void Resolver::unify_generics(
+	TypeInfo::ID    generic,
+	TypeInfo::ID    other,
+	TypeInfo::ID    generic_origin,
+	TypeInfo::ID    other_origin,
+	FileContext::ID file_id
+) {
+	// this is an infallible operation
+	assert(type_pool_.at(generic).is_generic());
+	auto& a = type_pool_.at(generic).get_generic();
+
+	// if the other type isn't a generic, this adds new imposed constraints to the generic
+	if (!type_pool_.at(other).is_generic()) {
+		a.imposed_constraints.push_back(TypeInfo::Generic::TypeConstraint {other_origin});
+		return;
+	}
+
+	// if it is also a generic, we push each generic's declared constraints as imposed constraints for the other
+	// generic
+	auto& b = type_pool_.at(other).get_generic();
+
+	// TODO: dedup
+	for (auto const& constraint : a.declared_constraints) { b.imposed_constraints.push_back(constraint); }
+
+	for (auto const& constraint : b.declared_constraints) { a.imposed_constraints.push_back(constraint); }
 }
 
 void Resolver::unify_member_access(
@@ -634,6 +726,10 @@ void Resolver::unify(
 		set_same_as(b_id, a_id);
 		return;
 	}
+
+	// generics
+	if (a.is_generic()) return unify_generics(a_id, b_id, a_origin, b_origin, file_id);
+	if (b.is_generic()) return unify_generics(b_id, a_id, b_origin, a_origin, file_id);
 
 	// member access types
 	if (a.is_member_access()) return unify_member_access(a_id, b_id, a_origin, b_origin, file_id);
@@ -913,6 +1009,10 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	// make unknowns known
 	if (a.is_unknown()) return true;
 	if (b.is_unknown()) return true;
+
+	// generics always unify
+	if (a.is_generic()) return true;
+	if (b.is_generic()) return true;
 
 	// member access types (these always succeed :P)
 	if (a.is_member_access()) return true;

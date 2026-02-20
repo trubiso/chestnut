@@ -53,6 +53,23 @@ private:
 			std::vector<ID> ids;
 		};
 
+		struct Generic {
+			AST::SymbolID name;
+
+			struct TraitConstraint {
+				AST::SymbolID   name;
+				std::vector<ID> arguments;
+			};
+
+			struct TypeConstraint {
+				ID type;
+			};
+
+			std::vector<TraitConstraint> declared_constraints;
+
+			std::vector<std::variant<TraitConstraint, TypeConstraint>> imposed_constraints;
+		};
+
 		struct MemberAccess {
 			ID              accessee;
 			std::vector<ID> possible_types;
@@ -92,6 +109,8 @@ private:
 			Function,
 			/// The exact same as any of the specified candidates.
 			SameAs,
+			/// A potentially constrained generic type.
+			Generic,
 			/// Accessing a member field of a type.
 			MemberAccess,
 			/// A named type which is not yet known (up to name resolution).
@@ -122,6 +141,7 @@ private:
 			std::monostate,          // Module
 			Function,                // Function
 			SameAs,                  // SameAs
+			Generic,                 // Generic
 			MemberAccess,            // MemberAccess
 			AST::Identifier const*,  // NamedPartial
 			AST::SymbolID,           // NamedKnown
@@ -162,6 +182,10 @@ private:
 
 		inline static TypeInfo make_same_as(std::vector<ID>&& ids) {
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::SameAs>, SameAs {std::move(ids)}});
+		}
+
+		inline static TypeInfo make_generic(Generic&& generic) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Generic>, std::move(generic)});
 		}
 
 		inline static TypeInfo make_member_access(ID accessee, std::string const& field) {
@@ -226,6 +250,8 @@ private:
 
 		inline bool is_same_as() const { return kind() == Kind::SameAs; }
 
+		inline bool is_generic() const { return kind() == Kind::Generic; }
+
 		inline bool is_member_access() const { return kind() == Kind::MemberAccess; }
 
 		inline bool is_named_partial() const { return kind() == Kind::NamedPartial; }
@@ -253,6 +279,10 @@ private:
 		inline Function& get_function() { return std::get<(size_t) Kind::Function>(value); }
 
 		inline SameAs const& get_same_as() const { return std::get<(size_t) Kind::SameAs>(value); }
+
+		inline Generic const& get_generic() const { return std::get<(size_t) Kind::Generic>(value); }
+
+		inline Generic& get_generic() { return std::get<(size_t) Kind::Generic>(value); }
 
 		inline MemberAccess const& get_member_access() const { return std::get<(size_t) Kind::MemberAccess>(value); }
 
@@ -566,6 +596,14 @@ private:
 		TypeInfo::ID b,
 		TypeInfo::ID a_origin,
 		TypeInfo::ID b_origin,
+		FileContext::ID
+	);
+	/// Unifies a generic and another type.
+	void unify_generics(
+		TypeInfo::ID generic,
+		TypeInfo::ID other,
+		TypeInfo::ID generic_origin,
+		TypeInfo::ID other_origin,
 		FileContext::ID
 	);
 	/// Unifies a member access and another type.
