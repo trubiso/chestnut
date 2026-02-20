@@ -335,6 +335,7 @@ private:
 			AST::Module*,
 			AST::Function*,
 			AST::Struct*,
+			AST::Trait*,
 			IR::Module,
 			IR::Function,
 			IR::BuiltInFunction,
@@ -384,6 +385,8 @@ private:
 	void identify(AST::Module&, bool exported, FileContext::ID);
 	/// Identifies the struct with an ID.
 	void identify(AST::Struct&, bool exported, FileContext::ID);
+	/// Identifies the trait with an ID.
+	void identify(AST::Trait&, bool exported, FileContext::ID);
 	/// Identifies the function with an ID.
 	void identify(AST::Function&, bool exported, FileContext::ID);
 	/// Identifies all module items with an ID, but does not resolve aliases.

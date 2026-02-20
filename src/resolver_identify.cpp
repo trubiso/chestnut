@@ -27,7 +27,7 @@ void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file
 	                {}}
 	);
 	for (Spanned<AST::Module::Item>& item : module.body.items) {
-		// TODO: disallow duplicate module names
+		// TODO: disallow duplicate module (and trait?) names
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value))
 			identify(std::get<AST::Function>(value), std::get<bool>(item.value), file_id);
@@ -35,6 +35,8 @@ void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file
 			identify(std::get<AST::Module>(value), std::get<bool>(item.value), file_id);
 		else if (std::holds_alternative<AST::Struct>(value))
 			identify(std::get<AST::Struct>(value), std::get<bool>(item.value), file_id);
+		else if (std::holds_alternative<AST::Trait>(value))
+			identify(std::get<AST::Trait>(value), std::get<bool>(item.value), file_id);
 	}
 }
 
@@ -47,6 +49,22 @@ void Resolver::identify(AST::Struct& struct_, bool exported, FileContext::ID fil
 	                struct_.name.value.name(),
 	                &struct_,
 	                // TODO: register struct type
+	                0,
+	                false,
+	                exported,
+	                {}}
+	);
+}
+
+void Resolver::identify(AST::Trait& trait, bool exported, FileContext::ID file_id) {
+	identify(trait.name.value);
+	symbol_pool_.push_back(
+		Symbol {trait.name.value.id.value()[0],
+	                file_id,
+	                trait.name.span,
+	                trait.name.value.name(),
+	                &trait,
+	                // TODO: register trait type?
 	                0,
 	                false,
 	                exported,
