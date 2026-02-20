@@ -7,7 +7,7 @@ std::ostream& operator<<(std::ostream& os, GenericDeclaration const& generic_dec
 	size_t count = 0;
 	for (auto const& generic : generic_declaration.generics) {
 		if (generic.anonymous) os << "anon ";
-		os << generic.name.value.name();
+		os << generic.name.value;
 		if (!generic.constraints.empty()) {
 			size_t subcount = 0;
 			os << ": ";

@@ -509,8 +509,10 @@ private:
 	void resolve(AST::Statement::Return&, Scope&, FileContext::ID);
 	void resolve(Spanned<AST::Statement>&, Scope&, FileContext::ID);
 	void resolve(AST::Scope&, Scope, FileContext::ID);
+	void resolve(AST::GenericDeclaration&, Scope&, FileContext::ID);
 	void resolve(AST::Function&, Scope, FileContext::ID);
-	void resolve(AST::Struct&, Scope const&, FileContext::ID);
+	void resolve(AST::Struct&, Scope, FileContext::ID);
+	void resolve(AST::Trait&, Scope, FileContext::ID);
 	void resolve(AST::Module&, Scope, FileContext::ID);
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();

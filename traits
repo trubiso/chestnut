@@ -21,12 +21,12 @@ func want_to_do_everything<T: CanDoWhatever + CanDoSomethingElse>(x: T) {
 	return do_something_else(x);
 }
 
-struct Struct<T> {}
-struct Struct<T: CanDoSomething> {}
-struct Struct<T: CanDoSomethingElse> {}
+struct Struct<T> { x: T }
+struct Struct<T: CanDoSomething> { x: T }
+struct Struct<T: CanDoSomethingElse> { x: T }
 
 func use_ambiguous_structs() {
 	const x: Struct<uint32>;
-	const y = Struct<char> {};
+	const y = Struct<char> { x: 'u' };
 	const z: Struct<uint8>;
 }

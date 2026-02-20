@@ -16,6 +16,7 @@ struct GenericDeclaration {
 	struct Generic {
 		Spanned<Identifier> name;  // unqualified
 
+		// TODO: support generics within constraints
 		std::vector<Spanned<Identifier>> constraints;
 
 		bool anonymous;

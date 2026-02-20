@@ -355,7 +355,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 
 		// now, we check if all given fields exist in the struct and we resolve all of them, regardless of
 		// whether they exist or not
-		// TODO: this may be more than one type!!! we cannot really check this in here :P
+		// TODO: this may be more than one type!!! we cannot really check this in here :P mby in lowering
 		AST::Struct* struct_
 			= std::get<AST::Struct*>(symbol_pool_.at(struct_literal.name.value.id.value().at(0)).item);
 		for (auto& field : struct_literal.fields) {
@@ -483,31 +483,99 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 	for (auto& statement : ast_scope) { resolve(statement, resolver_scope, file_id); }
 }
 
+void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scope, FileContext::ID file_id) {
+	for (auto& generic : generic_declaration.generics) {
+		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
+		for (auto& name : generic.constraints) {
+			resolve(name, scope, file_id);
+			if (!name.value.id.has_value()) {
+				std::cout << "error: no such trait: " << name.value << std::endl;
+				std::exit(1);
+			}
+			// TODO: deal with this possibility possibly
+			if (name.value.id.value().size() != 1) {
+				std::cout << "todo: ambiguous trait: " << name.value << std::endl;
+				std::exit(1);
+			}
+			if (!std::holds_alternative<AST::Trait*>(get_single_symbol(name.value).item)) {
+				std::cout
+					<< "todo: diagnostic for non-trait specified in trait bound: "
+					<< name.value
+					<< std::endl;
+				std::exit(1);
+			}
+			declared_constraints.emplace_back(name.value.id.value()[0]);
+		}
+		identify(generic.name.value);
+		symbol_pool_.push_back(
+			Symbol {generic.name.value.id.value()[0],
+		                file_id,
+		                generic.name.span,
+		                generic.name.value.name(),
+		                {},
+		                register_type(
+					TypeInfo::make_generic(
+						TypeInfo::Generic {
+							generic.name.value.id.value()[0],
+							std::move(declared_constraints),
+							{}
+						}
+					),
+					generic.name.span,
+					file_id,
+					generic.name.value.id.value()[0]
+				),
+		                false,
+		                false,
+		                {}}
+		);
+		scope.symbols.insert_or_assign(generic.name.value.name(), generic.name.value.id.value());
+	}
+}
+
 void Resolver::resolve(AST::Function& function, Scope scope, FileContext::ID file_id) {
 	Scope child_scope {&scope, {}};
+	if (function.generic_declaration.has_value())
+		resolve(function.generic_declaration.value(), child_scope, file_id);
 	for (auto& argument : function.arguments) {
-		resolve(argument.type, scope, file_id);
+		resolve(argument.type, child_scope, file_id);
 		// intentionally replace (shadowing)
 		child_scope.symbols.insert_or_assign(argument.name.value.name(), argument.name.value.id.value());
 	}
-	resolve(function.return_type, scope, file_id);
+	resolve(function.return_type, child_scope, file_id);
 	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
 }
 
-void Resolver::resolve(AST::Struct& struct_, Scope const& scope, FileContext::ID file_id) {
+void Resolver::resolve(AST::Struct& struct_, Scope scope, FileContext::ID file_id) {
+	Scope child_scope {&scope, {}};
+	if (struct_.generic_declaration.has_value()) resolve(struct_.generic_declaration.value(), child_scope, file_id);
 	// as of now, we just resolve all fields within the struct
-	for (auto& field : struct_.fields) {
-		resolve(field.type, scope, file_id);
-		// detect immediately recursive types (we allow pointers though, for now)
-		if (field.type.value.is_atom()
-		    && field.type.value.get_atom().is_named()
-		    && field.type.value.get_atom().get_named().name.value.id.value().size() == 1
-		    && field.type.value.get_atom().get_named().name.value.id.value().at(0)
-		               == struct_.name.value.id.value().at(0)) {
-			// TODO: move this somewhere else, probably during an IR pass, because we can't really detect
-			// mutually recursive types this way, and we don't know how the other type will use this, etc
-			std::cout << "recursive type detected !!" << std::endl;
-			std::exit(0);
+	for (auto& field : struct_.fields) { resolve(field.type, child_scope, file_id); }
+}
+
+void Resolver::resolve(AST::Trait& trait, Scope scope, FileContext::ID file_id) {
+	Scope child_scope {&scope, {}};
+	if (trait.generic_declaration.has_value()) resolve(trait.generic_declaration.value(), child_scope, file_id);
+	for (auto& constraint : trait.constraints) {
+		// TODO: resolve existential requirements or remove them
+		if (std::holds_alternative<AST::Trait::Has>(constraint)) continue;
+		auto& named = std::get<AST::Trait::Named>(constraint);
+		resolve(named.name, scope, file_id);
+		if (!named.name.value.id.has_value()) {
+			std::cout << "error: no such trait: " << named.name.value << std::endl;
+			std::exit(1);
+		}
+		// TODO: deal with this possibility possibly
+		if (named.name.value.id.value().size() != 1) {
+			std::cout << "todo: ambiguous trait: " << named.name.value << std::endl;
+			std::exit(1);
+		}
+		if (!std::holds_alternative<AST::Trait*>(get_single_symbol(named.name.value).item)) {
+			std::cout
+				<< "todo: diagnostic for non-trait specified in trait bound: "
+				<< named.name.value
+				<< std::endl;
+			std::exit(1);
 		}
 	}
 }
@@ -600,6 +668,13 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 				child_scope.symbols.at(struct_.name.value.name())
 					.push_back(struct_.name.value.id.value()[0]);
 			else child_scope.symbols.emplace(struct_.name.value.name(), struct_.name.value.id.value());
+		} else if (std::holds_alternative<AST::Trait>(value)) {
+			auto& trait = std::get<AST::Trait>(value);
+			// TODO: is it sound to have several traits under the same name?
+			if (child_scope.symbols.contains(trait.name.value.name()))
+				child_scope.symbols.at(trait.name.value.name())
+					.push_back(trait.name.value.id.value()[0]);
+			else child_scope.symbols.emplace(trait.name.value.name(), trait.name.value.id.value());
 		}
 	}
 
@@ -612,6 +687,8 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			resolve(std::get<AST::Module>(value), child_scope, file_id);
 		else if (std::holds_alternative<AST::Struct>(value))
 			resolve(std::get<AST::Struct>(value), child_scope, file_id);
+		else if (std::holds_alternative<AST::Trait>(value))
+			resolve(std::get<AST::Trait>(value), child_scope, file_id);
 	}
 }
 
