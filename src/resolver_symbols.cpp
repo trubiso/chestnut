@@ -265,7 +265,13 @@ void Resolver::resolve(
 void Resolver::resolve(AST::Type::Atom& atom, Span span, Scope const& scope, FileContext::ID file_id) {
 	if (!atom.is_named()) return;
 	resolve(atom.get_named().name, scope, file_id);
-	// TODO: prune non-type items
+	if (atom.get_named().generic_list.has_value()) {
+		for (auto& generic : atom.get_named().generic_list.value().ordered) resolve(generic, scope, file_id);
+		for (auto& generic : atom.get_named().generic_list.value().labeled)
+			resolve(std::get<1>(generic), scope, file_id);
+	}
+	// TODO: prune non-type items. we will need a flag on symbols which correspond to generics, then, to narrow
+	// types down to AST::Struct* or Generic{} or whatever
 }
 
 void Resolver::resolve(AST::Type& type, Span span, Scope const& scope, FileContext::ID file_id) {
@@ -311,6 +317,11 @@ void Resolver::resolve(
 
 void Resolver::resolve(AST::Expression::FunctionCall& function_call, Scope const& scope, FileContext::ID file_id) {
 	resolve(*function_call.callee, scope, file_id);
+	if (function_call.generic_list.has_value()) {
+		for (auto& generic : function_call.generic_list.value().ordered) resolve(generic, scope, file_id);
+		for (auto& generic : function_call.generic_list.value().labeled)
+			resolve(std::get<1>(generic), scope, file_id);
+	}
 	for (auto& argument : function_call.arguments.ordered) { resolve(argument, scope, file_id); }
 	for (auto& argument : function_call.arguments.labeled) { resolve(std::get<1>(argument), scope, file_id); }
 }
@@ -346,78 +357,21 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 
 		// we transfer the name to a type to resolve it and then back to maintain the ID
 		// in the future, we will have to ensure that this is a struct, but for now resolve already does that
-		// TODO: deal with generics
 		AST::Type temp_type = AST::Type::make_atom(
-			AST::Type::Atom::make_named(AST::Type::Atom::Named {std::move(struct_literal.name)})
+			AST::Type::Atom::make_named(
+				AST::Type::Atom::Named {
+					std::move(struct_literal.name),
+					std::move(struct_literal.generic_list)
+				}
+			)
 		);
 		resolve(temp_type, temp_type.get_atom().get_named().name.span, scope, file_id);
-		struct_literal.name = std::move(temp_type.get_atom().get_named().name);
+		struct_literal.name         = std::move(temp_type.get_atom().get_named().name);
+		struct_literal.generic_list = std::move(temp_type.get_atom().get_named().generic_list);
 
 		// now, we check if all given fields exist in the struct and we resolve all of them, regardless of
 		// whether they exist or not
-		// TODO: this may be more than one type!!! we cannot really check this in here :P mby in lowering
-		AST::Struct* struct_
-			= std::get<AST::Struct*>(symbol_pool_.at(struct_literal.name.value.id.value().at(0)).item);
-		for (auto& field : struct_literal.fields) {
-			// TODO: maybe in the future get closest field via levenshtein
-			resolve(*field.value, scope, file_id);
-			if (std::find_if(
-				    struct_->fields.cbegin(),
-				    struct_->fields.cend(),
-				    [&field](AST::Struct::Field const& given_field) {
-					    return given_field.name.value == field.name.value;
-				    }
-			    )
-			    == struct_->fields.cend()) {
-				std::stringstream subtitle_stream {};
-				subtitle_stream
-					<< "field `"
-					<< field.name.value
-					<< "` does not exist in struct `"
-					<< struct_->name.value.name()
-					<< "`";
-				parsed_files.at(file_id).diagnostics.push_back(
-					Diagnostic::error(
-						"nonexistent struct field",
-						subtitle_stream.str(),
-						{Diagnostic::Sample(
-							get_context(file_id),
-							field.name.span,
-							OutFmt::Color::Red
-						)}
-					)
-				);
-				struct_literal.valid = false;
-			}
-		}
-
-		// finally, we check whether any field is missing
-		for (auto const& field : struct_->fields) {
-			if (std::find_if(
-				    struct_literal.fields.cbegin(),
-				    struct_literal.fields.cend(),
-				    [&field](AST::Expression::Atom::StructLiteral::Field const& given_field) {
-					    return field.name.value == given_field.name.value;
-				    }
-			    )
-			    == struct_literal.fields.cend()) {
-				std::stringstream subtitle_stream {};
-				subtitle_stream
-					<< "field `"
-					<< field.name.value
-					<< "` exists in struct `"
-					<< struct_->name.value.name()
-					<< "`, but it was not given a value in the struct literal";
-				parsed_files.at(file_id).diagnostics.push_back(
-					Diagnostic::error(
-						"missing struct field",
-						subtitle_stream.str(),
-						{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
-					)
-				);
-				struct_literal.valid = false;
-			}
-		}
+		for (auto& field : struct_literal.fields) { resolve(*field.value, scope, file_id); }
 	}
 	// the rest of them do not need any kind of resolution yet
 	return;

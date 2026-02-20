@@ -411,6 +411,8 @@ IR::Value::Atom Resolver::lower_atom(
 	fields.reserve(struct_literal.fields.size());
 	IR::Struct const& struct_
 		= std::get<IR::Struct>(symbol_pool_.at(struct_literal.name.value.id.value().at(0)).item);
+	// TODO: exhaustiveness check (we must check that every field exists on the struct, and that every struct field
+	// exists on the literal)
 	for (auto const& field : struct_.fields) {
 		auto corresponding = std::find_if(
 			struct_literal.fields.cbegin(),
