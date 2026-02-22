@@ -673,6 +673,8 @@ private:
 	/// Tries to decide an undecided member access. Returns whether it was successfully decided (that
 	/// includes the case in which it is determined that the field does not exist!)
 	bool try_decide(TypeInfo::ID);
+	/// Tries to decide a named type.
+	bool try_decide_named_type(TypeInfo::ID);
 
 	TypeInfo::ID infer(AST::Expression::Atom::StructLiteral&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::Atom&, Span, FileContext::ID);

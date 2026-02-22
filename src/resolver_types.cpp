@@ -1443,6 +1443,77 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	return true;
 }
 
+bool Resolver::try_decide_named_type(TypeInfo::ID id) {
+	TypeInfo::Named& named = type_pool_.at(id).get_named();
+	assert(std::holds_alternative<std::vector<AST::SymbolID>>(named.name));
+
+	std::vector<AST::SymbolID>             new_candidates {};
+	std::vector<std::vector<TypeInfo::ID>> new_candidates_generics {};
+	for (AST::SymbolID candidate : std::get<std::vector<AST::SymbolID>>(named.name)) {
+		// we must determine the suitability of each candidate
+		AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(candidate).item);
+		if (named.generics.empty()) {
+			// if we don't have any generics, the struct must have no generics to be a suitable candidate
+			if (struct_->generic_declaration.has_value()
+			    && !struct_->generic_declaration.value().generics.empty())
+				continue;
+		} else {
+			// if we do have generics, the struct must have the same quantity
+			if (!struct_->generic_declaration.has_value()) continue;
+			auto const& generics = struct_->generic_declaration.value().generics;
+			if (generics.size() != named.generics.size()) continue;
+
+			// TODO: somehow do the per-function signature thing that we do for overloads here, so we don't
+			// have to keep matching them this way and we can support generics in unify. maybe we have an
+			// initial state with just the generics and AST::Identifier* and then we turn it into a vector
+			// of AST::SymbolID and IDs and a vector of rejections
+
+			std::vector<TypeInfo::ID> named_generics {};
+			named_generics.reserve(named.generics.size());
+			// first push ordered
+			for (auto const& [label, generic] : named.generics) {
+				if (!label.has_value()) named_generics.push_back(generic);
+			}
+			// then labeled
+			for (size_t i = named_generics.size(); i < generics.size(); ++i) {
+				auto const& generic       = generics.at(i);
+				auto        corresponding = std::find_if(
+                                        named.generics.cbegin(),
+                                        named.generics.cend(),
+                                        [&generic](auto const& data) {
+                                                if (!std::get<0>(data).has_value()) return false;
+                                                return std::get<0>(data).value() == generic.name.value.name();
+                                        }
+                                );
+				if (corresponding == named.generics.cend()) continue;
+				named_generics.push_back(std::get<1>(*corresponding));
+			}
+
+			// then check unifiability
+			// TODO: for this, we need the struct's type to be instantiable
+
+			// if all passes, we push
+			new_candidates_generics.push_back(std::move(named_generics));
+		}
+	}
+
+	named.name = std::move(new_candidates);
+
+	// if we still have more than one candidate, we fail to decide.
+	if (std::get<std::vector<AST::SymbolID>>(named.name).size() > 1) return false;
+
+	// if we have no candidates, we succeed but this becomes a bottom
+	if (std::get<std::vector<AST::SymbolID>>(named.name).empty()) {
+		// TODO: diagnostic
+		type_pool_.at(id) = TypeInfo::make_bottom();
+		return true;
+	}
+
+	// if we have a single candidate, we unify!
+	// TODO: unify with struct instantiation
+	return true;
+}
+
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span, FileContext::ID file_id) {
 	// TODO: infer struct literals
@@ -1565,6 +1636,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			{Diagnostic::Sample::Label(span, "function call", OutFmt::Color::Gray)}
 		)
 	);
+	// TODO: generic count, generic labels
 	for (TypeInfo::ID callable_id : callable) {
 		assert(type_pool_.at(callable_id).is_function());
 		auto const& function_arguments     = type_pool_.at(callable_id).get_function().arguments;
@@ -1918,6 +1990,7 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 
 bool Resolver::try_decide_remaining_types() {
 	// PERF: use std::copy_if
+	// TODO: check whether any undecided named types are left as well
 	while (!undecided_overloads.empty() || !undecided_member_accesses.empty()) {
 		// we first try to decide the overloads
 		std::vector<UndecidedOverload> remaining_overloads {};
@@ -1939,8 +2012,18 @@ bool Resolver::try_decide_remaining_types() {
 
 		bool member_accesses_succeeded = old_size != undecided_member_accesses.size();
 
+		// then we try to decide the named types
+		bool named_types_succeeded = false;
+		for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
+			TypeInfo const& type = type_pool_.at(id);
+			if (!type.is_named()) continue;
+			int decided = type.is_decided(type_pool_);
+			if (decided != 0) continue;
+			if (try_decide_named_type(id)) named_types_succeeded = true;
+		}
+
 		// finally, we quit if we made no progress
-		if (!overloads_succeeded && !member_accesses_succeeded) break;
+		if (!overloads_succeeded && !member_accesses_succeeded && !named_types_succeeded) break;
 	}
 
 	// only if both arrays are empty we have finished deciding the program
@@ -1954,6 +2037,7 @@ void Resolver::decide_remaining_types() {
 	// we will try a more destructive approach now: we will fill in all partial numeric types and try to decide.
 	// this doesn't really have an effect if it doesn't work, because the lowering phase would have done this
 	// anyway!
+	// TODO: abstract this functionality and do it for all partial numeric types
 	bool changes_made = false;
 	for (UndecidedOverload& undecided_overload : undecided_overloads) {
 		for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
@@ -2077,6 +2161,8 @@ void Resolver::decide_remaining_types() {
 			);
 		}
 	}
+
+	// TODO: diagnostic for impossible named types
 }
 
 void Resolver::infer_types() {
