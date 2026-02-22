@@ -132,6 +132,36 @@ Resolver::TypeInfo::get_single_underlying(std::vector<TypeInfo> const& pool) con
 	return this;
 }
 
+int Resolver::TypeInfo::is_decided(std::vector<TypeInfo> const& pool) const {
+	if (is_named()) {
+		size_t possibilities = std::get<std::vector<AST::SymbolID>>(get_named().name).size();
+		// if there is more than one possibility, this is to be determined
+		if (possibilities > 1) return 0;
+		// if there is no possibility, this is impossible
+		if (possibilities < 1) return -1;
+		for (auto const& [label, generic] : get_named().generics) {
+			int decided = pool.at(generic).is_decided(pool);
+			// if any generic is not decided, so is this named type
+			if (decided != 1) return decided;
+		}
+		// if all generics are decided, we are decided
+		return 1;
+	}
+
+	if (is_same_as()) {
+		auto const& ids = get_same_as().ids;
+		// if there is more than one possibility, this is to be determined
+		if (ids.size() > 1) return 0;
+		// if there is no possibility, this is impossible
+		if (ids.size() < 1) return -1;
+		// if there is a single possibility, we check it
+		return pool.at(ids.at(0)).is_decided(pool);
+	}
+
+	// any other type is decided
+	return 1;
+}
+
 void Resolver::debug_print_type(TypeInfo::ID id) const {
 	std::cout << "$" << id << " ";
 	debug_print_type(type_pool_.at(id));
@@ -747,18 +777,27 @@ void Resolver::unify_named(
 		return;
 	}
 
-	// TODO: unify
-	/*
-	AST::SymbolID a = type_pool_.at(named).get_named_known(), b = type_pool_.at(other).get_named_known();
+	auto &a = type_pool_.at(named).get_named(), &b = type_pool_.at(other).get_named();
 
-	// ensure they are actually the same named type
-	if (a != b) {
+	auto &a_possibilities = std::get<std::vector<AST::SymbolID>>(a.name),
+	     &b_possibilities = std::get<std::vector<AST::SymbolID>>(b.name);
+
+	// we must create a new possibility vector with only the common possibilities
+	std::vector<AST::SymbolID> common_possibilities {};
+	for (AST::SymbolID possibility : a_possibilities) {
+		if (std::find(b_possibilities.cbegin(), b_possibilities.cend(), possibility) != b_possibilities.cend())
+			common_possibilities.push_back(possibility);
+	}
+
+	// if there are no common possibilities, this already failed :P
+	if (common_possibilities.empty()) {
 		std::stringstream subtitle_stream {};
 		subtitle_stream
-			<< "expected both types to be "
+			<< "types "
 			<< get_type_name(named)
-			<< "; got "
-			<< get_type_name(other);
+			<< " and "
+			<< get_type_name(other)
+			<< " are incompatible (incompatible base type)";
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"type mismatch",
@@ -769,7 +808,45 @@ void Resolver::unify_named(
 		);
 		return;
 	}
-	*/
+
+	// now, we must check generics
+	if (a.generics.size() != b.generics.size()) {
+		std::stringstream subtitle_stream {};
+		subtitle_stream
+			<< "types "
+			<< get_type_name(named)
+			<< " and "
+			<< get_type_name(other)
+			<< " are incompatible (incompatible generic count)";
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				subtitle_stream.str(),
+				{get_type_sample(named_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
+			)
+		);
+		return;
+	}
+
+	// TODO: suppport named generics
+	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	generics.reserve(a.generics.size());
+
+	for (size_t i = 0; i < a.generics.size(); ++i) {
+		auto const& [a_label, a_generic] = a.generics.at(i);
+		auto const& [b_label, b_generic] = b.generics.at(i);
+		if (a_label.has_value() || b_label.has_value()) {
+			std::cout << "todo: named generics" << std::endl;
+			std::exit(0);
+		}
+		unify(a_generic, b_generic, file_id);
+		generics.emplace_back(std::nullopt, a_generic);
+	}
+
+	TypeInfo common_type = TypeInfo::make_named(std::move(common_possibilities), std::move(generics));
+	type_pool_.at(named) = common_type;
+	type_pool_.at(other) = TypeInfo::make_same_as(named);
 }
 
 void Resolver::unify(
@@ -1057,13 +1134,39 @@ bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other
 bool Resolver::can_unify_named(TypeInfo const& named, TypeInfo const& other) const {
 	// ensure they're both named types
 	assert(named.is_named());
-	if (!other.is_named()) { return false; }
+	if (!other.is_named()) return false;
 
-	// TODO: can unify
-	/*
-	// ensure they are actually the same named type
-	return named.get_named_known() == other.get_named_known();
-	*/
+	auto const &a = named.get_named(), &b = other.get_named();
+
+	auto const &a_possibilities = std::get<std::vector<AST::SymbolID>>(a.name),
+		   &b_possibilities = std::get<std::vector<AST::SymbolID>>(b.name);
+
+	// ensure they have common possibilities
+	bool common_possibilities = false;
+	for (AST::SymbolID possibility : a_possibilities)
+		if (std::find(b_possibilities.cbegin(), b_possibilities.cend(), possibility)
+		    != b_possibilities.cend()) {
+			common_possibilities = true;
+			break;
+		}
+	if (!common_possibilities) return false;
+
+	// ensure they have the same amount of generics
+	if (a.generics.size() != b.generics.size()) return false;
+
+	// ensure the generics are unifiable
+	// TODO: suppport named generics
+	for (size_t i = 0; i < a.generics.size(); ++i) {
+		auto const& [a_label, a_generic] = a.generics.at(i);
+		auto const& [b_label, b_generic] = b.generics.at(i);
+		if (a_label.has_value() || b_label.has_value()) {
+			std::cout << "todo: named generics" << std::endl;
+			std::exit(0);
+		}
+		if (!can_unify(a_generic, b_generic)) return false;
+	}
+
+	return true;
 }
 
 bool Resolver::can_unify(TypeInfo::ID a, TypeInfo::ID b) const {
@@ -1274,14 +1377,22 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	TypeInfo const& underlying = *maybe_underlying.value();
 	if (!underlying.is_named()) return false;
 
-	// this member access will 100% be resolved now! :D
-	// TODO: no it won't
-	std::vector<AST::SymbolID> type_name_ids = std::get<std::vector<AST::SymbolID>>(underlying.get_named().name);
-	if (type_name_ids.size() > 1) return false;
-	if (type_name_ids.size() < 1) {
+	// check that our named type is decided
+	int decided = underlying.is_decided(type_pool_);
+	if (decided == -1) {
+		// if it is impossible, we might have thrown a diagnostic?
+		// TODO: have we?
+		std::cout << "undecided type (just in case a diagnostic was not thrown): ";
+		debug_print_type(undecided_member_access);
+		std::cout << std::endl;
 		return true;
+	} else if (decided == 1) {
+		// if it is to be determined, we must wait
+		return false;
 	}
-	AST::SymbolID type_name_id = type_name_ids.at(0);
+	// if it is decided, the base is decided
+	// this member access will 100% be resolved now! :D
+	AST::SymbolID type_name_id = std::get<std::vector<AST::SymbolID>>(underlying.get_named().name).at(0);
 
 	// we don't have any other user type as of now :P
 	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_name_id).item);

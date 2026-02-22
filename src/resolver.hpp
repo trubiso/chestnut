@@ -320,6 +320,9 @@ private:
 		bool get_pointer_mutable(std::vector<TypeInfo> const&) const;
 		/// Returns a single TypeInfo after traversing all SameAs references, if they all point to a single type.
 		std::optional<TypeInfo const*> get_single_underlying(std::vector<TypeInfo> const&) const;
+		/// Returns 1 if this named type is decided (1 for all other kinds of types), -1 if it is impossible and
+		/// 0 if it is still to be determined. Assumes all AST::Identifier* have been pruned.
+		int is_decided(std::vector<TypeInfo> const&) const;
 	};
 
 	struct Symbol {
