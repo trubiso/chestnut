@@ -25,8 +25,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
 	case TypeInfo::Kind::MemberAccess:
-	case TypeInfo::Kind::NamedPartial:
-	case TypeInfo::Kind::NamedKnown:
+	case TypeInfo::Kind::Named:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::PartialInteger: break;
@@ -77,8 +76,10 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.is_named_known()) {
-		return IR::Type::make_atom(IR::Type::Atom::make_named(type.get_named_known()));
+	} else if (type.is_named()) {
+		// TODO: IR named types with generic arguments
+		// TODO: diagnostic if it wasn't fully resolved
+		// return IR::Type::make_atom(IR::Type::Atom::make_named(type.get_named()));
 	} else if (type.is_pointer()) {
 		return IR::Type::make_pointer(
 			IR::Type::Pointer {

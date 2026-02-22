@@ -76,6 +76,11 @@ private:
 			std::string     field;
 		};
 
+		struct Named {
+			std::variant<std::vector<AST::SymbolID>, AST::Identifier const*> name;
+			std::vector<std::tuple<std::optional<std::string>, ID>>          generics;
+		};
+
 		struct Pointer {
 			ID   pointee;
 			bool mutable_;
@@ -113,10 +118,8 @@ private:
 			Generic,
 			/// Accessing a member field of a type.
 			MemberAccess,
-			/// A named type which is not yet known (up to name resolution).
-			NamedPartial,
-			/// A named type resolved by name resolution.
-			NamedKnown,
+			/// A named type with potential generics.
+			Named,
 			/// A pointer type.
 			Pointer,
 			/// Known to be the built-in type 'void'.
@@ -143,8 +146,7 @@ private:
 			SameAs,                  // SameAs
 			Generic,                 // Generic
 			MemberAccess,            // MemberAccess
-			AST::Identifier const*,  // NamedPartial
-			AST::SymbolID,           // NamedKnown
+			Named,                   // Named
 			Pointer,                 // Pointer
 			std::monostate,          // KnownVoid
 			std::monostate,          // KnownChar
@@ -194,12 +196,12 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named_partial(AST::Identifier const* identifier) {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::NamedPartial>, identifier});
+		inline static TypeInfo make_named(AST::Identifier const* name, std::vector<std::tuple<std::optional<std::string>, ID>>&& generics = {}) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{name, std::move(generics)}});
 		}
 
-		inline static TypeInfo make_named_known(AST::SymbolID id) {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::NamedKnown>, id});
+		inline static TypeInfo make_named(std::vector<AST::SymbolID> name, std::vector<std::tuple<std::optional<std::string>, ID>>&& generics = {}) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{std::move(name), std::move(generics)}});
 		}
 		
 		inline static TypeInfo make_pointer(Pointer&& pointer) {
@@ -254,9 +256,7 @@ private:
 
 		inline bool is_member_access() const { return kind() == Kind::MemberAccess; }
 
-		inline bool is_named_partial() const { return kind() == Kind::NamedPartial; }
-
-		inline bool is_named_known() const { return kind() == Kind::NamedKnown; }
+		inline bool is_named() const { return kind() == Kind::Named; }
 
 		inline bool is_pointer() const { return kind() == Kind::Pointer; }
 
@@ -288,9 +288,9 @@ private:
 
 		inline MemberAccess& get_member_access() { return std::get<(size_t) Kind::MemberAccess>(value); }
 
-		inline AST::Identifier const* get_named_partial() const { return std::get<(size_t) Kind::NamedPartial>(value); }
+		inline Named const& get_named() const { return std::get<(size_t) Kind::Named>(value); }
 
-		inline AST::SymbolID get_named_known() const { return std::get<(size_t) Kind::NamedKnown>(value); }
+		inline Named& get_named() { return std::get<(size_t) Kind::Named>(value); }
 		
 		inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
 		
@@ -307,8 +307,6 @@ private:
 		}
 
 		inline PartialInteger& get_partial_integer() { return std::get<(size_t) Kind::PartialInteger>(value); }
-
-		static TypeInfo from_type(AST::Type::Atom const&, bool partial = true);
 
 		/// Returns whether this type pertains to something which could theoretically be callable.
 		bool is_callable(std::vector<TypeInfo> const&) const;
@@ -517,7 +515,7 @@ private:
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();
 
-	/// Turns all named partial types into named known types or bottoms.
+	/// Turns all named types which point to identifiers into named types which hold their own IDs.
 	void prune_named_partial_types();
 
 	// === TYPES ===
@@ -550,6 +548,7 @@ private:
 
 	std::vector<TypeInfo::ID> undecided_member_accesses {};
 
+	TypeInfo from_type(AST::Type::Atom const&, FileContext::ID, bool partial = true);
 	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID, bool partial = true);
 	TypeInfo from_type(AST::Type const&, FileContext::ID, bool partial = true);
 

@@ -652,12 +652,12 @@ void Resolver::resolve_identifiers() {
 
 void Resolver::prune_named_partial_types() {
 	for (TypeInfo& type : type_pool_)
-		if (type.is_named_partial()) {
+		if (type.is_named() && std::holds_alternative<AST::Identifier const*>(type.get_named().name)) {
+			AST::Identifier const* identifier = std::get<AST::Identifier const*>(type.get_named().name);
 			// if we did not manage to resolve, we make a bottom
-			if (!type.get_named_partial()->id.has_value()
-			    || type.get_named_partial()->id.value().size() != 1)
+			if (!identifier->id.has_value() || identifier->id.value().size() < 1)
 				type = TypeInfo::make_bottom();
-			// if we managed to resolve, we make a named known
-			else type = TypeInfo::make_named_known(type.get_named_partial()->id.value().at(0));
+			// if we managed to resolve, we transfer IDs
+			else type.get_named().name = identifier->id.value();
 		}
 }

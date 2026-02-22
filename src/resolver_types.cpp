@@ -7,24 +7,46 @@
 #include <sstream>
 #include <variant>
 
-Resolver::TypeInfo Resolver::TypeInfo::from_type(AST::Type::Atom const& atom, bool partial) {
+Resolver::TypeInfo Resolver::from_type(AST::Type::Atom const& atom, FileContext::ID file_id, bool partial) {
 	switch (atom.kind()) {
-	case AST::Type::Atom::Kind::Float: return make_known_float(KnownFloat {atom.get_float().width});
-	case AST::Type::Atom::Kind::Void:  return make_known_void();
-	case AST::Type::Atom::Kind::Char:  return make_known_char();
-	case AST::Type::Atom::Kind::Bool:  return make_known_bool();
-	case AST::Type::Atom::Kind::Named:
-		return partial ? make_named_partial(&atom.get_named().name.value)
-		               : make_named_known(atom.get_named().name.value.id.value().at(0));
-	case AST::Type::Atom::Kind::Inferred: return make_unknown();
+	case AST::Type::Atom::Kind::Float:
+		return TypeInfo::make_known_float(TypeInfo::KnownFloat {atom.get_float().width});
+	case AST::Type::Atom::Kind::Void:     return TypeInfo::make_known_void();
+	case AST::Type::Atom::Kind::Char:     return TypeInfo::make_known_char();
+	case AST::Type::Atom::Kind::Bool:     return TypeInfo::make_known_bool();
+	case AST::Type::Atom::Kind::Named:    break;
+	case AST::Type::Atom::Kind::Inferred: return TypeInfo::make_unknown();
 	case AST::Type::Atom::Kind::Integer:  break;
+	}
+
+	if (atom.is_named()) {
+		auto const& named = atom.get_named();
+
+		// for named types, we need to extract the generic list first
+		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+		if (named.generic_list.has_value()) {
+			for (auto const& generic : named.generic_list.value().ordered) {
+				TypeInfo     type    = from_type(generic.value, file_id, partial);
+				TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
+				generics.emplace_back(std::nullopt, type_id);
+			}
+			for (auto const& [label, generic] : named.generic_list.value().labeled) {
+				TypeInfo     type    = from_type(generic.value, file_id, partial);
+				TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
+				generics.emplace_back(label.value, type_id);
+			}
+		}
+
+		// then point to the identifier if partial, get the ids otherwise
+		return partial ? TypeInfo::make_named(&named.name.value, std::move(generics))
+		               : TypeInfo::make_named(named.name.value.id.value(), std::move(generics));
 	}
 
 	// for integers, we need to determine how much information we know
 	AST::Type::Atom::Integer const& integer = atom.get_integer();
 	if (integer.width_type() != AST::Type::Atom::Integer::WidthType::Any)
-		return make_known_integer(KnownInteger {integer});
-	else return make_partial_integer(PartialInteger {integer, true});
+		return TypeInfo::make_known_integer(TypeInfo::KnownInteger {integer});
+	else return TypeInfo::make_partial_integer(TypeInfo::PartialInteger {integer, true});
 }
 
 Resolver::TypeInfo Resolver::from_type(AST::Type::Pointer const& pointer, FileContext::ID file_id, bool partial) {
@@ -35,7 +57,7 @@ Resolver::TypeInfo Resolver::from_type(AST::Type::Pointer const& pointer, FileCo
 
 Resolver::TypeInfo Resolver::from_type(AST::Type const& type, FileContext::ID file_id, bool partial) {
 	switch (type.kind()) {
-	case AST::Type::Kind::Atom:    return TypeInfo::from_type(type.get_atom(), partial);
+	case AST::Type::Kind::Atom:    return from_type(type.get_atom(), file_id, partial);
 	case AST::Type::Kind::Pointer: return from_type(type.get_pointer(), file_id, partial);
 	}
 	[[assume(false)]];
@@ -120,8 +142,6 @@ void Resolver::debug_print_type(TypeInfo type) const {
 	case TypeInfo::Kind::Unknown:        std::cout << "(unknown type)"; return;
 	case TypeInfo::Kind::Bottom:         std::cout << "(bottom)"; return;
 	case TypeInfo::Kind::Module:         std::cout << "(module)"; return;
-	case TypeInfo::Kind::NamedPartial:   std::cout << *type.get_named_partial(); return;
-	case TypeInfo::Kind::NamedKnown:     std::cout << symbol_pool_.at(type.get_named_known()).name; return;
 	case TypeInfo::Kind::KnownVoid:      std::cout << "void"; return;
 	case TypeInfo::Kind::KnownChar:      std::cout << "char"; return;
 	case TypeInfo::Kind::KnownBool:      std::cout << "bool"; return;
@@ -130,6 +150,7 @@ void Resolver::debug_print_type(TypeInfo type) const {
 	case TypeInfo::Kind::SameAs:
 	case TypeInfo::Kind::Generic:
 	case TypeInfo::Kind::MemberAccess:
+	case TypeInfo::Kind::Named:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::KnownFloat:
@@ -212,6 +233,34 @@ void Resolver::debug_print_type(TypeInfo type) const {
 			}
 			std::cout << ')';
 		}
+	} else if (type.is_named()) {
+		TypeInfo::Named const& named = type.get_named();
+
+		if (std::holds_alternative<std::vector<AST::SymbolID>>(named.name)) {
+			auto const& ids = std::get<std::vector<AST::SymbolID>>(named.name);
+			if (ids.size() == 1) {
+				std::cout << symbol_pool_.at(ids[0]).name;
+			} else {
+				std::cout << '(';
+				size_t count = 0;
+				for (AST::SymbolID id : ids) {
+					std::cout << symbol_pool_.at(id).name;
+					if (++count < ids.size()) std::cout << " | ";
+				}
+				std::cout << ')';
+			}
+		} else std::cout << *std::get<AST::Identifier const*>(named.name);
+
+		if (!named.generics.empty()) {
+			std::cout << '<';
+			size_t count = 0;
+			for (auto const& [label, id] : named.generics) {
+				if (label.has_value()) std::cout << label.value() << ": ";
+				debug_print_type(id);
+				if (++count < named.generics.size()) std::cout << ", ";
+			}
+			std::cout << '>';
+		}
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		std::cout << "(*" << (pointer.mutable_ ? "mut" : "const") << " ";
@@ -250,12 +299,11 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	case TypeInfo::Kind::SameAs:
 	case TypeInfo::Kind::Generic:
 	case TypeInfo::Kind::MemberAccess:
-	case TypeInfo::Kind::NamedKnown:
+	case TypeInfo::Kind::Named:
 	case TypeInfo::Kind::Pointer:
 	case TypeInfo::Kind::KnownInteger:
 	case TypeInfo::Kind::KnownFloat:
 	case TypeInfo::Kind::PartialInteger: break;
-	case TypeInfo::Kind::NamedPartial:   [[assume(false)]]; break;  // these should've been chewed out by now
 	}
 
 	std::stringstream output {};
@@ -300,8 +348,34 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	} else if (type.is_member_access()) {
 		TypeInfo::MemberAccess const& member_access = type.get_member_access();
 		output << get_type_name(member_access.accessee) << '.' << member_access.field;
-	} else if (type.is_named_known()) {
-		output << symbol_pool_.at(type.get_named_known()).name;
+	} else if (type.is_named()) {
+		TypeInfo::Named const& named = type.get_named();
+		// we shouldn't be calling this function pre-partial pruning
+		assert(std::holds_alternative<std::vector<AST::SymbolID>>(named.name));
+
+		auto const& ids = std::get<std::vector<AST::SymbolID>>(named.name);
+		if (ids.size() == 1) {
+			output << symbol_pool_.at(ids[0]).name;
+		} else {
+			output << '(';
+			size_t count = 0;
+			for (AST::SymbolID id : ids) {
+				output << symbol_pool_.at(id).name;
+				if (++count < ids.size()) output << " | ";
+			}
+			output << ')';
+		}
+
+		if (!named.generics.empty()) {
+			output << '<';
+			size_t count = 0;
+			for (auto const& [label, id] : named.generics) {
+				if (label.has_value()) output << label.value() << ": ";
+				output << get_type_name(id);
+				if (++count < named.generics.size()) output << ", ";
+			}
+			output << '>';
+		}
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		output << "*" << (pointer.mutable_ ? "mut" : "const") << " " << get_type_name(pointer.pointee);
@@ -654,8 +728,8 @@ void Resolver::unify_named(
 	TypeInfo::ID    other_origin,
 	FileContext::ID file_id
 ) {
-	assert(type_pool_.at(named).is_named_known());
-	if (!type_pool_.at(other).is_named_known()) {
+	assert(type_pool_.at(named).is_named());
+	if (!type_pool_.at(other).is_named()) {
 		std::stringstream subtitle_stream {};
 		subtitle_stream
 			<< "expected both types to be "
@@ -673,6 +747,8 @@ void Resolver::unify_named(
 		return;
 	}
 
+	// TODO: unify
+	/*
 	AST::SymbolID a = type_pool_.at(named).get_named_known(), b = type_pool_.at(other).get_named_known();
 
 	// ensure they are actually the same named type
@@ -693,6 +769,7 @@ void Resolver::unify_named(
 		);
 		return;
 	}
+	*/
 }
 
 void Resolver::unify(
@@ -736,8 +813,8 @@ void Resolver::unify(
 	if (b.is_member_access()) return unify_member_access(b_id, a_id, b_origin, a_origin, file_id);
 
 	// named types
-	if (a.is_named_known()) return unify_named(a_id, b_id, a_origin, b_origin, file_id);
-	if (b.is_named_known()) return unify_named(b_id, a_id, b_origin, a_origin, file_id);
+	if (a.is_named()) return unify_named(a_id, b_id, a_origin, b_origin, file_id);
+	if (b.is_named()) return unify_named(b_id, a_id, b_origin, a_origin, file_id);
 
 	// if any of them is a basic Known type, the other must be exactly the same
 	if (unify_basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, a_origin, b_origin, file_id)) return;
@@ -979,11 +1056,14 @@ bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other
 
 bool Resolver::can_unify_named(TypeInfo const& named, TypeInfo const& other) const {
 	// ensure they're both named types
-	assert(named.is_named_known());
-	if (!other.is_named_known()) { return false; }
+	assert(named.is_named());
+	if (!other.is_named()) { return false; }
 
+	// TODO: can unify
+	/*
 	// ensure they are actually the same named type
 	return named.get_named_known() == other.get_named_known();
+	*/
 }
 
 bool Resolver::can_unify(TypeInfo::ID a, TypeInfo::ID b) const {
@@ -1019,8 +1099,8 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	if (b.is_member_access()) return true;
 
 	// named types
-	if (a.is_named_known()) return can_unify_named(a, b);
-	if (b.is_named_known()) return can_unify_named(b, a);
+	if (a.is_named()) return can_unify_named(a, b);
+	if (b.is_named()) return can_unify_named(b, a);
 
 	// if any of them is a basic Known type, the other must be exactly the same
 	std::optional<bool> attempt;
@@ -1192,10 +1272,16 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 
 	// only named types can have fields as of right now
 	TypeInfo const& underlying = *maybe_underlying.value();
-	if (!underlying.is_named_known()) return false;
+	if (!underlying.is_named()) return false;
 
 	// this member access will 100% be resolved now! :D
-	AST::SymbolID type_name_id = underlying.get_named_known();
+	// TODO: no it won't
+	std::vector<AST::SymbolID> type_name_ids = std::get<std::vector<AST::SymbolID>>(underlying.get_named().name);
+	if (type_name_ids.size() > 1) return false;
+	if (type_name_ids.size() < 1) {
+		return true;
+	}
+	AST::SymbolID type_name_id = type_name_ids.at(0);
 
 	// we don't have any other user type as of now :P
 	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_name_id).item);
@@ -1248,9 +1334,11 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span, FileContext::ID file_id) {
+	// TODO: infer struct literals
+	/*
 	// the type is whichever struct is pointed to
 	AST::SymbolID type_symbol_id = struct_literal.name.value.id.value().at(0);
-	TypeInfo      type           = TypeInfo::make_named_known(type_symbol_id);
+	TypeInfo      type           = TypeInfo::make_named(type_symbol_id);
 	TypeInfo::ID  type_id        = register_type(std::move(type), span, file_id);
 
 	// now, for each field, we unify it with the struct field type
@@ -1281,6 +1369,7 @@ Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span,
 	}
 
 	return type_id;
+	*/
 }
 
 Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, FileContext::ID file_id) {
