@@ -351,6 +351,8 @@ private:
 		int is_decided(std::vector<TypeInfo> const&) const;
 	};
 
+	struct Generic {};
+
 	struct Symbol {
 		AST::SymbolID   id;
 		FileContext::ID file_id;
@@ -363,6 +365,7 @@ private:
 			AST::Function*,
 			AST::Struct*,
 			AST::Trait*,
+			Generic,  // this is just a marker!
 			IR::Module,
 			IR::Function,
 			IR::BuiltInFunction,

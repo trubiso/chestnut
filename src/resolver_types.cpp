@@ -16,7 +16,12 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Sp
 
 	// TODO: rejections list for diagnostic
 	for (AST::SymbolID candidate : candidate_ids) {
-		// TODO: support generic types too (some sort of generic marker)
+		if (std::holds_alternative<Generic>(symbol_pool_.at(candidate).item)) {
+			// generics cannot take in generics
+			if (!partial.ordered_generics.empty() || !partial.labeled_generics.empty()) continue;
+			// otherwise, we have a generic candidate
+			candidates.emplace_back(candidate, std::vector<TypeInfo::ID>{});
+		}
 		if (!std::holds_alternative<AST::Struct*>(symbol_pool_.at(candidate).item)) continue;
 		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate).item);
 
@@ -1222,6 +1227,7 @@ bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other
 bool Resolver::can_unify_named(TypeInfo const& named, TypeInfo const& other) const {
 	// ensure they're both named types
 	assert(named.is_named());
+	// FIXME: this breaks when it's a named type with a generic candidate
 	if (!other.is_named()) return false;
 
 	auto const &a = named.get_named(), &b = other.get_named();

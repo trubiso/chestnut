@@ -466,7 +466,7 @@ void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scop
 		                file_id,
 		                generic.name.span,
 		                generic.name.value.name(),
-		                {},
+		                Generic {},
 		                register_type(
 					TypeInfo::make_generic(
 						TypeInfo::Generic {
