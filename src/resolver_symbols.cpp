@@ -651,13 +651,14 @@ void Resolver::resolve_identifiers() {
 }
 
 void Resolver::prune_named_partial_types() {
-	for (TypeInfo& type : type_pool_)
-		if (type.is_named() && std::holds_alternative<AST::Identifier const*>(type.get_named().name)) {
-			AST::Identifier const* identifier = std::get<AST::Identifier const*>(type.get_named().name);
-			// if we did not manage to resolve, we make a bottom
-			if (!identifier->id.has_value() || identifier->id.value().size() < 1)
-				type = TypeInfo::make_bottom();
-			// if we managed to resolve, we transfer IDs
-			else type.get_named().name = identifier->id.value();
+	for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
+		TypeInfo& type = type_pool_.at(id);
+		if (type.is_named() && type.get_named().is_partial()) {
+			type = from_partial(
+				std::move(std::get<TypeInfo::Named::Partial>(type.get_named().value)),
+				get_type_span(id),
+				get_type_file_id(id)
+			);
 		}
+	}
 }

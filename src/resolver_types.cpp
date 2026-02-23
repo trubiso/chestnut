@@ -7,6 +7,92 @@
 #include <sstream>
 #include <variant>
 
+Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Span span, FileContext::ID file_id) {
+	// first, we ignore name resolver issues
+	if (!partial.name->id.has_value() || partial.name->id.value().empty()) return TypeInfo::make_bottom();
+
+	std::vector<AST::SymbolID>              candidate_ids = partial.name->id.value();
+	std::vector<TypeInfo::Named::Candidate> candidates {};
+
+	// TODO: rejections list for diagnostic
+	for (AST::SymbolID candidate : candidate_ids) {
+		// TODO: support generic types too (some sort of generic marker)
+		if (!std::holds_alternative<AST::Struct*>(symbol_pool_.at(candidate).item)) continue;
+		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate).item);
+
+		if (partial.ordered_generics.empty() && partial.labeled_generics.empty()) {
+			// if we don't have any generics, the struct must have no generics
+			if (struct_.generic_declaration.has_value()
+			    && !struct_.generic_declaration.value().generics.empty())
+				continue;
+		} else {
+			// if we do have generics, the struct must have the same quantity
+			if (!struct_.generic_declaration.has_value()) continue;
+			auto const& struct_generics = struct_.generic_declaration.value().generics;
+			// TODO: default generics (default everything to inferred by default)
+			size_t generic_count = partial.ordered_generics.size() + partial.labeled_generics.size();
+			if (generic_count != struct_generics.size()) continue;
+
+			// check that all labeled generics exist, ignoring ordered ones
+			std::vector<std::string_view> under_consideration {};
+			under_consideration.reserve(struct_generics.size() - partial.ordered_generics.size());
+			for (size_t i = partial.ordered_generics.size(); i < struct_generics.size(); ++i)
+				if (!struct_generics.at(i).anonymous)
+					under_consideration.push_back(struct_generics.at(i).name.value.name());
+
+			if (std::any_of(
+				    partial.labeled_generics.cbegin(),
+				    partial.labeled_generics.cend(),
+				    [&under_consideration](auto const& generic) {
+					    auto const& name = std::get<0>(generic);
+					    return !std::any_of(
+						    under_consideration.cbegin(),
+						    under_consideration.cend(),
+						    [&name](std::string_view actual) { return name == actual; }
+					    );
+				    }
+			    ))
+				continue;
+
+			// this is a match! reconstruction time
+			std::vector<TypeInfo::ID> generics {};
+			generics.reserve(generic_count);
+			std::move(
+				partial.ordered_generics.begin(),
+				partial.ordered_generics.end(),
+				std::back_inserter(generics)
+			);
+			for (size_t i = generics.size(); i < struct_generics.size(); ++i) {
+				auto corresponding_generic = std::find_if(
+					partial.labeled_generics.cbegin(),
+					partial.labeled_generics.cend(),
+					[&struct_generics, i](auto const& generic) {
+						return std::get<0>(generic) == struct_generics.at(i).name.value.name();
+					}
+				);
+				generics.push_back(std::get<1>(*corresponding_generic));
+			}
+
+			candidates.emplace_back(candidate, std::move(generics));
+		}
+	}
+
+	if (candidates.empty()) {
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"could not resolve type",
+				partial.labeled_generics.empty() && partial.ordered_generics.empty()
+					? "there is no type with the provided name"
+					: "there is no type with the provided name and generic list",
+				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+			)
+		);
+		return TypeInfo::make_bottom();
+	}
+
+	return TypeInfo::make_named(std::move(candidates));
+}
+
 Resolver::TypeInfo Resolver::from_type(AST::Type::Atom const& atom, FileContext::ID file_id, bool partial) {
 	switch (atom.kind()) {
 	case AST::Type::Atom::Kind::Float:
@@ -23,23 +109,32 @@ Resolver::TypeInfo Resolver::from_type(AST::Type::Atom const& atom, FileContext:
 		auto const& named = atom.get_named();
 
 		// for named types, we need to extract the generic list first
-		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+		std::vector<TypeInfo::ID>                          ordered_generics {};
+		std::vector<std::tuple<std::string, TypeInfo::ID>> labeled_generics {};
 		if (named.generic_list.has_value()) {
+			ordered_generics.reserve(named.generic_list.value().ordered.size());
+			labeled_generics.reserve(named.generic_list.value().labeled.size());
 			for (auto const& generic : named.generic_list.value().ordered) {
 				TypeInfo     type    = from_type(generic.value, file_id, partial);
 				TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
-				generics.emplace_back(std::nullopt, type_id);
+				ordered_generics.push_back(type_id);
 			}
 			for (auto const& [label, generic] : named.generic_list.value().labeled) {
 				TypeInfo     type    = from_type(generic.value, file_id, partial);
 				TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
-				generics.emplace_back(label.value, type_id);
+				labeled_generics.emplace_back(label.value, type_id);
 			}
 		}
 
-		// then point to the identifier if partial, get the ids otherwise
-		return partial ? TypeInfo::make_named(&named.name.value, std::move(generics))
-		               : TypeInfo::make_named(named.name.value.id.value(), std::move(generics));
+		TypeInfo::Named::Partial partial_named {
+			&named.name.value,
+			std::move(ordered_generics),
+			std::move(labeled_generics)
+		};
+
+		// resolve the partial only if this is not a partial scenario
+		return partial ? TypeInfo {TypeInfo::Named {std::move(partial_named)}}
+		               : from_partial(std::move(partial_named), named.name.span, file_id);
 	}
 
 	// for integers, we need to determine how much information we know
@@ -134,12 +229,14 @@ Resolver::TypeInfo::get_single_underlying(std::vector<TypeInfo> const& pool) con
 
 int Resolver::TypeInfo::is_decided(std::vector<TypeInfo> const& pool) const {
 	if (is_named()) {
-		size_t possibilities = std::get<std::vector<AST::SymbolID>>(get_named().name).size();
+		size_t possibilities = get_named().candidates().size();
 		// if there is more than one possibility, this is to be determined
 		if (possibilities > 1) return 0;
 		// if there is no possibility, this is impossible
 		if (possibilities < 1) return -1;
-		for (auto const& [label, generic] : get_named().generics) {
+		// there is now one single candidate
+		auto const& candidate = get_named().candidates().at(0);
+		for (TypeInfo::ID generic : candidate.generics) {
 			int decided = pool.at(generic).is_decided(pool);
 			// if any generic is not decided, so is this named type
 			if (decided != 1) return decided;
@@ -266,31 +363,47 @@ void Resolver::debug_print_type(TypeInfo type) const {
 	} else if (type.is_named()) {
 		TypeInfo::Named const& named = type.get_named();
 
-		if (std::holds_alternative<std::vector<AST::SymbolID>>(named.name)) {
-			auto const& ids = std::get<std::vector<AST::SymbolID>>(named.name);
-			if (ids.size() == 1) {
-				std::cout << symbol_pool_.at(ids[0]).name;
-			} else {
-				std::cout << '(';
-				size_t count = 0;
-				for (AST::SymbolID id : ids) {
-					std::cout << symbol_pool_.at(id).name;
-					if (++count < ids.size()) std::cout << " | ";
-				}
-				std::cout << ')';
-			}
-		} else std::cout << *std::get<AST::Identifier const*>(named.name);
+		if (named.is_partial()) {
+			auto const& partial = std::get<TypeInfo::Named::Partial>(named.value);
+			std::cout << *partial.name;
 
-		if (!named.generics.empty()) {
+			size_t generic_count = partial.ordered_generics.size() + partial.labeled_generics.size();
+			if (generic_count == 0) return;
+
 			std::cout << '<';
 			size_t count = 0;
-			for (auto const& [label, id] : named.generics) {
-				if (label.has_value()) std::cout << label.value() << ": ";
-				debug_print_type(id);
-				if (++count < named.generics.size()) std::cout << ", ";
+			for (TypeInfo::ID generic : partial.ordered_generics) {
+				debug_print_type(generic);
+				if (++count < generic_count) std::cout << ", ";
+			}
+			for (auto const& [label, generic] : partial.labeled_generics) {
+				std::cout << label << ": ";
+				debug_print_type(generic);
+				if (++count < generic_count) std::cout << ", ";
 			}
 			std::cout << '>';
+			return;
 		}
+
+		if (named.candidates().empty()) return (void) (std::cout << "(impossible)");
+		if (named.candidates().size() > 1) std::cout << '(';
+		size_t count = 0;
+		for (auto const& candidate : named.candidates()) {
+			std::cout << symbol_pool_.at(candidate.name).name;
+
+			if (!candidate.generics.empty()) {
+				std::cout << '<';
+				size_t subcount = 0;
+				for (TypeInfo::ID id : candidate.generics) {
+					debug_print_type(id);
+					if (++subcount < candidate.generics.size()) std::cout << ", ";
+				}
+				std::cout << '>';
+			}
+
+			if (++count < named.candidates().size()) std::cout << " | ";
+		}
+		if (named.candidates().size() > 1) std::cout << ')';
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		std::cout << "(*" << (pointer.mutable_ ? "mut" : "const") << " ";
@@ -381,31 +494,27 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	} else if (type.is_named()) {
 		TypeInfo::Named const& named = type.get_named();
 		// we shouldn't be calling this function pre-partial pruning
-		assert(std::holds_alternative<std::vector<AST::SymbolID>>(named.name));
+		assert(!named.is_partial());
 
-		auto const& ids = std::get<std::vector<AST::SymbolID>>(named.name);
-		if (ids.size() == 1) {
-			output << symbol_pool_.at(ids[0]).name;
-		} else {
-			output << '(';
-			size_t count = 0;
-			for (AST::SymbolID id : ids) {
-				output << symbol_pool_.at(id).name;
-				if (++count < ids.size()) output << " | ";
-			}
-			output << ')';
-		}
+		if (named.candidates().empty()) return "(impossible)";
+		if (named.candidates().size() > 1) output << '(';
+		size_t count = 0;
+		for (auto const& candidate : named.candidates()) {
+			output << symbol_pool_.at(candidate.name).name;
 
-		if (!named.generics.empty()) {
-			output << '<';
-			size_t count = 0;
-			for (auto const& [label, id] : named.generics) {
-				if (label.has_value()) output << label.value() << ": ";
-				output << get_type_name(id);
-				if (++count < named.generics.size()) output << ", ";
+			if (!candidate.generics.empty()) {
+				output << '<';
+				size_t subcount = 0;
+				for (TypeInfo::ID id : candidate.generics) {
+					output << get_type_name(id);
+					if (++subcount < candidate.generics.size()) output << ", ";
+				}
+				output << '>';
 			}
-			output << '>';
+
+			if (++count < named.candidates().size()) output << " | ";
 		}
+		if (named.candidates().size() > 1) output << ')';
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
 		output << "*" << (pointer.mutable_ ? "mut" : "const") << " " << get_type_name(pointer.pointee);
@@ -779,72 +888,51 @@ void Resolver::unify_named(
 
 	auto &a = type_pool_.at(named).get_named(), &b = type_pool_.at(other).get_named();
 
-	auto &a_possibilities = std::get<std::vector<AST::SymbolID>>(a.name),
-	     &b_possibilities = std::get<std::vector<AST::SymbolID>>(b.name);
-
-	// we must create a new possibility vector with only the common possibilities
-	std::vector<AST::SymbolID> common_possibilities {};
-	for (AST::SymbolID possibility : a_possibilities) {
-		if (std::find(b_possibilities.cbegin(), b_possibilities.cend(), possibility) != b_possibilities.cend())
-			common_possibilities.push_back(possibility);
-	}
-
-	// if there are no common possibilities, this already failed :P
-	if (common_possibilities.empty()) {
-		std::stringstream subtitle_stream {};
-		subtitle_stream
-			<< "types "
-			<< get_type_name(named)
-			<< " and "
-			<< get_type_name(other)
-			<< " are incompatible (incompatible base type)";
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"type mismatch",
-				subtitle_stream.str(),
-				{get_type_sample(named_origin, OutFmt::Color::Cyan),
-		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
-			)
+	// we must create a new candidate vector with only the common unified candidates
+	std::vector<TypeInfo::Named::Candidate> common_candidates {};
+	for (TypeInfo::Named::Candidate& candidate : a.candidates()) {
+		auto corresponding_candidate = std::find_if(
+			b.candidates().cbegin(),
+			b.candidates().cend(),
+			[&candidate, this](TypeInfo::Named::Candidate const& other_candidate) {
+				if (candidate.name != other_candidate.name) return false;
+				if (candidate.generics.size() != other_candidate.generics.size()) return false;
+				for (size_t i = 0; i < candidate.generics.size(); ++i) {
+					if (!can_unify(candidate.generics.at(i), other_candidate.generics.at(i)))
+						return false;
+				}
+				return true;
+			}
 		);
-		return;
-	}
-
-	// now, we must check generics
-	if (a.generics.size() != b.generics.size()) {
-		std::stringstream subtitle_stream {};
-		subtitle_stream
-			<< "types "
-			<< get_type_name(named)
-			<< " and "
-			<< get_type_name(other)
-			<< " are incompatible (incompatible generic count)";
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"type mismatch",
-				subtitle_stream.str(),
-				{get_type_sample(named_origin, OutFmt::Color::Cyan),
-		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
-			)
-		);
-		return;
-	}
-
-	// TODO: suppport named generics
-	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
-	generics.reserve(a.generics.size());
-
-	for (size_t i = 0; i < a.generics.size(); ++i) {
-		auto const& [a_label, a_generic] = a.generics.at(i);
-		auto const& [b_label, b_generic] = b.generics.at(i);
-		if (a_label.has_value() || b_label.has_value()) {
-			std::cout << "todo: named generics" << std::endl;
-			std::exit(0);
+		if (corresponding_candidate == b.candidates().cend()) continue;
+		for (size_t i = 0; i < candidate.generics.size(); ++i) {
+			unify(candidate.generics.at(i), corresponding_candidate->generics.at(i), file_id);
 		}
-		unify(a_generic, b_generic, file_id);
-		generics.emplace_back(std::nullopt, a_generic);
+		common_candidates.push_back(std::move(candidate));
 	}
 
-	TypeInfo common_type = TypeInfo::make_named(std::move(common_possibilities), std::move(generics));
+	// if there are no common possibilities, this failed
+	if (common_candidates.empty()) {
+		std::stringstream subtitle_stream {};
+		subtitle_stream
+			<< "types "
+			<< get_type_name(named)
+			<< " and "
+			<< get_type_name(other)
+			<< " are incompatible";
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				subtitle_stream.str(),
+				{get_type_sample(named_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
+			)
+		);
+		return;
+	}
+
+	// otherwise, we can proceed with unification
+	TypeInfo common_type = TypeInfo::make_named(std::move(common_candidates));
 	type_pool_.at(named) = common_type;
 	type_pool_.at(other) = TypeInfo::make_same_as(named);
 }
@@ -1138,35 +1226,27 @@ bool Resolver::can_unify_named(TypeInfo const& named, TypeInfo const& other) con
 
 	auto const &a = named.get_named(), &b = other.get_named();
 
-	auto const &a_possibilities = std::get<std::vector<AST::SymbolID>>(a.name),
-		   &b_possibilities = std::get<std::vector<AST::SymbolID>>(b.name);
-
-	// ensure they have common possibilities
-	bool common_possibilities = false;
-	for (AST::SymbolID possibility : a_possibilities)
-		if (std::find(b_possibilities.cbegin(), b_possibilities.cend(), possibility)
-		    != b_possibilities.cend()) {
-			common_possibilities = true;
-			break;
-		}
-	if (!common_possibilities) return false;
-
-	// ensure they have the same amount of generics
-	if (a.generics.size() != b.generics.size()) return false;
-
-	// ensure the generics are unifiable
-	// TODO: suppport named generics
-	for (size_t i = 0; i < a.generics.size(); ++i) {
-		auto const& [a_label, a_generic] = a.generics.at(i);
-		auto const& [b_label, b_generic] = b.generics.at(i);
-		if (a_label.has_value() || b_label.has_value()) {
-			std::cout << "todo: named generics" << std::endl;
-			std::exit(0);
-		}
-		if (!can_unify(a_generic, b_generic)) return false;
+	// check if there are any common candidates
+	bool any_common_candidate = false;
+	for (TypeInfo::Named::Candidate const& candidate : a.candidates()) {
+		auto corresponding_candidate = std::find_if(
+			b.candidates().cbegin(),
+			b.candidates().cend(),
+			[&candidate, this](TypeInfo::Named::Candidate const& other_candidate) {
+				if (candidate.name != other_candidate.name) return false;
+				if (candidate.generics.size() != other_candidate.generics.size()) return false;
+				for (size_t i = 0; i < candidate.generics.size(); ++i) {
+					if (!can_unify(candidate.generics.at(i), other_candidate.generics.at(i)))
+						return false;
+				}
+				return true;
+			}
+		);
+		if (corresponding_candidate == b.candidates().cend()) continue;
+		any_common_candidate = true;
+		break;
 	}
-
-	return true;
+	return any_common_candidate;
 }
 
 bool Resolver::can_unify(TypeInfo::ID a, TypeInfo::ID b) const {
@@ -1392,7 +1472,7 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	}
 	// if it is decided, the base is decided
 	// this member access will 100% be resolved now! :D
-	AST::SymbolID type_name_id = std::get<std::vector<AST::SymbolID>>(underlying.get_named().name).at(0);
+	AST::SymbolID type_name_id = underlying.get_named().candidates().at(0).name;
 
 	// we don't have any other user type as of now :P
 	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_name_id).item);
@@ -1444,74 +1524,8 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 }
 
 bool Resolver::try_decide_named_type(TypeInfo::ID id) {
-	TypeInfo::Named& named = type_pool_.at(id).get_named();
-	assert(std::holds_alternative<std::vector<AST::SymbolID>>(named.name));
-
-	std::vector<AST::SymbolID>             new_candidates {};
-	std::vector<std::vector<TypeInfo::ID>> new_candidates_generics {};
-	for (AST::SymbolID candidate : std::get<std::vector<AST::SymbolID>>(named.name)) {
-		// we must determine the suitability of each candidate
-		AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(candidate).item);
-		if (named.generics.empty()) {
-			// if we don't have any generics, the struct must have no generics to be a suitable candidate
-			if (struct_->generic_declaration.has_value()
-			    && !struct_->generic_declaration.value().generics.empty())
-				continue;
-		} else {
-			// if we do have generics, the struct must have the same quantity
-			if (!struct_->generic_declaration.has_value()) continue;
-			auto const& generics = struct_->generic_declaration.value().generics;
-			if (generics.size() != named.generics.size()) continue;
-
-			// TODO: somehow do the per-function signature thing that we do for overloads here, so we don't
-			// have to keep matching them this way and we can support generics in unify. maybe we have an
-			// initial state with just the generics and AST::Identifier* and then we turn it into a vector
-			// of AST::SymbolID and IDs and a vector of rejections
-
-			std::vector<TypeInfo::ID> named_generics {};
-			named_generics.reserve(named.generics.size());
-			// first push ordered
-			for (auto const& [label, generic] : named.generics) {
-				if (!label.has_value()) named_generics.push_back(generic);
-			}
-			// then labeled
-			for (size_t i = named_generics.size(); i < generics.size(); ++i) {
-				auto const& generic       = generics.at(i);
-				auto        corresponding = std::find_if(
-                                        named.generics.cbegin(),
-                                        named.generics.cend(),
-                                        [&generic](auto const& data) {
-                                                if (!std::get<0>(data).has_value()) return false;
-                                                return std::get<0>(data).value() == generic.name.value.name();
-                                        }
-                                );
-				if (corresponding == named.generics.cend()) continue;
-				named_generics.push_back(std::get<1>(*corresponding));
-			}
-
-			// then check unifiability
-			// TODO: for this, we need the struct's type to be instantiable
-
-			// if all passes, we push
-			new_candidates_generics.push_back(std::move(named_generics));
-		}
-	}
-
-	named.name = std::move(new_candidates);
-
-	// if we still have more than one candidate, we fail to decide.
-	if (std::get<std::vector<AST::SymbolID>>(named.name).size() > 1) return false;
-
-	// if we have no candidates, we succeed but this becomes a bottom
-	if (std::get<std::vector<AST::SymbolID>>(named.name).empty()) {
-		// TODO: diagnostic
-		type_pool_.at(id) = TypeInfo::make_bottom();
-		return true;
-	}
-
-	// if we have a single candidate, we unify!
-	// TODO: unify with struct instantiation
-	return true;
+	// TODO: we need generic instantiation to try and unify with the struct's type :P
+	return false;
 }
 
 Resolver::TypeInfo::ID
@@ -1526,28 +1540,28 @@ Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span,
 	// now, for each field, we unify it with the struct field type
 	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_symbol_id).item);
 	for (auto& field : struct_literal.fields) {
-		// we skip those which don't exist
-		auto struct_field = std::find_if(
-			struct_->fields.cbegin(),
-			struct_->fields.cend(),
-			[&field](AST::Struct::Field const& given_field) {
-				return given_field.name.value == field.name.value;
-			}
-		);
-		if (struct_field == struct_->fields.cend()) continue;
+	        // we skip those which don't exist
+	        auto struct_field = std::find_if(
+	                struct_->fields.cbegin(),
+	                struct_->fields.cend(),
+	                [&field](AST::Struct::Field const& given_field) {
+	                        return given_field.name.value == field.name.value;
+	                }
+	        );
+	        if (struct_field == struct_->fields.cend()) continue;
 
-		TypeInfo::ID field_type = infer(field.value->value, field.value->span, file_id);
-		// FIXME: we shouldn't have to re-register the types per struct literal
-		TypeInfo struct_field_type
-			= from_type(struct_field->type.value, symbol_pool_.at(type_symbol_id).file_id, false);
-		TypeInfo::ID struct_field_type_id = register_type(
-			std::move(struct_field_type),
-			struct_field->type.span,
-			symbol_pool_.at(type_symbol_id).file_id
-		);
+	        TypeInfo::ID field_type = infer(field.value->value, field.value->span, file_id);
+	        // FIXME: we shouldn't have to re-register the types per struct literal
+	        TypeInfo struct_field_type
+	                = from_type(struct_field->type.value, symbol_pool_.at(type_symbol_id).file_id, false);
+	        TypeInfo::ID struct_field_type_id = register_type(
+	                std::move(struct_field_type),
+	                struct_field->type.span,
+	                symbol_pool_.at(type_symbol_id).file_id
+	        );
 
-		// FIXME: i don't like how these diagnostics are worded for struct fields
-		unify(field_type, struct_field_type_id, file_id);
+	        // FIXME: i don't like how these diagnostics are worded for struct fields
+	        unify(field_type, struct_field_type_id, file_id);
 	}
 
 	return type_id;
@@ -1636,6 +1650,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			{Diagnostic::Sample::Label(span, "function call", OutFmt::Color::Gray)}
 		)
 	);
+	// TODO: collapse these 2 for loops into one
 	// TODO: generic count, generic labels
 	for (TypeInfo::ID callable_id : callable) {
 		assert(type_pool_.at(callable_id).is_function());

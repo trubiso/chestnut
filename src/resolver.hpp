@@ -77,8 +77,25 @@ private:
 		};
 
 		struct Named {
-			std::variant<std::vector<AST::SymbolID>, AST::Identifier const*> name;
-			std::vector<std::tuple<std::optional<std::string>, ID>>          generics;
+			struct Partial {
+				AST::Identifier const* name;
+
+				std::vector<ID>                          ordered_generics;
+				std::vector<std::tuple<std::string, ID>> labeled_generics;
+			};
+
+			struct Candidate {
+				AST::SymbolID   name;
+				std::vector<ID> generics;
+			};
+
+			std::variant<Partial, std::vector<Candidate>> value;
+
+			inline bool is_partial() const { return std::holds_alternative<Partial>(value); }
+
+			inline std::vector<Candidate> const& candidates() const { return std::get<std::vector<Candidate>>(value); }
+
+			inline std::vector<Candidate>& candidates() { return std::get<std::vector<Candidate>>(value); }
 		};
 
 		struct Pointer {
@@ -196,12 +213,21 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named(AST::Identifier const* name, std::vector<std::tuple<std::optional<std::string>, ID>>&& generics = {}) {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{name, std::move(generics)}});
+		inline static TypeInfo make_named(AST::Identifier const* name, std::vector<ID>&& ordered_generics = {}, std::vector<std::tuple<std::string, ID>> labeled_generics = {}) {
+			return TypeInfo(
+				value_t {
+					std::in_place_index<(size_t) Kind::Named>,
+					Named {Named::Partial {
+						name,
+						std::move(ordered_generics),
+						std::move(labeled_generics)
+					}}
+				}
+			);
 		}
 
-		inline static TypeInfo make_named(std::vector<AST::SymbolID> name, std::vector<std::tuple<std::optional<std::string>, ID>>&& generics = {}) {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{std::move(name), std::move(generics)}});
+		inline static TypeInfo make_named(std::vector<Named::Candidate>&& candidates) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{std::move(candidates)}});
 		}
 		
 		inline static TypeInfo make_pointer(Pointer&& pointer) {
@@ -550,6 +576,10 @@ private:
 	std::vector<UndecidedOverload> undecided_overloads {};
 
 	std::vector<TypeInfo::ID> undecided_member_accesses {};
+
+	/// Turns a partial named type into a full named type with candidates. May return a bottom if the
+	/// identifier is not resolved, or if no candidates match (in which case it throws a diagnostic).
+	TypeInfo from_partial(TypeInfo::Named::Partial&&, Span, FileContext::ID);
 
 	TypeInfo from_type(AST::Type::Atom const&, FileContext::ID, bool partial = true);
 	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID, bool partial = true);
