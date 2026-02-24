@@ -54,6 +54,29 @@ void Resolver::identify(AST::Struct& struct_, bool exported, FileContext::ID fil
 	                exported,
 	                {}}
 	);
+
+	// make stub generics (their type will be added during symbol resolution!)
+	if (struct_.generic_declaration.has_value())
+		for (auto& generic : struct_.generic_declaration.value().generics) {
+			identify(generic.name.value);
+			TypeInfo::ID stub_type = register_type(
+				TypeInfo::make_bottom(),
+				generic.name.span,
+				file_id,
+				generic.name.value.id.value()[0]
+			);
+			symbol_pool_.push_back(
+				Symbol {generic.name.value.id.value()[0],
+			                file_id,
+			                generic.name.span,
+			                generic.name.value.name(),
+			                Generic {},
+			                stub_type,
+			                false,
+			                false,
+			                {}}
+			);
+		}
 }
 
 void Resolver::identify(AST::Trait& trait, bool exported, FileContext::ID file_id) {
@@ -70,6 +93,29 @@ void Resolver::identify(AST::Trait& trait, bool exported, FileContext::ID file_i
 	                exported,
 	                {}}
 	);
+
+	// make stub generics (their type will be added during symbol resolution!)
+	if (trait.generic_declaration.has_value())
+		for (auto& generic : trait.generic_declaration.value().generics) {
+			identify(generic.name.value);
+			TypeInfo::ID stub_type = register_type(
+				TypeInfo::make_bottom(),
+				generic.name.span,
+				file_id,
+				generic.name.value.id.value()[0]
+			);
+			symbol_pool_.push_back(
+				Symbol {generic.name.value.id.value()[0],
+			                file_id,
+			                generic.name.span,
+			                generic.name.value.name(),
+			                Generic {},
+			                stub_type,
+			                false,
+			                false,
+			                {}}
+			);
+		}
 }
 
 void Resolver::identify(AST::Function& function, bool exported, FileContext::ID file_id) {
@@ -100,6 +146,34 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 		);
 	}
 
+	// make stub generics (their type will be added during symbol resolution!)
+	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	if (function.generic_declaration.has_value())
+		for (auto& generic : function.generic_declaration.value().generics) {
+			identify(generic.name.value);
+			TypeInfo::ID stub_type = register_type(
+				TypeInfo::make_bottom(),
+				generic.name.span,
+				file_id,
+				generic.name.value.id.value()[0]
+			);
+			symbol_pool_.push_back(
+				Symbol {generic.name.value.id.value()[0],
+			                file_id,
+			                generic.name.span,
+			                generic.name.value.name(),
+			                Generic {},
+			                stub_type,
+			                false,
+			                false,
+			                {}}
+			);
+			generics.emplace_back(
+				generic.anonymous ? std::nullopt : std::optional {generic.name.value.name()},
+				stub_type
+			);
+		}
+
 	TypeInfo::ID return_
 		= register_type(from_type(function.return_type.value, file_id), function.return_type.span, file_id);
 
@@ -111,7 +185,9 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 	                function.name.value.name(),
 	                &function,
 	                register_type(
-				TypeInfo::make_function(TypeInfo::Function {std::move(arguments), return_}),
+				TypeInfo::make_function(
+					TypeInfo::Function {std::move(arguments), std::move(generics), return_}
+				),
 				function.name.span,
 				file_id,
 				function.name.value.id.value()[0]
@@ -153,8 +229,8 @@ void Resolver::identify_built_in_unary_operator(
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
-	TypeInfo::ID type_id       = register_type(std::move(type), span, file_id);
-	TypeInfo     function_type = TypeInfo::make_function(TypeInfo::Function {{{std::nullopt, type_id}}, type_id});
+	TypeInfo::ID type_id   = register_type(std::move(type), span, file_id);
+	TypeInfo function_type = TypeInfo::make_function(TypeInfo::Function {{{std::nullopt, type_id}}, {}, type_id});
 	identify_built_in_operator(function, operator_, std::move(function_type));
 }
 
@@ -170,6 +246,7 @@ void Resolver::identify_built_in_binary_operator(
 	TypeInfo     function_type = TypeInfo::make_function(
                 TypeInfo::Function {
 			    {{std::nullopt, type_id}, {std::nullopt, type_id}},
+			    {},
                         type_id
         }
         );
@@ -189,6 +266,7 @@ void Resolver::identify_built_in_binary_comparison_operator(
 	TypeInfo     function_type = TypeInfo::make_function(
                 TypeInfo::Function {
 			    {{std::nullopt, type_id}, {std::nullopt, type_id}},
+			    {},
                         return_id
         }
         );

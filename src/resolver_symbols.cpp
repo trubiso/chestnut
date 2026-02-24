@@ -438,6 +438,7 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 }
 
 void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scope, FileContext::ID file_id) {
+	// we now actually create these generics
 	for (auto& generic : generic_declaration.generics) {
 		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
 		for (auto& name : generic.constraints) {
@@ -460,28 +461,8 @@ void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scop
 			}
 			declared_constraints.emplace_back(name.value.id.value()[0]);
 		}
-		identify(generic.name.value);
-		symbol_pool_.push_back(
-			Symbol {generic.name.value.id.value()[0],
-		                file_id,
-		                generic.name.span,
-		                generic.name.value.name(),
-		                Generic {},
-		                register_type(
-					TypeInfo::make_generic(
-						TypeInfo::Generic {
-							generic.name.value.id.value()[0],
-							std::move(declared_constraints),
-							{}
-						}
-					),
-					generic.name.span,
-					file_id,
-					generic.name.value.id.value()[0]
-				),
-		                false,
-		                false,
-		                {}}
+		type_pool_.at(get_single_symbol(generic.name.value).type) = TypeInfo::make_generic(
+			TypeInfo::Generic {generic.name.value.id.value()[0], std::move(declared_constraints), {}}
 		);
 		unchecked_generics.push_back(get_single_symbol(generic.name.value).type);
 		scope.symbols.insert_or_assign(generic.name.value.name(), generic.name.value.id.value());

@@ -1893,10 +1893,21 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 				return std::tuple {std::get<0>(argument), instantiate_type(std::get<1>(argument))};
 			}
 		);
+		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_generics {};
+		new_generics.reserve(type.get_function().generics.size());
+		std::transform(
+			type.get_function().generics.cbegin(),
+			type.get_function().generics.cend(),
+			std::back_inserter(new_generics),
+			[this](auto const& generic) {
+				return std::tuple {std::get<0>(generic), instantiate_type(std::get<1>(generic))};
+			}
+		);
 		return register_type(
 			TypeInfo::make_function(
 				TypeInfo::Function {
 					std::move(new_arguments),
+					std::move(new_generics),
 					instantiate_type(type.get_function().return_)
 				}
 			),
@@ -2151,7 +2162,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		// we store the expression type as the return type so it automatically gets inferred!
 		TypeInfo::ID callable_type = instantiate_type(callable_id);
 		TypeInfo     function_call_type
-			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), expr_type});
+			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), {}, expr_type});
 		UndecidedOverload::Candidate candidate {callable_type, function_call_type};
 		candidates.push_back(std::move(candidate));
 	}

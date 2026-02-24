@@ -46,6 +46,7 @@ private:
 		struct Function {
 			// TODO: arguments can have default values! (size_t default_up_to;)
 			std::vector<std::tuple<std::optional<std::string>, ID>> arguments;
+			std::vector<std::tuple<std::optional<std::string>, ID>> generics;
 			ID                                                      return_;
 		};
 
