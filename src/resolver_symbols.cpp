@@ -441,13 +441,14 @@ void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scop
 	// we now actually create these generics
 	for (auto& generic : generic_declaration.generics) {
 		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
-		for (auto& name : generic.constraints) {
+		for (auto& constraint : generic.constraints) {
+			auto& name = constraint.name;
 			resolve(name, scope, file_id);
 			if (!name.value.id.has_value()) {
 				std::cout << "error: no such trait: " << name.value << std::endl;
 				std::exit(1);
 			}
-			// TODO: deal with this possibility possibly
+			// TODO: deal with this possibility possibly (most likely we won't support trait overloading)
 			if (name.value.id.value().size() != 1) {
 				std::cout << "todo: ambiguous trait: " << name.value << std::endl;
 				std::exit(1);
@@ -459,7 +460,24 @@ void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scop
 					<< std::endl;
 				std::exit(1);
 			}
-			declared_constraints.emplace_back(name.value.id.value()[0]);
+			std::vector<TypeInfo::ID> arguments {};
+			// FIXME: resolving subgenerics this early has the side effect that we cannot reference generics
+			// that appear later in the generic declaration!
+			if (constraint.generic_list.has_value()) {
+				// TODO: support labeled arguments at some point
+				if (!constraint.generic_list.value().labeled.empty()) {
+					assert(false && "we do not support labeled arguments in traits. sorry!");
+				}
+				for (auto& subgeneric : constraint.generic_list.value().ordered) {
+					resolve(subgeneric, scope, file_id);
+					arguments.push_back(register_type(
+						from_type(subgeneric.value, file_id),
+						subgeneric.span,
+						file_id
+					));
+				}
+			}
+			declared_constraints.emplace_back(name.value.id.value()[0], std::move(arguments));
 		}
 		type_pool_.at(get_single_symbol(generic.name.value).type) = TypeInfo::make_generic(
 			TypeInfo::Generic {generic.name.value.id.value()[0], std::move(declared_constraints), {}}

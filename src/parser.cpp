@@ -731,17 +731,19 @@ std::optional<GenericDeclaration::Generic> Parser::consume_generic_declaration_g
 		generic_name = SPANNED(consume_unqualified_identifier);
 	}
 
-	std::vector<Spanned<Identifier>> constraints {};
+	std::vector<GenericDeclaration::Generic::Constraint> constraints {};
 	if (consume_symbol(Token::Symbol::Colon)) {
 		std::optional<Spanned<Identifier>> constraint
 			= SPANNED_REASON(expect_identifier, "expected trait name after `:`");
 		if (!constraint.has_value()) goto return_;
-		constraints.push_back(std::move(constraint.value()));
+		std::optional<GenericList> generic_list = consume_generic_list();
+		constraints.emplace_back(std::move(constraint.value()), std::move(generic_list));
 		if (!peek_symbol(Token::Symbol::Plus)) goto return_;
 		assert(consume_symbol(Token::Symbol::Plus));
 
 		while ((constraint = SPANNED(consume_identifier)).has_value()) {
-			constraints.push_back(std::move(constraint.value()));
+			generic_list = consume_generic_list();
+			constraints.emplace_back(std::move(constraint.value()), std::move(generic_list));
 			if (!consume_symbol(Token::Symbol::Plus)) break;
 		}
 	}

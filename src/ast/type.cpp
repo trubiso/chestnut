@@ -12,7 +12,8 @@ std::ostream& operator<<(std::ostream& os, GenericDeclaration const& generic_dec
 			size_t subcount = 0;
 			os << ": ";
 			for (auto const& constraint : generic.constraints) {
-				os << constraint.value;
+				os << constraint.name.value;
+				if (constraint.generic_list.has_value()) os << constraint.generic_list.value();
 				if (++subcount < generic.constraints.size()) os << " + ";
 			}
 		}

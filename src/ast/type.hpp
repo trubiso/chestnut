@@ -12,21 +12,6 @@ namespace AST {
 
 struct Type;
 
-struct GenericDeclaration {
-	struct Generic {
-		Spanned<Identifier> name;  // unqualified
-
-		// TODO: support generics within constraints
-		std::vector<Spanned<Identifier>> constraints;
-
-		bool anonymous;
-	};
-
-	std::vector<Generic> generics;
-};
-
-std::ostream& operator<<(std::ostream&, GenericDeclaration const&);
-
 struct GenericList {
 	typedef Spanned<Type>                                    OrderedGeneric;
 	typedef std::tuple<Spanned<std::string>, OrderedGeneric> LabeledGeneric;
@@ -38,6 +23,26 @@ struct GenericList {
 };
 
 std::ostream& operator<<(std::ostream&, GenericList const&);
+
+struct GenericDeclaration {
+	struct Generic {
+		Spanned<Identifier> name;  // unqualified
+
+		struct Constraint {
+			Spanned<Identifier> name;
+
+			std::optional<GenericList> generic_list;
+		};
+
+		std::vector<Constraint> constraints;
+
+		bool anonymous;
+	};
+
+	std::vector<Generic> generics;
+};
+
+std::ostream& operator<<(std::ostream&, GenericDeclaration const&);
 
 struct Type {
 	struct Atom {
