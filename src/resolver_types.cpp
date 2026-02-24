@@ -30,56 +30,59 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Sp
 			if (struct_.generic_declaration.has_value()
 			    && !struct_.generic_declaration.value().generics.empty())
 				continue;
-		} else {
-			// if we do have generics, the struct must have the same quantity
-			if (!struct_.generic_declaration.has_value()) continue;
-			auto const& struct_generics = struct_.generic_declaration.value().generics;
-			// TODO: default generics (default everything to inferred by default)
-			size_t generic_count = partial.ordered_generics.size() + partial.labeled_generics.size();
-			if (generic_count != struct_generics.size()) continue;
 
-			// check that all labeled generics exist, ignoring ordered ones
-			std::vector<std::string_view> under_consideration {};
-			under_consideration.reserve(struct_generics.size() - partial.ordered_generics.size());
-			for (size_t i = partial.ordered_generics.size(); i < struct_generics.size(); ++i)
-				if (!struct_generics.at(i).anonymous)
-					under_consideration.push_back(struct_generics.at(i).name.value.name());
-
-			if (std::any_of(
-				    partial.labeled_generics.cbegin(),
-				    partial.labeled_generics.cend(),
-				    [&under_consideration](auto const& generic) {
-					    auto const& name = std::get<0>(generic);
-					    return !std::any_of(
-						    under_consideration.cbegin(),
-						    under_consideration.cend(),
-						    [&name](std::string_view actual) { return name == actual; }
-					    );
-				    }
-			    ))
-				continue;
-
-			// this is a match! reconstruction time
-			std::vector<TypeInfo::ID> generics {};
-			generics.reserve(generic_count);
-			std::move(
-				partial.ordered_generics.begin(),
-				partial.ordered_generics.end(),
-				std::back_inserter(generics)
-			);
-			for (size_t i = generics.size(); i < struct_generics.size(); ++i) {
-				auto corresponding_generic = std::find_if(
-					partial.labeled_generics.cbegin(),
-					partial.labeled_generics.cend(),
-					[&struct_generics, i](auto const& generic) {
-						return std::get<0>(generic) == struct_generics.at(i).name.value.name();
-					}
-				);
-				generics.push_back(std::get<1>(*corresponding_generic));
-			}
-
-			candidates.emplace_back(candidate, std::move(generics));
+			candidates.emplace_back(candidate, std::vector<TypeInfo::ID> {});
+			continue;
 		}
+
+		// if we do have generics, the struct must have the same quantity
+		if (!struct_.generic_declaration.has_value()) continue;
+		auto const& struct_generics = struct_.generic_declaration.value().generics;
+		// TODO: default generics (default everything to inferred by default)
+		size_t generic_count = partial.ordered_generics.size() + partial.labeled_generics.size();
+		if (generic_count != struct_generics.size()) continue;
+
+		// check that all labeled generics exist, ignoring ordered ones
+		std::vector<std::string_view> under_consideration {};
+		under_consideration.reserve(struct_generics.size() - partial.ordered_generics.size());
+		for (size_t i = partial.ordered_generics.size(); i < struct_generics.size(); ++i)
+			if (!struct_generics.at(i).anonymous)
+				under_consideration.push_back(struct_generics.at(i).name.value.name());
+
+		if (std::any_of(
+			    partial.labeled_generics.cbegin(),
+			    partial.labeled_generics.cend(),
+			    [&under_consideration](auto const& generic) {
+				    auto const& name = std::get<0>(generic);
+				    return !std::any_of(
+					    under_consideration.cbegin(),
+					    under_consideration.cend(),
+					    [&name](std::string_view actual) { return name == actual; }
+				    );
+			    }
+		    ))
+			continue;
+
+		// this is a match! reconstruction time
+		std::vector<TypeInfo::ID> generics {};
+		generics.reserve(generic_count);
+		std::move(
+			partial.ordered_generics.begin(),
+			partial.ordered_generics.end(),
+			std::back_inserter(generics)
+		);
+		for (size_t i = generics.size(); i < struct_generics.size(); ++i) {
+			auto corresponding_generic = std::find_if(
+				partial.labeled_generics.cbegin(),
+				partial.labeled_generics.cend(),
+				[&struct_generics, i](auto const& generic) {
+					return std::get<0>(generic) == struct_generics.at(i).name.value.name();
+				}
+			);
+			generics.push_back(std::get<1>(*corresponding_generic));
+		}
+
+		candidates.emplace_back(candidate, std::move(generics));
 	}
 
 	if (candidates.empty()) {
