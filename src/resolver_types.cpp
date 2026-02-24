@@ -2019,8 +2019,12 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	assert(!callable.empty());  // we know is_callable()
 
 	// we need to further filter this to ensure we have same argument count and our labeled arguments match
-	// TODO: this works for now, but will break once arguments have default values
+	// TODO: this works for now, but will break once arguments and generics have default values
 	size_t provided_arguments = function_call.arguments.labeled.size() + function_call.arguments.ordered.size();
+	size_t provided_generics  = function_call.generic_list.has_value()
+	                                  ? (function_call.generic_list.value().labeled.size()
+                                            + function_call.generic_list.value().ordered.size())
+	                                  : 0;
 	std::vector<TypeInfo::ID> callable_filtered {};
 	// this list holds all function rejections as code samples so we can provide a rich diagnostic
 	std::vector<Diagnostic::Sample> rejections {};
@@ -2098,6 +2102,69 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			}
 			if (!all_arguments_exist) continue;
 		}
+		auto const& function_generics     = type_pool_.at(callable_id).get_function().generics;
+		bool        generic_count_matches = function_generics.size() == provided_generics;
+		if (!generic_count_matches) {
+			rejections.push_back(
+				Diagnostic::Sample(
+					get_context(get_type_file_id(callable_id)),
+					{Diagnostic::Sample::Label(
+						get_type_span(callable_id),
+						function_generics.size() < provided_generics
+							? "incompatible generic count (too many were provided)"
+							: "incompatible generic count (too few were provided)",
+						OutFmt::Color::BrightBlue
+					)}
+				)
+			);
+			continue;
+		}
+		if (function_call.generic_list.has_value() && !function_call.generic_list.value().labeled.empty()) {
+			// check that all labeled generics exist
+			// we only consider generics that haven't already been provided by the ordered
+			// generics
+			std::vector<std::string_view> generics_under_consideration {};
+			generics_under_consideration.reserve(
+				function_generics.size() - function_call.generic_list.value().ordered.size()
+			);
+			for (size_t i = function_call.generic_list.value().ordered.size(); i < function_generics.size();
+			     ++i)
+				if (std::get<0>(function_generics.at(i)).has_value())
+					generics_under_consideration.push_back(
+						std::get<0>(function_generics.at(i)).value()
+					);
+
+			bool all_generics_exist = true;
+			for (auto const& generic : function_call.generic_list.value().labeled) {
+				auto const& name = std::get<0>(generic);
+
+				bool generic_exists = std::any_of(
+					generics_under_consideration.cbegin(),
+					generics_under_consideration.cend(),
+					[&name](std::string_view actual_generic) {
+						return actual_generic == name.value;
+					}
+				);
+
+				if (!generic_exists) {
+					std::stringstream text {};
+					text << "missing labeled generic `" << name.value << "`";
+					rejections.push_back(
+						Diagnostic::Sample(
+							get_context(get_type_file_id(callable_id)),
+							{Diagnostic::Sample::Label(
+								get_type_span(callable_id),
+								text.str(),
+								OutFmt::Color::BrightGreen
+							)}
+						)
+					);
+					all_generics_exist = false;
+					break;
+				}
+			}
+			if (!all_generics_exist) continue;
+		}
 		callable_filtered.push_back(callable_id);
 	}
 
@@ -2118,7 +2185,8 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	}
 
 	// it's time to infer the arguments now that we have a set of possible callees
-	std::vector<TypeInfo::ID> ordered_arguments {};
+	std::vector<TypeInfo::ID>                     ordered_arguments {};
+	std::unordered_map<std::string, TypeInfo::ID> labeled_arguments {};
 	ordered_arguments.reserve(function_call.arguments.ordered.size());
 	std::transform(
 		function_call.arguments.ordered.begin(),
@@ -2126,11 +2194,30 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		std::back_inserter(ordered_arguments),
 		[this, file_id](auto& argument) { return infer(argument.value, argument.span, file_id); }
 	);
-
-	std::unordered_map<std::string, TypeInfo::ID> labeled_arguments {};
 	ordered_arguments.reserve(function_call.arguments.labeled.size());
 	for (auto& [identifier, value] : function_call.arguments.labeled) {
 		labeled_arguments.emplace(identifier.value.name(), infer(value.value, value.span, file_id));
+	}
+
+	std::vector<TypeInfo::ID>                     ordered_generics {};
+	std::unordered_map<std::string, TypeInfo::ID> labeled_generics {};
+	if (function_call.generic_list.has_value()) {
+		ordered_generics.reserve(function_call.generic_list.value().ordered.size());
+		std::transform(
+			function_call.generic_list.value().ordered.begin(),
+			function_call.generic_list.value().ordered.end(),
+			std::back_inserter(ordered_generics),
+			[this, file_id](auto& generic) {
+				return register_type(from_type(generic.value, file_id, false), generic.span, file_id);
+			}
+		);
+		ordered_generics.reserve(function_call.generic_list.value().labeled.size());
+		for (auto& [name, generic] : function_call.generic_list.value().labeled) {
+			labeled_generics.emplace(
+				name.value,
+				register_type(from_type(generic.value, file_id, false), generic.span, file_id)
+			);
+		}
 	}
 
 	TypeInfo::ID expr_type = register_type(TypeInfo::make_unknown(), span, file_id);
@@ -2141,7 +2228,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	for (TypeInfo::ID callable_id : callable_filtered) {
 		assert(type_pool_.at(callable_id).is_function());
 		// now we must create the function call type according to the function (due to labeled
-		// arguments)
+		// arguments and generics)
 		auto const& function_arguments = type_pool_.at(callable_id).get_function().arguments;
 		assert(function_arguments.size() == provided_arguments);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> arguments {};
@@ -2159,10 +2246,28 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			arguments.push_back({name, labeled_arguments.at(name.value())});
 		}
 
+		auto const& function_generics = type_pool_.at(callable_id).get_function().generics;
+		assert(function_generics.size() == provided_generics);
+		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+		generics.reserve(provided_generics);
+		std::transform(
+			ordered_generics.cbegin(),
+			ordered_generics.cend(),
+			std::back_inserter(generics),
+			[](TypeInfo::ID generic) { return std::tuple {std::nullopt, generic}; }
+		);
+		for (size_t i = generics.size(); i < function_generics.size(); ++i) {
+			std::optional<std::string> name = std::get<0>(function_generics.at(i));
+			// if it didn't have a name, it couldn't be a labeled generic
+			assert(name.has_value());
+			generics.push_back({name, labeled_generics.at(name.value())});
+		}
+
 		// we store the expression type as the return type so it automatically gets inferred!
-		TypeInfo::ID callable_type = instantiate_type(callable_id);
-		TypeInfo     function_call_type
-			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), {}, expr_type});
+		TypeInfo::ID callable_type      = instantiate_type(callable_id);
+		TypeInfo     function_call_type = TypeInfo::make_function(
+                        TypeInfo::Function {std::move(arguments), std::move(generics), expr_type}
+                );
 		UndecidedOverload::Candidate candidate {callable_type, function_call_type};
 		candidates.push_back(std::move(candidate));
 	}
