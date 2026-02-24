@@ -27,11 +27,9 @@ struct Struct<T: CanDoSomethingElse> { x: T }
 struct Struct<T, U> { x: T; y: U }
 
 func use_ambiguous_structs() {
-/*
 	const x: Struct<uint32>;
 	const y = Struct<char> { x: 'u' };
 	const z: Struct<uint8>;
-*/
 }
 
 func use_some_struct_types() {

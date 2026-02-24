@@ -1586,42 +1586,92 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span, FileContext::ID file_id) {
-	// TODO: infer struct literals
-	/*
-	// the type is whichever struct is pointed to
-	AST::SymbolID type_symbol_id = struct_literal.name.value.id.value().at(0);
-	TypeInfo      type           = TypeInfo::make_named(type_symbol_id);
-	TypeInfo::ID  type_id        = register_type(std::move(type), span, file_id);
-
-	// now, for each field, we unify it with the struct field type
-	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_symbol_id).item);
-	for (auto& field : struct_literal.fields) {
-	        // we skip those which don't exist
-	        auto struct_field = std::find_if(
-	                struct_->fields.cbegin(),
-	                struct_->fields.cend(),
-	                [&field](AST::Struct::Field const& given_field) {
-	                        return given_field.name.value == field.name.value;
-	                }
-	        );
-	        if (struct_field == struct_->fields.cend()) continue;
-
-	        TypeInfo::ID field_type = infer(field.value->value, field.value->span, file_id);
-	        // FIXME: we shouldn't have to re-register the types per struct literal
-	        TypeInfo struct_field_type
-	                = from_type(struct_field->type.value, symbol_pool_.at(type_symbol_id).file_id, false);
-	        TypeInfo::ID struct_field_type_id = register_type(
-	                std::move(struct_field_type),
-	                struct_field->type.span,
-	                symbol_pool_.at(type_symbol_id).file_id
-	        );
-
-	        // FIXME: i don't like how these diagnostics are worded for struct fields
-	        unify(field_type, struct_field_type_id, file_id);
+	if (!struct_literal.name.value.id.has_value() || struct_literal.name.value.id.value().empty()) {
+		// name resolver will have complained already
+		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
+	TypeInfo named_type = from_type(
+		AST::Type::Atom::make_named(
+			AST::Type::Atom::Named {struct_literal.name, std::move(struct_literal.generic_list)}
+		),
+		file_id,
+		false
+	);
+	if (named_type.is_bottom()) {
+		// the function will have complained
+		return register_type(TypeInfo::make_bottom(), span, file_id);
+	}
+
+	// we must now check field exhaustiveness to filter named types
+	// TODO: store rejections
+	std::vector<TypeInfo::Named::Candidate> suitable_candidates {};
+	for (auto& candidate : named_type.get_named().candidates()) {
+		AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(candidate.name).item);
+
+		// first, we must check that all specified fields exist
+		bool all_fields_exist = true;
+		for (auto const& field : struct_literal.fields) {
+			if (!std::any_of(
+				    struct_->fields.cbegin(),
+				    struct_->fields.cend(),
+				    [&field](AST::Struct::Field const& struct_field) {
+					    return field.name.value == struct_field.name.value;
+				    }
+			    )) {
+				all_fields_exist = false;
+				break;
+			};
+		}
+		if (!all_fields_exist) continue;
+
+		// then, we must check that all struct fields are specified
+		bool all_fields_specified = true;
+		for (auto const& struct_field : struct_->fields) {
+			if (!std::any_of(
+				    struct_literal.fields.cbegin(),
+				    struct_literal.fields.cend(),
+				    [&struct_field](AST::Expression::Atom::StructLiteral::Field const& field) {
+					    return field.name.value == struct_field.name.value;
+				    }
+			    )) {
+				all_fields_specified = false;
+				break;
+			};
+		}
+		if (!all_fields_specified) continue;
+
+		// if both tests pass, this candidate is suitable
+		suitable_candidates.push_back(std::move(candidate));
+	}
+
+	if (suitable_candidates.empty()) {
+		// if there are no suitable candidates, we can't do anything
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"struct literal does not match any struct",
+				"none of the possible struct types have the same fields as the ones specified in the literal",
+				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
+			)
+		);
+		struct_literal.valid = false;  // remember to invalidate for lowering
+		return register_type(TypeInfo::make_bottom(), span, file_id);
+	}
+
+	// we can get the field types via member access now and delegate the work there
+	TypeInfo::ID type_id = register_type(std::move(named_type), struct_literal.name.span, file_id);
+	for (auto& field : struct_literal.fields) {
+		TypeInfo::ID field_type  = infer(field.value->value, field.value->span, file_id);
+		TypeInfo::ID access_type = register_type(
+			TypeInfo::make_member_access(type_id, field.name.value),
+			field.name.span,
+			file_id
+		);
+		unify(field_type, access_type, file_id);
+	}
+
+	// finally, we return our named type
 	return type_id;
-	*/
 }
 
 Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, FileContext::ID file_id) {
