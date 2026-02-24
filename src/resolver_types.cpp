@@ -2575,7 +2575,7 @@ bool Resolver::try_decide_remaining_types() {
 		// then we try to check generics
 		std::vector<TypeInfo::ID> remaining_unchecked_generics {};
 		for (TypeInfo::ID unchecked_generic : unchecked_generics)
-			if (!try_decide_generic_type(unchecked_generic))
+			if (!check_generic_type(unchecked_generic))
 				remaining_unchecked_generics.push_back(unchecked_generic);
 		old_size           = unchecked_generics.size();
 		unchecked_generics = std::move(remaining_unchecked_generics);
