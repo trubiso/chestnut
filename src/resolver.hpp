@@ -617,6 +617,11 @@ private:
 	/// Registers a type in the type pool and returns its ID.
 	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
 
+	/// Instantiates a type, that is, clones all of the generics within it.
+	TypeInfo::ID instantiate_type(TypeInfo::ID);
+	/// Instantiates a vector of types, that is, clones all of the generics within them.
+	std::vector<TypeInfo::ID> instantiate_types(std::vector<TypeInfo::ID> const&);
+
 	/// Gets all candidate functions for an operator.
 	std::vector<AST::SymbolID> get_operator_candidates(Token::Symbol operator_, bool binary) const;
 

@@ -1857,6 +1857,132 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 	else return register_type(TypeInfo::make_same_as(std::move(type_ids)), span, file_id);
 }
 
+Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
+	auto const& type    = type_pool_.at(id);
+	auto        span    = get_type_span(id);
+	auto        file_id = get_type_file_id(id);
+	auto        symbol  = type_symbol_mapping_.at(id);
+
+	switch (type_pool_.at(id).kind()) {
+	case TypeInfo::Kind::KnownVoid:
+	case TypeInfo::Kind::KnownChar:
+	case TypeInfo::Kind::KnownBool:
+	case TypeInfo::Kind::KnownInteger:
+	case TypeInfo::Kind::KnownFloat:
+	case TypeInfo::Kind::Module:
+	case TypeInfo::Kind::Bottom:         return id;
+	case TypeInfo::Kind::Unknown:        return register_type(TypeInfo::make_unknown(), span, file_id, symbol);
+	case TypeInfo::Kind::Function:
+	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::Generic:
+	case TypeInfo::Kind::MemberAccess:
+	case TypeInfo::Kind::Named:
+	case TypeInfo::Kind::Pointer:
+	case TypeInfo::Kind::PartialInteger:
+	case TypeInfo::Kind::PartialFloat:   break;
+	}
+
+	if (type.is_function()) {
+		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_arguments {};
+		new_arguments.reserve(type.get_function().arguments.size());
+		std::transform(
+			type.get_function().arguments.cbegin(),
+			type.get_function().arguments.cend(),
+			std::back_inserter(new_arguments),
+			[this](auto const& argument) {
+				return std::tuple {std::get<0>(argument), instantiate_type(std::get<1>(argument))};
+			}
+		);
+		return register_type(
+			TypeInfo::make_function(
+				TypeInfo::Function {
+					std::move(new_arguments),
+					instantiate_type(type.get_function().return_)
+				}
+			),
+			span,
+			file_id,
+			symbol
+		);
+	} else if (type.is_same_as()) {
+		return register_type(
+			TypeInfo::make_same_as(instantiate_types(type.get_same_as().ids)),
+			span,
+			file_id,
+			symbol
+		);
+	} else if (type.is_generic()) {
+		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
+		declared_constraints.reserve(type.get_generic().declared_constraints.size());
+		std::transform(
+			type.get_generic().declared_constraints.cbegin(),
+			type.get_generic().declared_constraints.cend(),
+			std::back_inserter(declared_constraints),
+			[this](TypeInfo::Generic::TraitConstraint const& constraint) {
+				return TypeInfo::Generic::TraitConstraint {
+					constraint.name,
+					instantiate_types(constraint.arguments)
+				};
+			}
+		);
+		if (!type.get_generic().imposed_constraints.empty()) {
+			std::cout << "warning: tried to instantiate generic type with imposed constraints: ";
+			debug_print_type(id);
+			std::cout << std::endl;
+		}
+		return register_type(
+			TypeInfo::make_generic(
+				TypeInfo::Generic {type.get_generic().name, std::move(declared_constraints), {}}
+			),
+			span,
+			file_id,
+			symbol
+		);
+	} else if (type.is_member_access()) {
+		assert(false && "tried to instantiate member access");
+	} else if (type.is_named()) {
+		assert(!type.get_named().is_partial());
+		std::vector<TypeInfo::Named::Candidate> new_candidates {};
+		new_candidates.reserve(type.get_named().candidates().size());
+		std::transform(
+			type.get_named().candidates().cbegin(),
+			type.get_named().candidates().cend(),
+			std::back_inserter(new_candidates),
+			[this](
+				TypeInfo::Named::Candidate const& candidate
+			) { return TypeInfo::Named::Candidate {candidate.name, instantiate_types(candidate.generics)}; }
+		);
+		return register_type(TypeInfo::make_named(std::move(new_candidates)), span, file_id, symbol);
+	} else if (type.is_pointer()) {
+		return register_type(
+			TypeInfo::make_pointer(
+				TypeInfo::Pointer {
+					instantiate_type(type.get_pointer().pointee),
+					type.get_pointer().mutable_
+				}
+			),
+			span,
+			file_id,
+			symbol
+		);
+	} else if (type.is_partial_integer()) {
+		assert(false && "tried to instantiate partial integer");
+	} else if (type.is_partial_float()) {
+		assert(false && "tried to instantiate partial float");
+	}
+	[[assume(false)]];
+	return id;
+}
+
+std::vector<Resolver::TypeInfo::ID> Resolver::instantiate_types(std::vector<TypeInfo::ID> const& types) {
+	std::vector<TypeInfo::ID> new_types {};
+	new_types.reserve(types.size());
+	std::transform(types.cbegin(), types.cend(), std::back_inserter(new_types), [this](TypeInfo::ID id) {
+		return instantiate_type(id);
+	});
+	return new_types;
+}
+
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileContext::ID file_id) {
 	// for function calls, we need to resolve or partially resolve the overload
@@ -2021,10 +2147,10 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		}
 
 		// we store the expression type as the return type so it automatically gets inferred!
-		// TODO: once we have generics, we need to instantiate a copy of the function with unknowns
-		TypeInfo function_call_type
+		TypeInfo::ID callable_type = instantiate_type(callable_id);
+		TypeInfo     function_call_type
 			= TypeInfo::make_function(TypeInfo::Function {std::move(arguments), expr_type});
-		UndecidedOverload::Candidate candidate {callable_id, function_call_type};
+		UndecidedOverload::Candidate candidate {callable_type, function_call_type};
 		candidates.push_back(std::move(candidate));
 	}
 
