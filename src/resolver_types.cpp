@@ -14,15 +14,15 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Sp
 	std::vector<AST::SymbolID>              candidate_ids = partial.name->id.value();
 	std::vector<TypeInfo::Named::Candidate> candidates {};
 
-	// TODO: if there is a generic candidate, there is only one candidate, so we should get a generic instead and check it!
-
 	// TODO: rejections list for diagnostic
+	bool any_generic_candidate = false;
 	for (AST::SymbolID candidate : candidate_ids) {
 		if (std::holds_alternative<Generic>(symbol_pool_.at(candidate).item)) {
 			// generics cannot take in generics
 			if (!partial.ordered_generics.empty() || !partial.labeled_generics.empty()) continue;
 			// otherwise, we have a generic candidate
 			candidates.emplace_back(candidate, std::vector<TypeInfo::ID> {});
+			any_generic_candidate = true;
 		}
 		if (!std::holds_alternative<AST::Struct*>(symbol_pool_.at(candidate).item)) continue;
 		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate).item);
@@ -100,6 +100,11 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Sp
 		return TypeInfo::make_bottom();
 	}
 
+	if (any_generic_candidate) {
+		assert(candidates.size() == 1);
+		// TODO: should we clone the generic instead?
+		return TypeInfo::make_same_as(symbol_pool_.at(candidates.at(0).name).type);
+	}
 	return TypeInfo::make_named(std::move(candidates));
 }
 
@@ -879,36 +884,20 @@ void Resolver::unify_named(
 ) {
 	assert(type_pool_.at(named).is_named());
 	if (!type_pool_.at(other).is_named()) {
-		// this can only unify with our generic candidates
-		std::vector<TypeInfo::Named::Candidate> generic_candidates {};
-		std::vector<TypeInfo::ID>               generic_candidate_ids {};
-		for (TypeInfo::Named::Candidate& candidate : type_pool_.at(named).get_named().candidates())
-			if (std::holds_alternative<Generic>(symbol_pool_.at(candidate.name).item)) {
-				assert(candidate.generics.empty());
-				generic_candidate_ids.push_back(symbol_pool_.at(candidate.name).type);
-				generic_candidates.push_back(std::move(candidate));
-			}
-		if (generic_candidate_ids.empty()) {
-			std::stringstream subtitle_stream {};
-			subtitle_stream
-				<< "expected both types to be "
-				<< get_type_name(named)
-				<< "; got "
-				<< get_type_name(other);
-			parsed_files.at(file_id).diagnostics.push_back(
-				Diagnostic::error(
-					"type mismatch",
-					subtitle_stream.str(),
-					{get_type_sample(named_origin, OutFmt::Color::Cyan),
-			                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
-				)
-			);
-			return;
-		}
-
-		// TODO: should we clone the generics before doing this?
-		for (TypeInfo::ID candidate : generic_candidate_ids) unify(candidate, other, file_id);
-		type_pool_.at(named).get_named().candidates() = std::move(generic_candidates);
+		std::stringstream subtitle_stream {};
+		subtitle_stream
+			<< "expected both types to be "
+			<< get_type_name(named)
+			<< "; got "
+			<< get_type_name(other);
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"type mismatch",
+				subtitle_stream.str(),
+				{get_type_sample(named_origin, OutFmt::Color::Cyan),
+		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
+			)
+		);
 		return;
 	}
 
@@ -1248,16 +1237,7 @@ bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other
 bool Resolver::can_unify_named(TypeInfo const& named, TypeInfo const& other) const {
 	// ensure they're both named types
 	assert(named.is_named());
-	if (!other.is_named()) {
-		// we need to have at least one generic candidate
-		return std::any_of(
-			named.get_named().candidates().cbegin(),
-			named.get_named().candidates().cend(),
-			[this](TypeInfo::Named::Candidate const& candidate) {
-				return std::holds_alternative<Generic>(symbol_pool_.at(candidate.name).item);
-			}
-		);
-	}
+	if (!other.is_named()) return false;
 
 	auto const &a = named.get_named(), &b = other.get_named();
 
@@ -1616,26 +1596,8 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	assert(type_pool_.at(id).is_named());
 	auto& candidates = type_pool_.at(id).get_named().candidates();
 
-	// i don't think we can actually have mixed generic and named candidates, but let's check
-	bool has_generic_candidate = false;
-	for (TypeInfo::Named::Candidate& candidate : candidates) {
-		if (std::holds_alternative<Generic>(symbol_pool_.at(candidate.name).item)) {
-			has_generic_candidate = true;
-		} else {
-			assert(!has_generic_candidate && "somehow we have mixed generic and named candidates");
-		}
-	}
-
 	// there should be candidates
 	assert(!candidates.empty());
-
-	// if it's generic candidates i don't think you can get more than one?
-	if (has_generic_candidate) {
-		assert(candidates.size() == 1);
-		// and then this just becomes a generic to decide
-		// TODO: decide
-		return false;
-	}
 
 	// if it's non-generic candidates, decide by specialization
 	// TODO: we need specialization for this
