@@ -358,7 +358,7 @@ void Resolver::debug_print_type(TypeInfo type) const {
 						std::cout << '>';
 					}
 				} else debug_print_type(std::get<TypeInfo::Generic::TypeConstraint>(constraint).type);
-				if (++count < generic.declared_constraints.size()) std::cout << " + ";
+				if (++count < generic.imposed_constraints.size()) std::cout << " + ";
 			}
 			std::cout << ')';
 		}
