@@ -1930,7 +1930,7 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 			debug_print_type(id);
 			std::cout << std::endl;
 		}
-		return register_type(
+		TypeInfo::ID generic_id = register_type(
 			TypeInfo::make_generic(
 				TypeInfo::Generic {type.get_generic().name, std::move(declared_constraints), {}}
 			),
@@ -1938,6 +1938,8 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 			file_id,
 			symbol
 		);
+		undecided_generics.push_back(generic_id);
+		return generic_id;
 	} else if (type.is_member_access()) {
 		assert(false && "tried to instantiate member access");
 	} else if (type.is_named()) {
