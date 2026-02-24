@@ -513,6 +513,11 @@ void Resolver::resolve(AST::Trait& trait, Scope scope, FileContext::ID file_id) 
 				<< std::endl;
 			std::exit(1);
 		}
+		if (named.generic_list.has_value()) {
+			for (auto& generic : named.generic_list.value().ordered) resolve(generic, child_scope, file_id);
+			for (auto& generic : named.generic_list.value().labeled)
+				resolve(std::get<1>(generic), child_scope, file_id);
+		}
 	}
 }
 

@@ -1353,7 +1353,8 @@ std::optional<Trait::Constraint> Parser::parse_trait_constraint() {
 		};
 	} else {
 		// this is a named constraint
-		return Trait::Named {std::move(identifier.value())};
+		std::optional<GenericList> generic_list = consume_generic_list();
+		return Trait::Named {std::move(identifier.value()), std::move(generic_list)};
 	}
 }
 

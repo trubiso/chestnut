@@ -3,7 +3,9 @@
 namespace AST {
 
 std::ostream& operator<<(std::ostream& os, Trait::Named const& named) {
-	return os << named.name.value;
+	os << named.name.value;
+	if (named.generic_list.has_value()) os << named.generic_list.value();
+	return os;
 }
 
 std::ostream& operator<<(std::ostream& os, Trait::Has const& has) {

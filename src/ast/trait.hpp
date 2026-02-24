@@ -8,6 +8,8 @@ struct Trait {
 	/// Points to a named trait.
 	struct Named {
 		Spanned<Identifier> name;
+
+		std::optional<GenericList> generic_list;
 	};
 
 	/// Concrete constraint.
