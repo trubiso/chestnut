@@ -2301,10 +2301,17 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		}
 
 		// we store the expression type as the return type so it automatically gets inferred!
-		TypeInfo::ID callable_type      = instantiate_type(callable_id);
-		TypeInfo     function_call_type = TypeInfo::make_function(
-                        TypeInfo::Function {std::move(arguments), std::move(generics), expr_type}
-                );
+		TypeInfo::ID callable_type = instantiate_type(callable_id);
+		// let's replace the type spans so the diagnostics are a bit nicer :-)
+		// TODO: this is a bit of a silly solution isn't it
+		// FIXME: we still get a diagnostic at the function declaration for some reason?
+		for (size_t i = 0; i < generics.size(); ++i) {
+			type_span_pool_.at(std::get<1>(type_pool_.at(callable_type).get_function().generics.at(i)))
+				= type_span_pool_.at(std::get<1>(generics.at(i)));
+		}
+		TypeInfo function_call_type = TypeInfo::make_function(
+			TypeInfo::Function {std::move(arguments), std::move(generics), expr_type}
+		);
 		UndecidedOverload::Candidate candidate {callable_type, function_call_type};
 		candidates.push_back(std::move(candidate));
 	}
