@@ -1448,6 +1448,7 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 	}
 
 	// if too many candidates are unifiable, we fail to decide.
+	// TODO: unless we can decide by specialization
 	if (undecided_overload.candidates.size() > 1) { return false; }
 
 	// if only one is unifiable, we've finally found the one and only function
@@ -1554,7 +1555,32 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 }
 
 bool Resolver::try_decide_named_type(TypeInfo::ID id) {
-	// TODO: we need generic instantiation to try and unify with the struct's type :P
+	assert(type_pool_.at(id).is_named());
+	auto& candidates = type_pool_.at(id).get_named().candidates();
+
+	// i don't think we can actually have mixed generic and named candidates, but let's check
+	bool has_generic_candidate = false;
+	for (TypeInfo::Named::Candidate& candidate : candidates) {
+		if (std::holds_alternative<Generic>(symbol_pool_.at(candidate.name).item)) {
+			has_generic_candidate = true;
+		} else {
+			assert(!has_generic_candidate && "somehow we have mixed generic and named candidates");
+		}
+	}
+
+	// there should be candidates
+	assert(!candidates.empty());
+
+	// if it's generic candidates i don't think you can get more than one?
+	if (has_generic_candidate) {
+		assert(candidates.size() == 1);
+		// and then this just becomes a generic to decide
+		// TODO: decide
+		return false;
+	}
+
+	// if it's non-generic candidates, decide by specialization
+	// TODO: we need specialization for this
 	return false;
 }
 
