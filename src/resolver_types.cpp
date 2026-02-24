@@ -828,6 +828,34 @@ void Resolver::unify_functions(
 		}
 	}
 
+	// unify the names and types of generics
+	for (size_t i = 0; i < a_function.generics.size(); ++i) {
+		auto& [a_name, a_type] = a_function.generics.at(i);
+		auto& [b_name, b_type] = b_function.generics.at(i);
+
+		// unify the type first for diagnostics' sake
+		bool can_unify_type = can_unify(a_type, b_type);
+		unify(a_type, b_type, file_id);
+
+		bool a_has_name = a_name.has_value(), b_has_name = b_name.has_value();
+		if (a_has_name && b_has_name && (a_name.value() != b_name.value())) {
+			// we don't want to throw the diagnostic if the type cannot be unified to begin with
+			if (can_unify_type) {
+				// FIXME: we don't have the span/fileid for the generic, so we can't show a sample!
+				parsed_files.at(file_id).diagnostics.push_back(
+					Diagnostic::error(
+						"type mismatch",
+						"expected both functions to have the same generic names, since neither generic name is marked as anonymous",
+						{}
+					)
+				);
+			}
+		} else if (a_has_name || b_has_name) {
+			if (a_has_name) b_name = a_name;
+			if (b_has_name) a_name = b_name;
+		}
+	}
+
 	// unify the return types
 	unify(a_function.return_, b_function.return_, file_id);
 	return;
@@ -1213,6 +1241,15 @@ bool Resolver::can_unify_functions(TypeInfo const& function, TypeInfo const& oth
 		auto& [a_name, a_type] = a_function.arguments.at(i);
 		auto& [b_name, b_type] = b_function.arguments.at(i);
 		if (a_name.has_value() && b_name.has_value() && (a_name.value() != b_name.value())) { return false; }
+		if (!can_unify(a_type, b_type)) return false;
+	}
+
+	// unify the names and types of generics
+	for (size_t i = 0; i < a_function.generics.size(); ++i) {
+		auto& [a_name, a_type] = a_function.generics.at(i);
+		auto& [b_name, b_type] = b_function.generics.at(i);
+		if (a_name.has_value() && b_name.has_value() && (a_name.value() != b_name.value())) { return false; }
+		// TODO: we most likely don't need to call this, since generics are of type generic
 		if (!can_unify(a_type, b_type)) return false;
 	}
 
