@@ -591,8 +591,6 @@ private:
 	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID, bool partial = true);
 	TypeInfo from_type(AST::Type const&, FileContext::ID, bool partial = true);
 
-	TypeInfo from_identifier(AST::Identifier const&);
-
 	/// Returns the span for a given type ID.
 	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }
 
