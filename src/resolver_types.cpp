@@ -14,6 +14,8 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Sp
 	std::vector<AST::SymbolID>              candidate_ids = partial.name->id.value();
 	std::vector<TypeInfo::Named::Candidate> candidates {};
 
+	// TODO: if there is a generic candidate, there is only one candidate, so we should get a generic instead and check it!
+
 	// TODO: rejections list for diagnostic
 	for (AST::SymbolID candidate : candidate_ids) {
 		if (std::holds_alternative<Generic>(symbol_pool_.at(candidate).item)) {
@@ -2285,7 +2287,12 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 bool Resolver::try_decide_remaining_types() {
 	// PERF: use std::copy_if
 	// TODO: check whether any undecided named types are left as well
-	while (!undecided_overloads.empty() || !undecided_member_accesses.empty()) {
+	while (!undecided_overloads.empty()
+	       || !undecided_member_accesses.empty()
+	       || !undecided_generics.empty()
+	       || !unchecked_generics.empty()) {
+		bool any_succeeded = false;
+
 		// we first try to decide the overloads
 		std::vector<UndecidedOverload> remaining_overloads {};
 		for (UndecidedOverload& undecided_overload : undecided_overloads)
@@ -2293,31 +2300,46 @@ bool Resolver::try_decide_remaining_types() {
 				remaining_overloads.push_back(std::move(undecided_overload));
 		size_t old_size     = undecided_overloads.size();
 		undecided_overloads = std::move(remaining_overloads);
-
-		bool overloads_succeeded = old_size != undecided_overloads.size();
+		if (old_size != undecided_overloads.size()) any_succeeded = true;
 
 		// then we try to decide the member accesses
 		std::vector<TypeInfo::ID> remaining_member_accesses {};
 		for (TypeInfo::ID undecided_member_access : undecided_member_accesses)
 			if (!try_decide(undecided_member_access))
 				remaining_member_accesses.push_back(undecided_member_access);
-		old_size                  = remaining_member_accesses.size();
+		old_size                  = undecided_member_accesses.size();
 		undecided_member_accesses = std::move(remaining_member_accesses);
-
-		bool member_accesses_succeeded = old_size != undecided_member_accesses.size();
+		if (old_size != undecided_member_accesses.size()) any_succeeded = true;
 
 		// then we try to decide the named types
-		bool named_types_succeeded = false;
 		for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
 			TypeInfo const& type = type_pool_.at(id);
 			if (!type.is_named()) continue;
 			int decided = type.is_decided(type_pool_);
 			if (decided != 0) continue;
-			if (try_decide_named_type(id)) named_types_succeeded = true;
+			if (try_decide_named_type(id)) any_succeeded = true;
 		}
 
+		// then we try to decide generics
+		std::vector<TypeInfo::ID> remaining_undecided_generics {};
+		for (TypeInfo::ID undecided_generic : undecided_generics)
+			if (!try_decide_generic_type(undecided_generic))
+				remaining_undecided_generics.push_back(undecided_generic);
+		old_size           = undecided_generics.size();
+		undecided_generics = std::move(remaining_undecided_generics);
+		if (old_size != undecided_generics.size()) any_succeeded = true;
+
+		// then we try to check generics
+		std::vector<TypeInfo::ID> remaining_unchecked_generics {};
+		for (TypeInfo::ID unchecked_generic : unchecked_generics)
+			if (!try_decide_generic_type(unchecked_generic))
+				remaining_unchecked_generics.push_back(unchecked_generic);
+		old_size           = unchecked_generics.size();
+		unchecked_generics = std::move(remaining_unchecked_generics);
+		if (old_size != unchecked_generics.size()) any_succeeded = true;
+
 		// finally, we quit if we made no progress
-		if (!overloads_succeeded && !member_accesses_succeeded && !named_types_succeeded) break;
+		if (!any_succeeded) break;
 	}
 
 	// only if both arrays are empty we have finished deciding the program

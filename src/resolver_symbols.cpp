@@ -483,6 +483,7 @@ void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scop
 		                false,
 		                {}}
 		);
+		unchecked_generics.push_back(get_single_symbol(generic.name.value).type);
 		scope.symbols.insert_or_assign(generic.name.value.name(), generic.name.value.id.value());
 	}
 }

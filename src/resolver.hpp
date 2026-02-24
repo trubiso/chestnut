@@ -580,6 +580,9 @@ private:
 
 	std::vector<TypeInfo::ID> undecided_member_accesses {};
 
+	std::vector<TypeInfo::ID> undecided_generics {};
+	std::vector<TypeInfo::ID> unchecked_generics {};
+
 	/// Turns a partial named type into a full named type with candidates. May return a bottom if the
 	/// identifier is not resolved, or if no candidates match (in which case it throws a diagnostic).
 	TypeInfo from_partial(TypeInfo::Named::Partial&&, Span, FileContext::ID);
