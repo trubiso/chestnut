@@ -710,9 +710,9 @@ private:
 	bool try_decide_named_type(TypeInfo::ID);
 
 	/// Returns whether a concrete type satisfies a set of trait constraints.
-	bool satisfies_trait_constraint(TypeInfo::ID, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
-	/// Returns whether the checked trait constraint is stricter than the other trait constraint.
-	bool satisfies_trait_constraint(TypeInfo::Generic::TraitConstraint const& checked, TypeInfo::Generic::TraitConstraint const&) const;
+	std::optional<bool> satisfies_trait_constraint(TypeInfo::ID, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
+	/// Expands a trait into itself plus its required traits, recursively.
+	std::vector<TypeInfo::Generic::TraitConstraint> expand_trait(TypeInfo::Generic::TraitConstraint const&) const;
 	/// Returns whether the checked list of trait constraints is stricter than the other list.
 	bool satisfies_trait_constraint(std::vector<TypeInfo::Generic::TraitConstraint> const& checked, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
 

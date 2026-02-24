@@ -1557,6 +1557,59 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	return true;
 }
 
+std::optional<bool> Resolver::satisfies_trait_constraint(
+	TypeInfo::ID                                           type_id,
+	std::vector<TypeInfo::Generic::TraitConstraint> const& constraints
+) const {
+	if (type_pool_.at(type_id).is_generic()) {
+		return satisfies_trait_constraint(
+			type_pool_.at(type_id).get_generic().declared_constraints,
+			constraints
+		);
+	} else if (type_pool_.at(type_id).is_member_access() || type_pool_.at(type_id).is_unknown()) {
+		// we delay generic resolution if we don't yet know the type
+		return std::nullopt;
+	} else if (type_pool_.at(type_id).is_bottom()) {
+		// we ignore bottoms
+		return true;
+	} else {
+		// TODO: obtain implemented traits for type
+		return false;
+	}
+}
+
+std::vector<Resolver::TypeInfo::Generic::TraitConstraint>
+Resolver::expand_trait(TypeInfo::Generic::TraitConstraint const& trait_constraint) const {
+	// TODO: expand
+	return {trait_constraint};
+}
+
+bool Resolver::satisfies_trait_constraint(
+	std::vector<TypeInfo::Generic::TraitConstraint> const& checked,
+	std::vector<TypeInfo::Generic::TraitConstraint> const& other
+) const {
+	std::vector<TypeInfo::Generic::TraitConstraint> expanded_traits {};
+
+	// TODO: we need to pre-check that these trait constraints have the correct amount of generics and such!!!
+	for (auto const& trait_constraint : checked) {
+		std::vector<TypeInfo::Generic::TraitConstraint> expanded = expand_trait(trait_constraint);
+		std::move(expanded.begin(), expanded.end(), std::back_inserter(expanded_traits));
+	}
+
+	for (auto const& trait_constraint : other) {
+		// we need to check that this trait constraint exists in the expanded traits list
+		bool any_matched = false;
+		for (auto const& trait : expanded_traits) {
+			if (trait_constraint.name != trait.name) continue;
+			// TODO: check generics, potentially returning null if any of them are not yet decided
+			any_matched = true;
+			break;
+		}
+		if (!any_matched) return false;
+	}
+	return true;
+}
+
 bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	assert(type_pool_.at(id).is_named());
 	auto& candidates = type_pool_.at(id).get_named().candidates();
@@ -1599,8 +1652,14 @@ bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
 	for (auto const& constraint : generic.imposed_constraints) {
 		if (std::holds_alternative<TypeInfo::Generic::TypeConstraint>(constraint)) {
 			auto const& type_constraint = std::get<TypeInfo::Generic::TypeConstraint>(constraint);
-			if (!satisfies_trait_constraint(type_constraint.type, generic.declared_constraints))
-				satisfies_trait_constraints = false;
+
+			std::optional<bool> satisfies
+				= satisfies_trait_constraint(type_constraint.type, generic.declared_constraints);
+			if (!satisfies.has_value()) {
+				// we cannot yet finish resolving this, because the type is not yet known
+				return false;
+			}
+			if (!satisfies.value()) satisfies_trait_constraints = false;
 			type_constraints.push_back(type_constraint);
 		} else {
 			trait_constraints.push_back(std::get<TypeInfo::Generic::TraitConstraint>(constraint));
@@ -1674,6 +1733,7 @@ bool Resolver::check_generic_type(TypeInfo::ID id) {
 	// constraint makes sense?
 	for (auto const& constraint : generic.imposed_constraints) {
 		if (std::holds_alternative<TypeInfo::Generic::TypeConstraint>(constraint)) {
+			// TODO: diagnostic
 			return true;
 		} else trait_constraints.push_back(std::get<TypeInfo::Generic::TraitConstraint>(constraint));
 	}
