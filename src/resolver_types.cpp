@@ -20,7 +20,7 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Sp
 			// generics cannot take in generics
 			if (!partial.ordered_generics.empty() || !partial.labeled_generics.empty()) continue;
 			// otherwise, we have a generic candidate
-			candidates.emplace_back(candidate, std::vector<TypeInfo::ID>{});
+			candidates.emplace_back(candidate, std::vector<TypeInfo::ID> {});
 		}
 		if (!std::holds_alternative<AST::Struct*>(symbol_pool_.at(candidate).item)) continue;
 		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate).item);
@@ -874,20 +874,36 @@ void Resolver::unify_named(
 ) {
 	assert(type_pool_.at(named).is_named());
 	if (!type_pool_.at(other).is_named()) {
-		std::stringstream subtitle_stream {};
-		subtitle_stream
-			<< "expected both types to be "
-			<< get_type_name(named)
-			<< "; got "
-			<< get_type_name(other);
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"type mismatch",
-				subtitle_stream.str(),
-				{get_type_sample(named_origin, OutFmt::Color::Cyan),
-		                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
-			)
-		);
+		// this can only unify with our generic candidates
+		std::vector<TypeInfo::Named::Candidate> generic_candidates {};
+		std::vector<TypeInfo::ID>               generic_candidate_ids {};
+		for (TypeInfo::Named::Candidate& candidate : type_pool_.at(named).get_named().candidates())
+			if (std::holds_alternative<Generic>(symbol_pool_.at(candidate.name).item)) {
+				assert(candidate.generics.empty());
+				generic_candidate_ids.push_back(symbol_pool_.at(candidate.name).type);
+				generic_candidates.push_back(std::move(candidate));
+			}
+		if (generic_candidate_ids.empty()) {
+			std::stringstream subtitle_stream {};
+			subtitle_stream
+				<< "expected both types to be "
+				<< get_type_name(named)
+				<< "; got "
+				<< get_type_name(other);
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					"type mismatch",
+					subtitle_stream.str(),
+					{get_type_sample(named_origin, OutFmt::Color::Cyan),
+			                 get_type_sample(other_origin, OutFmt::Color::Yellow)}
+				)
+			);
+			return;
+		}
+
+		// TODO: should we clone the generics before doing this?
+		for (TypeInfo::ID candidate : generic_candidate_ids) unify(candidate, other, file_id);
+		type_pool_.at(named).get_named().candidates() = std::move(generic_candidates);
 		return;
 	}
 
@@ -1227,8 +1243,16 @@ bool Resolver::can_unify_pointers(TypeInfo const& pointer, TypeInfo const& other
 bool Resolver::can_unify_named(TypeInfo const& named, TypeInfo const& other) const {
 	// ensure they're both named types
 	assert(named.is_named());
-	// FIXME: this breaks when it's a named type with a generic candidate
-	if (!other.is_named()) return false;
+	if (!other.is_named()) {
+		// we need to have at least one generic candidate
+		return std::any_of(
+			named.get_named().candidates().cbegin(),
+			named.get_named().candidates().cend(),
+			[this](TypeInfo::Named::Candidate const& candidate) {
+				return std::holds_alternative<Generic>(symbol_pool_.at(candidate.name).item);
+			}
+		);
+	}
 
 	auto const &a = named.get_named(), &b = other.get_named();
 

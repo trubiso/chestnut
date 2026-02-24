@@ -18,7 +18,7 @@ trait CanDoWhatever: has do_whatever(anon _: This);
 func want_to_do_everything<T: CanDoWhatever + CanDoSomethingElse>(x: T) {
 	do_something(*&const x);
 	do_whatever(*&const x);
-	return do_something_else(x);
+	return do_something_else(x, true);
 }
 
 struct Struct<T> { x: T }
