@@ -709,6 +709,20 @@ private:
 	/// Tries to decide a named type.
 	bool try_decide_named_type(TypeInfo::ID);
 
+	/// Returns whether a concrete type satisfies a set of trait constraints.
+	bool satisfies_trait_constraint(TypeInfo::ID, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
+	/// Returns whether the checked trait constraint is stricter than the other trait constraint.
+	bool satisfies_trait_constraint(TypeInfo::Generic::TraitConstraint const& checked, TypeInfo::Generic::TraitConstraint const&) const;
+	/// Returns whether the checked list of trait constraints is stricter than the other list.
+	bool satisfies_trait_constraint(std::vector<TypeInfo::Generic::TraitConstraint> const& checked, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
+
+	/// Checks whether a generic type's imposed constraints are at least as strict as its declared
+	/// constraints. If possible, turns it into a concrete type.
+	bool try_decide_generic_type(TypeInfo::ID);
+	/// Checks whether a generic type's imposed constraints are more relaxed than or equal to its
+	/// declared constraints.
+	bool check_generic_type(TypeInfo::ID);
+
 	TypeInfo::ID infer(AST::Expression::Atom::StructLiteral&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::Atom&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::FunctionCall&, Span, FileContext::ID);

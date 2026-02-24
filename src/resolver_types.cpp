@@ -1587,6 +1587,116 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	return false;
 }
 
+bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
+	assert(type_pool_.at(id).is_generic());
+	auto& generic = type_pool_.at(id).get_generic();
+
+	// all imposed constraints must satisfy the declared constraints
+	bool                                            satisfies_trait_constraints = true;
+	std::vector<TypeInfo::Generic::TraitConstraint> trait_constraints {};
+	std::vector<TypeInfo::Generic::TypeConstraint>  type_constraints {};
+	// type constraints must satisfy declared trait constraints
+	for (auto const& constraint : generic.imposed_constraints) {
+		if (std::holds_alternative<TypeInfo::Generic::TypeConstraint>(constraint)) {
+			auto const& type_constraint = std::get<TypeInfo::Generic::TypeConstraint>(constraint);
+			if (!satisfies_trait_constraint(type_constraint.type, generic.declared_constraints))
+				satisfies_trait_constraints = false;
+			type_constraints.push_back(type_constraint);
+		} else {
+			trait_constraints.push_back(std::get<TypeInfo::Generic::TraitConstraint>(constraint));
+		}
+	}
+	// trait constraints must satisfy declared trait constraints
+	satisfies_trait_constraints = satisfies_trait_constraints
+	                           && satisfies_trait_constraint(trait_constraints, generic.declared_constraints);
+	if (!satisfies_trait_constraints) {
+		type_pool_.at(id) = TypeInfo::make_bottom();
+		// TODO: rejections list
+		parsed_files.at(get_type_file_id(id))
+			.diagnostics.push_back(
+				Diagnostic::error(
+					"type does not satisfy declared trait constraints",
+					{Diagnostic::Sample(
+						get_context(get_type_file_id(id)),
+						get_type_span(id),
+						OutFmt::Color::Red
+					)}
+				)
+			);
+		return true;
+	}
+
+	// if there are no imposed type constraints then there is no concrete type!
+	if (type_constraints.empty()) {
+		// this is not an issue, though
+		return true;
+	}
+
+	// imposed type constraints must satisfy imposed trait constraints
+	satisfies_trait_constraints = true;
+	for (auto const& type_constraint : type_constraints) {
+		if (!satisfies_trait_constraint(type_constraint.type, trait_constraints))
+			satisfies_trait_constraints = false;
+	}
+	if (!satisfies_trait_constraints) {
+		type_pool_.at(id) = TypeInfo::make_bottom();
+		// TODO: rejections list
+		parsed_files.at(get_type_file_id(id))
+			.diagnostics.push_back(
+				Diagnostic::error(
+					"type does not satisfy imposed trait constraints",
+					{Diagnostic::Sample(
+						get_context(get_type_file_id(id)),
+						get_type_span(id),
+						OutFmt::Color::Red
+					)}
+				)
+			);
+		return true;
+	}
+
+	// if we do satisfy those constraints, we can now unify the imposed type constraints with each other
+	type_pool_.at(id) = TypeInfo::make_same_as(type_constraints.at(0).type);
+	for (size_t i = 1; i < type_constraints.size(); ++i) {
+		unify(id, type_constraints[i].type, get_type_file_id(id));
+	}
+	return true;
+}
+
+bool Resolver::check_generic_type(TypeInfo::ID id) {
+	assert(type_pool_.at(id).is_generic());
+	auto& generic = type_pool_.at(id).get_generic();
+
+	// all declared constraints must satisfy the imposed constraints
+	std::vector<TypeInfo::Generic::TraitConstraint> trait_constraints {};
+	// if there is any type constraint, we bail
+	// TODO: there might be an edge case where a type is the only implementer of a trait and therefore a type
+	// constraint makes sense?
+	for (auto const& constraint : generic.imposed_constraints) {
+		if (std::holds_alternative<TypeInfo::Generic::TypeConstraint>(constraint)) {
+			return true;
+		} else trait_constraints.push_back(std::get<TypeInfo::Generic::TraitConstraint>(constraint));
+	}
+	if (!satisfies_trait_constraint(generic.declared_constraints, trait_constraints)) {
+		type_pool_.at(id) = TypeInfo::make_bottom();
+		// TODO: rejections list, and better diagnostic??
+		parsed_files.at(get_type_file_id(id))
+			.diagnostics.push_back(
+				Diagnostic::error(
+					"type is not capable enough",
+					{Diagnostic::Sample(
+						get_context(get_type_file_id(id)),
+						get_type_span(id),
+						OutFmt::Color::Red
+					)}
+				)
+			);
+		return true;
+	}
+
+	return true;
+}
+
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span, FileContext::ID file_id) {
 	if (!struct_literal.name.value.id.has_value() || struct_literal.name.value.id.value().empty()) {
