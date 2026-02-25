@@ -2766,8 +2766,11 @@ bool Resolver::try_decide_remaining_types() {
 		if (!any_succeeded) break;
 	}
 
-	// only if both arrays are empty we have finished deciding the program
-	return undecided_overloads.empty() && undecided_member_accesses.empty();
+	// only if all arrays are empty we have finished deciding the program
+	return undecided_overloads.empty()
+	    && undecided_member_accesses.empty()
+	    && undecided_generics.empty()
+	    && unchecked_generics.empty();
 }
 
 void Resolver::decide_remaining_types() {
