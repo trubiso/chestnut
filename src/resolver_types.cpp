@@ -1525,6 +1525,9 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	}
 	// if it is decided, the base is decided
 	// this member access will 100% be resolved now! :D
+
+	// let's ensure that we have the proper generic constraints
+	constrain_candidate(underlying.get_named().candidates().at(0));
 	AST::SymbolID type_name_id = underlying.get_named().candidates().at(0).name;
 
 	// we don't have any other user type as of now :P
