@@ -751,6 +751,12 @@ private:
 	/// Turns a generic declaration constraint into a type inference engine trait constraint. Returns null if an error happens.
 	std::optional<TypeInfo::Generic::TraitConstraint> generate_constraint(AST::GenericDeclaration::Generic::Constraint const&, FileContext::ID);
 
+	/// Adds the correct trait constraints to a named type's generics according to the provided candidate.
+	void constrain_candidate(TypeInfo::Named::Candidate const&);
+	/// Adds generic constraints to all single-candidate named types' generics. It's necessary to do this,
+	/// since these types will get overlooked by the main type decision loop, because they are already decided.
+	void constrain_known_named_type_generics();
+
 	/// Tries to decide all remaining function overloads and member accesses, returning whether there are
 	/// still any remaining types which were not able to be decided.
 	bool try_decide_remaining_types();

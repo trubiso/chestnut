@@ -2651,6 +2651,31 @@ Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint const
 	return TypeInfo::Generic::TraitConstraint {constraint.name.value.id.value()[0], std::move(arguments)};
 }
 
+void Resolver::constrain_candidate(TypeInfo::Named::Candidate const& candidate) {
+	AST::Struct* struct_ = std::get<AST::Struct*>(get_single_symbol(candidate.name).item);
+	if (!struct_->generic_declaration.has_value()) return;
+	auto const& generics          = candidate.generics;
+	auto&       declared_generics = struct_->generic_declaration.value().generics;
+
+	// add trait constraints from the struct generics
+	assert(generics.size() == declared_generics.size());
+	for (size_t i = 0; i < generics.size(); ++i) {
+		ensure_has_constraints(declared_generics.at(i), get_single_symbol(candidate.name).file_id);
+		auto generic = instantiate_type(get_single_symbol(declared_generics.at(i).name.value).type);
+		unify(generics.at(i), generic, get_type_file_id(generic));
+	}
+}
+
+void Resolver::constrain_known_named_type_generics() {
+	for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
+		TypeInfo const& type = type_pool_.at(id);
+		if (!type.is_named()) continue;
+		if (type.get_named().candidates().size() != 1) continue;
+		auto const& candidate = type.get_named().candidates().at(0);
+		constrain_candidate(candidate);
+	}
+}
+
 bool Resolver::try_decide_remaining_types() {
 	// PERF: use std::copy_if
 	// TODO: check whether any undecided named types are left as well
@@ -2850,5 +2875,6 @@ void Resolver::decide_remaining_types() {
 
 void Resolver::infer_types() {
 	for (ParsedFile& file : parsed_files) { infer(file.module, file.file_id); }
+	constrain_known_named_type_generics();
 	decide_remaining_types();
 }
