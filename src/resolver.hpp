@@ -746,6 +746,9 @@ private:
 	void         infer(AST::Trait&, FileContext::ID);
 	void         infer(AST::Module&, FileContext::ID);
 
+	/// Turns a type into an undecided generic with the old type as a constraint, unless it is already a generic type.
+	TypeInfo::ID generify_type(TypeInfo::ID, AST::SymbolID);
+
 	/// Ensures a generic declaration generic has its constraints added.
 	void ensure_has_constraints(AST::GenericDeclaration::Generic&, FileContext::ID);
 	/// Turns a generic declaration constraint into a type inference engine trait constraint. Returns null if an error happens.

@@ -2551,6 +2551,17 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 	}
 }
 
+Resolver::TypeInfo::ID Resolver::generify_type(TypeInfo::ID id, AST::SymbolID name) {
+	if (type_pool_.at(id).is_generic()) return id;
+	TypeInfo::ID generified = register_type(
+		TypeInfo::make_generic(TypeInfo::Generic {name, {}, {TypeInfo::Generic::TypeConstraint {id}}}),
+		get_type_span(id),
+		get_type_file_id(id)
+	);
+	undecided_generics.push_back(generified);
+	return generified;
+}
+
 void Resolver::ensure_has_constraints(AST::GenericDeclaration::Generic& generic, FileContext::ID file_id) {
 	auto& generic_type = type_pool_.at(get_single_symbol(generic.name.value).type).get_generic();
 	if (!generic_type.declared_constraints.empty()) return;
@@ -2647,7 +2658,7 @@ Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint const
 	assert(arguments.size() == trait_generics.size());
 	for (size_t i = 0; i < arguments.size(); ++i) {
 		ensure_has_constraints(trait_generics.at(i), get_single_symbol(constraint.name.value).file_id);
-		auto generic = instantiate_type(get_single_symbol(trait_generics.at(i).name.value).type);
+		auto generic    = instantiate_type(get_single_symbol(trait_generics.at(i).name.value).type);
 		unify(arguments.at(i), generic, file_id);
 	}
 
@@ -2664,8 +2675,9 @@ void Resolver::constrain_candidate(TypeInfo::Named::Candidate const& candidate) 
 	assert(generics.size() == declared_generics.size());
 	for (size_t i = 0; i < generics.size(); ++i) {
 		ensure_has_constraints(declared_generics.at(i), get_single_symbol(candidate.name).file_id);
-		auto generic = instantiate_type(get_single_symbol(declared_generics.at(i).name.value).type);
-		unify(generics.at(i), generic, get_type_file_id(generic));
+		auto generic    = instantiate_type(get_single_symbol(declared_generics.at(i).name.value).type);
+		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value()[0]);
+		unify(generified, generic, get_type_file_id(generified));
 	}
 }
 
