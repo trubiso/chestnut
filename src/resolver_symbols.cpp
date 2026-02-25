@@ -440,7 +440,6 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scope, FileContext::ID file_id) {
 	// we now actually create these generics
 	for (auto& generic : generic_declaration.generics) {
-		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
 		for (auto& constraint : generic.constraints) {
 			auto& name = constraint.name;
 			resolve(name, scope, file_id);
@@ -460,7 +459,6 @@ void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scop
 					<< std::endl;
 				std::exit(1);
 			}
-			std::vector<TypeInfo::ID> arguments {};
 			// FIXME: resolving subgenerics this early has the side effect that we cannot reference generics
 			// that appear later in the generic declaration!
 			if (constraint.generic_list.has_value()) {
@@ -470,18 +468,11 @@ void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scop
 				}
 				for (auto& subgeneric : constraint.generic_list.value().ordered) {
 					resolve(subgeneric, scope, file_id);
-					arguments.push_back(register_type(
-						from_type(subgeneric.value, file_id),
-						subgeneric.span,
-						file_id
-					));
 				}
 			}
-			declared_constraints.emplace_back(name.value.id.value()[0], std::move(arguments));
 		}
-		type_pool_.at(get_single_symbol(generic.name.value).type) = TypeInfo::make_generic(
-			TypeInfo::Generic {generic.name.value.id.value()[0], std::move(declared_constraints), {}}
-		);
+		type_pool_.at(get_single_symbol(generic.name.value).type)
+			= TypeInfo::make_generic(TypeInfo::Generic {generic.name.value.id.value()[0], {}, {}});
 		unchecked_generics.push_back(get_single_symbol(generic.name.value).type);
 		scope.symbols.insert_or_assign(generic.name.value.name(), generic.name.value.id.value());
 	}

@@ -740,7 +740,10 @@ private:
 	void         infer(AST::Statement::Return&, Span, AST::SymbolID function, FileContext::ID);
 	void         infer(Spanned<AST::Statement>&, AST::SymbolID function, FileContext::ID);
 	void         infer(AST::Scope&, AST::SymbolID function, FileContext::ID);
+	void         infer(AST::GenericDeclaration&, FileContext::ID);
 	void         infer(AST::Function&, FileContext::ID);
+	void         infer(AST::Struct&, FileContext::ID);
+	void         infer(AST::Trait&, FileContext::ID);
 	void         infer(AST::Module&, FileContext::ID);
 
 	/// Tries to decide all remaining function overloads and member accesses, returning whether there are

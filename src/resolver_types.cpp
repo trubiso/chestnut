@@ -1609,7 +1609,6 @@ bool Resolver::satisfies_trait_constraint(
 ) const {
 	std::vector<TypeInfo::Generic::TraitConstraint> expanded_traits {};
 
-	// TODO: we need to pre-check that these trait constraints have the correct amount of generics and such!!!
 	for (auto const& trait_constraint : checked) {
 		std::vector<TypeInfo::Generic::TraitConstraint> expanded = expand_trait(trait_constraint);
 		std::move(expanded.begin(), expanded.end(), std::back_inserter(expanded_traits));
@@ -2522,8 +2521,120 @@ void Resolver::infer(AST::Scope& scope, AST::SymbolID function, FileContext::ID 
 	for (auto& statement : scope) { infer(statement, function, file_id); }
 }
 
+void Resolver::infer(AST::GenericDeclaration& generic_declaration, FileContext::ID file_id) {
+	for (auto& generic : generic_declaration.generics) {
+		auto& generic_type = type_pool_.at(get_single_symbol(generic.name.value).type).get_generic();
+		for (auto& constraint : generic.constraints) {
+			if (!constraint.name.value.id.has_value() || constraint.name.value.id.value().empty()) {
+				// name resolver will already have thrown errors about this
+				continue;
+			}
+			if (constraint.name.value.id.value().size() != 1) {
+				std::cout << "todo: diagnostic for unsupported ambiguous trait" << std::endl;
+				std::exit(1);
+			}
+
+			if (!std::holds_alternative<AST::Trait*>(get_single_symbol(constraint.name.value).item))
+				// TODO: diagnostic
+				continue;
+			AST::Trait const& trait = *std::get<AST::Trait*>(get_single_symbol(constraint.name.value).item);
+
+			if (!constraint.generic_list.has_value()
+			    || (constraint.generic_list.value().ordered.empty()
+			        && constraint.generic_list.value().labeled.empty())) {
+				// if we don't have any generics, the trait must have no generics
+				if (trait.generic_declaration.has_value()
+				    && !trait.generic_declaration.value().generics.empty())
+					// TODO: diagnostic
+					continue;
+
+				generic_type.declared_constraints.push_back(
+					TypeInfo::Generic::TraitConstraint {constraint.name.value.id.value()[0], {}}
+				);
+				continue;
+			}
+
+			// if we do have generics, the trait must have the same quantity
+			// TODO: diagnostic
+			if (!trait.generic_declaration.has_value()) continue;
+			auto const& trait_generics = trait.generic_declaration.value().generics;
+			// TODO: default generics (default everything to inferred by default)
+			size_t generic_count = constraint.generic_list.value().ordered.size()
+			                     + constraint.generic_list.value().labeled.size();
+			// TODO: diagnostic
+			if (generic_count != trait_generics.size()) continue;
+
+			// check that all labeled generics exist, ignoring ordered ones
+			std::vector<std::string_view> under_consideration {};
+			under_consideration.reserve(
+				trait_generics.size() - constraint.generic_list.value().ordered.size()
+			);
+			for (size_t i = constraint.generic_list.value().ordered.size(); i < trait_generics.size(); ++i)
+				if (!trait_generics.at(i).anonymous)
+					under_consideration.push_back(trait_generics.at(i).name.value.name());
+
+			if (std::any_of(
+				    constraint.generic_list.value().labeled.cbegin(),
+				    constraint.generic_list.value().labeled.cend(),
+				    [&under_consideration](auto const& generic) {
+					    auto const& name = std::get<0>(generic);
+					    return !std::any_of(
+						    under_consideration.cbegin(),
+						    under_consideration.cend(),
+						    [&name](std::string_view actual) { return name.value == actual; }
+					    );
+				    }
+			    ))
+				// TODO: diagnostic
+				continue;
+
+			// this is a match! reconstruction time
+			std::vector<TypeInfo::ID> arguments {};
+			arguments.reserve(generic_count);
+			std::transform(
+				constraint.generic_list.value().ordered.begin(),
+				constraint.generic_list.value().ordered.end(),
+				std::back_inserter(arguments),
+				[this, file_id](auto const& type) {
+					return register_type(from_type(type.value, file_id, false), type.span, file_id);
+				}
+			);
+			for (size_t i = arguments.size(); i < trait_generics.size(); ++i) {
+				auto corresponding_generic = std::find_if(
+					constraint.generic_list.value().labeled.cbegin(),
+					constraint.generic_list.value().labeled.cend(),
+					[&trait_generics, i](auto const& generic) {
+						return std::get<0>(generic).value
+					            == trait_generics.at(i).name.value.name();
+					}
+				);
+				auto const& type = std::get<1>(*corresponding_generic);
+				arguments.push_back(
+					register_type(from_type(type.value, file_id, false), type.span, file_id)
+				);
+			}
+
+			generic_type.declared_constraints.push_back(
+				TypeInfo::Generic::TraitConstraint {
+					constraint.name.value.id.value()[0],
+					std::move(arguments)
+				}
+			);
+		}
+	}
+}
+
 void Resolver::infer(AST::Function& function, FileContext::ID file_id) {
+	if (function.generic_declaration.has_value()) infer(function.generic_declaration.value(), file_id);
 	if (function.body.has_value()) infer(function.body.value(), function.name.value.id.value()[0], file_id);
+}
+
+void Resolver::infer(AST::Struct& struct_, FileContext::ID file_id) {
+	if (struct_.generic_declaration.has_value()) infer(struct_.generic_declaration.value(), file_id);
+}
+
+void Resolver::infer(AST::Trait& trait, FileContext::ID file_id) {
+	if (trait.generic_declaration.has_value()) infer(trait.generic_declaration.value(), file_id);
 }
 
 void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
@@ -2531,6 +2642,8 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) infer(std::get<AST::Function>(value), file_id);
 		else if (std::holds_alternative<AST::Module>(value)) infer(std::get<AST::Module>(value), file_id);
+		else if (std::holds_alternative<AST::Struct>(value)) infer(std::get<AST::Struct>(value), file_id);
+		else if (std::holds_alternative<AST::Trait>(value)) infer(std::get<AST::Trait>(value), file_id);
 	}
 }
 
