@@ -384,6 +384,8 @@ private:
 		/// Which files this symbol is imported from.
 		std::vector<FileContext::ID> imported_from;
 
+		std::vector<TypeInfo::Generic::TraitConstraint> trait_constraints = {};
+
 		bool is_visible(FileContext::ID) const;
 	};
 

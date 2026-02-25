@@ -1602,8 +1602,14 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 
 std::vector<Resolver::TypeInfo::Generic::TraitConstraint>
 Resolver::expand_trait(TypeInfo::Generic::TraitConstraint const& trait_constraint) const {
-	// TODO: expand
-	return {trait_constraint};
+	auto const& subconstraints = symbol_pool_.at(trait_constraint.name).trait_constraints;
+	// TODO: do sth with generics
+	std::vector<Resolver::TypeInfo::Generic::TraitConstraint> expanded {trait_constraint};
+	for (auto const& subconstraint : subconstraints) {
+		auto subexpansion = expand_trait(subconstraint);
+		std::move(subexpansion.begin(), subexpansion.end(), std::back_inserter(expanded));
+	}
+	return expanded;
 }
 
 bool Resolver::satisfies_trait_constraint(
@@ -2547,6 +2553,8 @@ void Resolver::infer(AST::Trait& trait, FileContext::ID file_id) {
 			AST::GenericDeclaration::Generic::Constraint {named.name, std::move(named.generic_list)},
 			file_id
 		);
+		if (!trait_constraint.has_value()) continue;
+		get_single_symbol(trait.name.value).trait_constraints.push_back(trait_constraint.value());
 	}
 }
 
