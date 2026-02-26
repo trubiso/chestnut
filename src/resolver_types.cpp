@@ -273,20 +273,15 @@ int Resolver::TypeInfo::is_decided(std::vector<TypeInfo> const& pool) const {
 	return 1;
 }
 
-void Resolver::debug_print_type(TypeInfo::ID id) const {
-	std::cout << "$" << id << " ";
-	debug_print_type(type_pool_.at(id));
-}
-
-void Resolver::debug_print_type(TypeInfo type) const {
+std::ostream& Resolver::debug_print_type(std::ostream& os, TypeInfo const& type) const {
 	switch (type.kind()) {
-	case TypeInfo::Kind::Unknown:        std::cout << "(unknown type)"; return;
-	case TypeInfo::Kind::Bottom:         std::cout << "(bottom)"; return;
-	case TypeInfo::Kind::Module:         std::cout << "(module)"; return;
-	case TypeInfo::Kind::KnownVoid:      std::cout << "void"; return;
-	case TypeInfo::Kind::KnownChar:      std::cout << "char"; return;
-	case TypeInfo::Kind::KnownBool:      std::cout << "bool"; return;
-	case TypeInfo::Kind::PartialFloat:   std::cout << "(float)"; return;
+	case TypeInfo::Kind::Unknown:        return os << "(unknown type)";
+	case TypeInfo::Kind::Bottom:         return os << "(bottom)";
+	case TypeInfo::Kind::Module:         return os << "(module)";
+	case TypeInfo::Kind::KnownVoid:      return os << "void";
+	case TypeInfo::Kind::KnownChar:      return os << "char";
+	case TypeInfo::Kind::KnownBool:      return os << "bool";
+	case TypeInfo::Kind::PartialFloat:   return os << "(float)";
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
 	case TypeInfo::Kind::Generic:
@@ -300,158 +295,179 @@ void Resolver::debug_print_type(TypeInfo type) const {
 
 	if (type.is_function()) {
 		TypeInfo::Function const& function = type.get_function();
-		std::cout << "(function with args (";
+		os << "(function with args (";
 		size_t count = 0;
 		for (auto const& [name, arg_type] : function.arguments) {
-			std::cout << (name.has_value() ? name.value() : "(anonymous)") << ": ";
-			debug_print_type(arg_type);
-			if (++count < function.arguments.size()) std::cout << ", ";
+			os << (name.has_value() ? name.value() : "(anonymous)") << ": ";
+			debug_print_type(os, arg_type);
+			if (++count < function.arguments.size()) os << ", ";
 		}
-		std::cout << ") and return type ";
-		debug_print_type(function.return_);
-		std::cout << ")";
+		os << ") and return type ";
+		return debug_print_type(os, function.return_) << ")";
 	} else if (type.is_same_as()) {
-		std::cout << "=(";
+		os << "=(";
 		size_t count = 0;
 		for (TypeInfo::ID subid : type.get_same_as().ids) {
-			debug_print_type(subid);
-			if (++count < type.get_same_as().ids.size()) std::cout << " | ";
+			debug_print_type(os, subid);
+			if (++count < type.get_same_as().ids.size()) os << " | ";
 		}
-		std::cout << ")";
+		return os << ")";
 	} else if (type.is_generic()) {
 		TypeInfo::Generic const& generic = type.get_generic();
-		std::cout << symbol_pool_.at(generic.name).name;
+		os << symbol_pool_.at(generic.name).name;
 		if (!generic.declared_constraints.empty()) {
-			std::cout << ": ";
+			os << ": ";
 			size_t count = 0;
 			for (auto const& constraint : generic.declared_constraints) {
-				std::cout << symbol_pool_.at(constraint.name).name;
+				os << symbol_pool_.at(constraint.name).name;
 				if (!constraint.arguments.empty()) {
-					std::cout << '<';
+					os << '<';
 					size_t subcount = 0;
 					for (TypeInfo::ID subtype : constraint.arguments) {
-						debug_print_type(subtype);
-						if (++subcount < constraint.arguments.size()) std::cout << ", ";
+						debug_print_type(os, subtype);
+						if (++subcount < constraint.arguments.size()) os << ", ";
 					}
-					std::cout << '>';
+					os << '>';
 				}
-				if (++count < generic.declared_constraints.size()) std::cout << " + ";
+				if (++count < generic.declared_constraints.size()) os << " + ";
 			}
 		}
 		if (!generic.imposed_constraints.empty()) {
-			std::cout << " (imposed: ";
+			os << " (imposed: ";
 			size_t count = 0;
 			for (auto const& constraint : generic.imposed_constraints) {
 				if (std::holds_alternative<TypeInfo::Generic::TraitConstraint>(constraint)) {
 					auto const& trait_constraint
 						= std::get<TypeInfo::Generic::TraitConstraint>(constraint);
-					std::cout << symbol_pool_.at(trait_constraint.name).name;
+					os << symbol_pool_.at(trait_constraint.name).name;
 					if (!trait_constraint.arguments.empty()) {
-						std::cout << '<';
+						os << '<';
 						size_t subcount = 0;
 						for (TypeInfo::ID subtype : trait_constraint.arguments) {
-							debug_print_type(subtype);
-							if (++subcount < trait_constraint.arguments.size())
-								std::cout << ", ";
+							debug_print_type(os, subtype);
+							if (++subcount < trait_constraint.arguments.size()) os << ", ";
 						}
-						std::cout << '>';
+						os << '>';
 					}
-				} else debug_print_type(std::get<TypeInfo::Generic::TypeConstraint>(constraint).type);
-				if (++count < generic.imposed_constraints.size()) std::cout << " + ";
+				} else
+					debug_print_type(
+						os,
+						std::get<TypeInfo::Generic::TypeConstraint>(constraint).type
+					);
+				if (++count < generic.imposed_constraints.size()) os << " + ";
 			}
-			std::cout << ')';
+			os << ')';
 		}
+
+		return os;
 	} else if (type.is_member_access()) {
 		TypeInfo::MemberAccess const& member_access = type.get_member_access();
-		debug_print_type(member_access.accessee);
-		std::cout << '.' << member_access.field;
+		debug_print_type(os, member_access.accessee) << '.' << member_access.field;
 		if (!member_access.possible_types.empty()) {
-			std::cout << " (possibly: ";
+			os << " (possibly: ";
 			size_t count = 0;
 			for (TypeInfo::ID subid : member_access.possible_types) {
-				debug_print_type(subid);
-				if (++count < member_access.possible_types.size()) std::cout << ", ";
+				debug_print_type(os, subid);
+				if (++count < member_access.possible_types.size()) os << ", ";
 			}
-			std::cout << ')';
+			os << ')';
 		}
+		return os;
 	} else if (type.is_named()) {
 		TypeInfo::Named const& named = type.get_named();
 
 		if (named.is_partial()) {
 			auto const& partial = std::get<TypeInfo::Named::Partial>(named.value);
-			std::cout << *partial.name;
+			os << *partial.name;
 
 			size_t generic_count = partial.ordered_generics.size() + partial.labeled_generics.size();
-			if (generic_count == 0) return;
+			if (generic_count == 0) return os;
 
-			std::cout << '<';
+			os << '<';
 			size_t count = 0;
 			for (TypeInfo::ID generic : partial.ordered_generics) {
-				debug_print_type(generic);
-				if (++count < generic_count) std::cout << ", ";
+				debug_print_type(os, generic);
+				if (++count < generic_count) os << ", ";
 			}
 			for (auto const& [label, generic] : partial.labeled_generics) {
-				std::cout << label << ": ";
-				debug_print_type(generic);
-				if (++count < generic_count) std::cout << ", ";
+				os << label << ": ";
+				debug_print_type(os, generic);
+				if (++count < generic_count) os << ", ";
 			}
-			std::cout << '>';
-			return;
+			os << '>';
+			return os;
 		}
 
-		if (named.candidates().empty()) return (void) (std::cout << "(impossible)");
-		if (named.candidates().size() > 1) std::cout << '(';
+		if (named.candidates().empty()) return os << "(impossible)";
+		if (named.candidates().size() > 1) os << '(';
 		size_t count = 0;
 		for (auto const& candidate : named.candidates()) {
-			std::cout << symbol_pool_.at(candidate.name).name;
+			os << symbol_pool_.at(candidate.name).name;
 
 			if (!candidate.generics.empty()) {
-				std::cout << '<';
+				os << '<';
 				size_t subcount = 0;
 				for (TypeInfo::ID id : candidate.generics) {
-					debug_print_type(id);
-					if (++subcount < candidate.generics.size()) std::cout << ", ";
+					debug_print_type(os, id);
+					if (++subcount < candidate.generics.size()) os << ", ";
 				}
-				std::cout << '>';
+				os << '>';
 			}
 
-			if (++count < named.candidates().size()) std::cout << " | ";
+			if (++count < named.candidates().size()) os << " | ";
 		}
-		if (named.candidates().size() > 1) std::cout << ')';
+		if (named.candidates().size() > 1) os << ')';
+		return os;
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
-		std::cout << "(*" << (pointer.mutable_ ? "mut" : "const") << " ";
-		debug_print_type(pointer.pointee);
-		std::cout << ")";
+		os << "(*" << (pointer.mutable_ ? "mut" : "const") << " ";
+		return debug_print_type(os, pointer.pointee) << ")";
 	} else if (type.is_known_integer()) {
 		AST::Type::Atom::Integer integer = type.get_known_integer().integer;
-		std::cout << AST::Type::Atom::make_integer(std::move(integer));
+		return os << AST::Type::Atom::make_integer(std::move(integer));
 	} else if (type.is_known_float()) {
-		std::cout << AST::Type::Atom::make_float(type.get_known_float().width);
+		return os << AST::Type::Atom::make_float(type.get_known_float().width);
 	} else if (type.is_partial_integer()) {
 		AST::Type::Atom::Integer integer = type.get_partial_integer().integer;
 
 		bool signed_is_known = type.get_partial_integer().signed_is_known;
 
-		std::cout << (signed_is_known ? (integer.is_signed() ? "" : "u") : "?") << "int";
+		os << (signed_is_known ? (integer.is_signed() ? "" : "u") : "?") << "int";
 		switch (integer.width_type()) {
-		case AST::Type::Atom::Integer::WidthType::Fixed: std::cout << integer.bit_width().value(); break;
-		case AST::Type::Atom::Integer::WidthType::Any:   break;
-		case AST::Type::Atom::Integer::WidthType::Ptr:   std::cout << "ptr"; break;
-		case AST::Type::Atom::Integer::WidthType::Size:  std::cout << "size"; break;
+		case AST::Type::Atom::Integer::WidthType::Fixed: return os << integer.bit_width().value();
+		case AST::Type::Atom::Integer::WidthType::Any:   return os;
+		case AST::Type::Atom::Integer::WidthType::Ptr:   return os << "ptr";
+		case AST::Type::Atom::Integer::WidthType::Size:  return os << "size";
 		}
 	}
+
+	[[assume(false)]];
+	return os;
 }
 
-std::string Resolver::get_type_name(TypeInfo const& type) const {
+std::ostream& Resolver::debug_print_type(std::ostream& os, TypeInfo::ID id) const {
+	os << "$" << id << " ";
+	return debug_print_type(os, type_pool_.at(id));
+}
+
+void Resolver::debug_print_type(TypeInfo::ID id) const {
+	std::cout << "$" << id << " ";
+	debug_print_type(type_pool_.at(id));
+}
+
+void Resolver::debug_print_type(TypeInfo const& type) const {
+	debug_print_type(std::cout, type);
+}
+
+std::ostream& Resolver::get_type_name(std::ostream& os, TypeInfo const& type) const {
 	switch (type.kind()) {
-	case TypeInfo::Kind::Unknown:        return "unknown";
-	case TypeInfo::Kind::Bottom:         return "bottom";
-	case TypeInfo::Kind::Module:         return "module";
-	case TypeInfo::Kind::KnownVoid:      return "void";
-	case TypeInfo::Kind::KnownChar:      return "char";
-	case TypeInfo::Kind::KnownBool:      return "bool";
-	case TypeInfo::Kind::PartialFloat:   return "float";
+	case TypeInfo::Kind::Unknown:        return os << "unknown";
+	case TypeInfo::Kind::Bottom:         return os << "bottom";
+	case TypeInfo::Kind::Module:         return os << "module";
+	case TypeInfo::Kind::KnownVoid:      return os << "void";
+	case TypeInfo::Kind::KnownChar:      return os << "char";
+	case TypeInfo::Kind::KnownBool:      return os << "bool";
+	case TypeInfo::Kind::PartialFloat:   return os << "float";
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
 	case TypeInfo::Kind::Generic:
@@ -463,94 +479,109 @@ std::string Resolver::get_type_name(TypeInfo const& type) const {
 	case TypeInfo::Kind::PartialInteger: break;
 	}
 
-	std::stringstream output {};
 	if (type.is_function()) {
 		TypeInfo::Function const& function = type.get_function();
-		output << "func(";
+		os << "func(";
 		size_t count = 0;
 		for (auto const& [name, arg_type] : function.arguments) {
-			output << (name.has_value() ? name.value() : "_") << ": ";
-			output << get_type_name(arg_type);
-			if (++count < function.arguments.size()) output << ", ";
+			os << (name.has_value() ? name.value() : "_") << ": ";
+			get_type_name(os, arg_type);
+			if (++count < function.arguments.size()) os << ", ";
 		}
-		output << ") " << get_type_name(function.return_) << "";
+		os << ") ";
+		return get_type_name(os, function.return_) << "";
 	} else if (type.is_same_as()) {
-		if (type.get_same_as().ids.size() > 1) output << '(';
+		if (type.get_same_as().ids.size() > 1) os << '(';
 		size_t count = 0;
 		for (TypeInfo::ID subid : type.get_same_as().ids) {
-			output << get_type_name(subid);
-			if (++count < type.get_same_as().ids.size()) output << " | ";
+			get_type_name(os, subid);
+			if (++count < type.get_same_as().ids.size()) os << " | ";
 		}
-		if (type.get_same_as().ids.size() > 1) output << ')';
+		if (type.get_same_as().ids.size() > 1) os << ')';
+		return os;
 	} else if (type.is_generic()) {
 		TypeInfo::Generic const& generic = type.get_generic();
-		output << symbol_pool_.at(generic.name).name;
+		os << symbol_pool_.at(generic.name).name;
 		if (!generic.declared_constraints.empty()) {
-			output << ": ";
+			os << ": ";
 			size_t count = 0;
 			for (auto const& constraint : generic.declared_constraints) {
-				output << symbol_pool_.at(constraint.name).name;
+				os << symbol_pool_.at(constraint.name).name;
 				if (!constraint.arguments.empty()) {
-					output << '<';
+					os << '<';
 					size_t subcount = 0;
 					for (TypeInfo::ID subtype : constraint.arguments) {
-						output << get_type_name(subtype);
-						if (++subcount < constraint.arguments.size()) output << ", ";
+						get_type_name(os, subtype);
+						if (++subcount < constraint.arguments.size()) os << ", ";
 					}
-					output << '>';
+					os << '>';
 				}
-				if (++count < generic.declared_constraints.size()) output << " + ";
+				if (++count < generic.declared_constraints.size()) os << " + ";
 			}
 		}
+		return os;
 	} else if (type.is_member_access()) {
 		TypeInfo::MemberAccess const& member_access = type.get_member_access();
-		output << get_type_name(member_access.accessee) << '.' << member_access.field;
+		return get_type_name(os, member_access.accessee) << '.' << member_access.field;
 	} else if (type.is_named()) {
 		TypeInfo::Named const& named = type.get_named();
 		// we shouldn't be calling this function pre-partial pruning
 		assert(!named.is_partial());
 
-		if (named.candidates().empty()) return "(impossible)";
-		if (named.candidates().size() > 1) output << '(';
+		if (named.candidates().empty()) return os << "(impossible)";
+		if (named.candidates().size() > 1) os << '(';
 		size_t count = 0;
 		for (auto const& candidate : named.candidates()) {
-			output << symbol_pool_.at(candidate.name).name;
+			os << symbol_pool_.at(candidate.name).name;
 
 			if (!candidate.generics.empty()) {
-				output << '<';
+				os << '<';
 				size_t subcount = 0;
 				for (TypeInfo::ID id : candidate.generics) {
-					output << get_type_name(id);
-					if (++subcount < candidate.generics.size()) output << ", ";
+					get_type_name(os, id);
+					if (++subcount < candidate.generics.size()) os << ", ";
 				}
-				output << '>';
+				os << '>';
 			}
 
-			if (++count < named.candidates().size()) output << " | ";
+			if (++count < named.candidates().size()) os << " | ";
 		}
-		if (named.candidates().size() > 1) output << ')';
+		if (named.candidates().size() > 1) os << ')';
+		return os;
 	} else if (type.is_pointer()) {
 		TypeInfo::Pointer const& pointer = type.get_pointer();
-		output << "*" << (pointer.mutable_ ? "mut" : "const") << " " << get_type_name(pointer.pointee);
+		os << "*" << (pointer.mutable_ ? "mut" : "const") << " ";
+		return get_type_name(os, pointer.pointee);
 	} else if (type.is_known_integer()) {
 		AST::Type::Atom::Integer integer = type.get_known_integer().integer;
-		output << AST::Type::Atom::make_integer(std::move(integer));
+		return os << AST::Type::Atom::make_integer(std::move(integer));
 	} else if (type.is_known_float()) {
-		output << AST::Type::Atom::make_float(type.get_known_float().width);
+		return os << AST::Type::Atom::make_float(type.get_known_float().width);
 	} else if (type.is_partial_integer()) {
 		AST::Type::Atom::Integer integer = type.get_partial_integer().integer;
 
 		bool signed_is_known = type.get_partial_integer().signed_is_known;
 
-		output << (signed_is_known ? (integer.is_signed() ? "" : "u") : "(u)") << "int";
+		os << (signed_is_known ? (integer.is_signed() ? "" : "u") : "(u)") << "int";
 		switch (integer.width_type()) {
-		case AST::Type::Atom::Integer::WidthType::Fixed: output << integer.bit_width().value(); break;
-		case AST::Type::Atom::Integer::WidthType::Any:   break;
-		case AST::Type::Atom::Integer::WidthType::Ptr:   output << "ptr"; break;
-		case AST::Type::Atom::Integer::WidthType::Size:  output << "size"; break;
+		case AST::Type::Atom::Integer::WidthType::Fixed: return os << integer.bit_width().value();
+		case AST::Type::Atom::Integer::WidthType::Any:   return os;
+		case AST::Type::Atom::Integer::WidthType::Ptr:   return os << "ptr";
+		case AST::Type::Atom::Integer::WidthType::Size:  return os << "size";
 		}
 	}
 
+	[[assume(false)]];
+	return os;
+}
+
+std::ostream& Resolver::get_type_name(std::ostream& os, TypeInfo::ID id) const {
+	return get_type_name(os, type_pool_.at(id));
+}
+
+std::string Resolver::get_type_name(TypeInfo const& type) const {
+	std::stringstream output {};
+	get_type_name(output, type);
 	return output.str();
 }
 

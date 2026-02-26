@@ -602,11 +602,19 @@ private:
 	/// Returns the file ID for a given type ID.
 	inline FileContext::ID get_type_file_id(TypeInfo::ID id) const { return std::get<1>(type_span_pool_.at(id)); }
 
+	/// Adds debug info for a type given its ID to the provided stream.
+	std::ostream& debug_print_type(std::ostream&, TypeInfo const&) const;
+	/// Adds debug info for a type given its ID to the provided stream.
+	std::ostream& debug_print_type(std::ostream&, TypeInfo::ID) const;
 	/// Prints debug info for a type given its ID, without a newline.
 	void debug_print_type(TypeInfo::ID) const;
 	/// Prints debug info for a type, without a newline.
-	void debug_print_type(TypeInfo) const;
+	void debug_print_type(TypeInfo const&) const;
 
+	/// Adds a name for a type suitable for a diagnostic to the provided stream.
+	std::ostream& get_type_name(std::ostream&, TypeInfo const&) const;
+	/// Adds a name for a type suitable for a diagnostic to the provided stream.
+	std::ostream& get_type_name(std::ostream&, TypeInfo::ID) const;
 	/// Returns a name for a type suitable for a diagnostic.
 	std::string get_type_name(TypeInfo::ID) const;
 	/// Returns a name for a type suitable for a diagnostic.
