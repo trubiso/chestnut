@@ -1365,18 +1365,21 @@ std::optional<Trait> Parser::parse_trait() {
 	auto name = SPANNED_REASON(expect_identifier, "expected trait name");
 	if (!name.has_value()) return {};
 	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
-	expect_symbol("expected `:` to begin constraint list for trait", Token::Symbol::Colon);
+	std::vector<Trait::Constraint>    constraints {};
+	if (!consume_symbol(Token::Symbol::Colon)) goto return_;
 
-	std::optional<Trait::Constraint> constraint = expect_trait_constraint("expected trait constraint after `:`");
-	if (!constraint.has_value()) return {};
-	std::vector<Trait::Constraint> constraints {};
-	constraints.push_back(std::move(constraint.value()));
-	if (!peek_symbol(Token::Symbol::Plus)) goto return_;
-	assert(consume_symbol(Token::Symbol::Plus));
-
-	while ((constraint = parse_trait_constraint()).has_value()) {
+	{
+		std::optional<Trait::Constraint> constraint
+			= expect_trait_constraint("expected trait constraint after `:`");
+		if (!constraint.has_value()) return {};
 		constraints.push_back(std::move(constraint.value()));
-		if (!consume_symbol(Token::Symbol::Plus)) break;
+		if (!peek_symbol(Token::Symbol::Plus)) goto return_;
+		assert(consume_symbol(Token::Symbol::Plus));
+
+		while ((constraint = parse_trait_constraint()).has_value()) {
+			constraints.push_back(std::move(constraint.value()));
+			if (!consume_symbol(Token::Symbol::Plus)) break;
+		}
 	}
 return_:
 	return Trait {std::move(name.value()), std::move(generic_declaration), std::move(constraints)};
