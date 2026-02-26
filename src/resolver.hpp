@@ -346,7 +346,7 @@ private:
 		/// Returns whether this pointer is mutable (assumes is_pointer()).
 		bool get_pointer_mutable(std::vector<TypeInfo> const&) const;
 		/// Returns a single TypeInfo after traversing all SameAs references, if they all point to a single type.
-		std::optional<TypeInfo const*> get_single_underlying(std::vector<TypeInfo> const&) const;
+		std::optional<TypeInfo*> get_single_underlying(std::vector<TypeInfo>&);
 		/// Returns 1 if this named type is decided (1 for all other kinds of types), -1 if it is impossible and
 		/// 0 if it is still to be determined. Assumes all AST::Identifier* have been pruned.
 		int is_decided(std::vector<TypeInfo> const&) const;
@@ -759,7 +759,7 @@ private:
 	std::optional<TypeInfo::Generic::TraitConstraint> generate_constraint(AST::GenericDeclaration::Generic::Constraint const&, FileContext::ID);
 
 	/// Adds the correct trait constraints to a named type's generics according to the provided candidate.
-	void constrain_candidate(TypeInfo::Named::Candidate const&);
+	void constrain_candidate(TypeInfo::Named::Candidate&);
 	/// Adds generic constraints to all single-candidate named types' generics. It's necessary to do this,
 	/// since these types will get overlooked by the main type decision loop, because they are already decided.
 	void constrain_known_named_type_generics();

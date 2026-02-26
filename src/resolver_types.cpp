@@ -231,8 +231,7 @@ bool Resolver::TypeInfo::get_pointer_mutable(std::vector<TypeInfo> const& pool) 
 	}
 }
 
-std::optional<Resolver::TypeInfo const*>
-Resolver::TypeInfo::get_single_underlying(std::vector<TypeInfo> const& pool) const {
+std::optional<Resolver::TypeInfo*> Resolver::TypeInfo::get_single_underlying(std::vector<TypeInfo>& pool) {
 	if (is_same_as()) {
 		auto const& ids = get_same_as().ids;
 		if (ids.size() != 1) return {};
@@ -1502,12 +1501,12 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	TypeInfo::MemberAccess& member_access = type_pool_.at(undecided_member_access).get_member_access();
 
 	// we can only actually decide the member access if we know the type of the accessee
-	std::optional<TypeInfo const*> maybe_underlying
+	std::optional<TypeInfo*> maybe_underlying
 		= type_pool_.at(member_access.accessee).get_single_underlying(type_pool_);
 	if (!maybe_underlying.has_value()) return false;
 
 	// only named types can have fields as of right now
-	TypeInfo const& underlying = *maybe_underlying.value();
+	TypeInfo& underlying = *maybe_underlying.value();
 	if (!underlying.is_named()) return false;
 
 	// check that our named type is decided
@@ -2312,7 +2311,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		TypeInfo::ID callable_type = instantiate_type(callable_id);
 		// let's replace the type spans so the diagnostics are a bit nicer :-)
 		// TODO: this is a bit of a silly solution isn't it
-		// FIXME: we still get a diagnostic at the function declaration for some reason?
+		// TODO: don't instantiate to avoid throwing extra diagnostics
 		for (size_t i = 0; i < generics.size(); ++i) {
 			type_span_pool_.at(std::get<1>(type_pool_.at(callable_type).get_function().generics.at(i)))
 				= type_span_pool_.at(std::get<1>(generics.at(i)));
@@ -2669,36 +2668,45 @@ Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint const
 	// add trait constraints from the trait generics
 	assert(arguments.size() == trait_generics.size());
 	for (size_t i = 0; i < arguments.size(); ++i) {
+		// TODO: don't instantiate to avoid throwing extra diagnostics
 		ensure_has_constraints(trait_generics.at(i), get_single_symbol(constraint.name.value).file_id);
-		auto generic    = instantiate_type(get_single_symbol(trait_generics.at(i).name.value).type);
+		auto generic = instantiate_type(get_single_symbol(trait_generics.at(i).name.value).type);
 		unify(arguments.at(i), generic, file_id);
 	}
 
 	return TypeInfo::Generic::TraitConstraint {constraint.name.value.id.value()[0], std::move(arguments)};
 }
 
-void Resolver::constrain_candidate(TypeInfo::Named::Candidate const& candidate) {
+void Resolver::constrain_candidate(TypeInfo::Named::Candidate& candidate) {
 	AST::Struct* struct_ = std::get<AST::Struct*>(get_single_symbol(candidate.name).item);
 	if (!struct_->generic_declaration.has_value()) return;
-	auto const& generics          = candidate.generics;
-	auto&       declared_generics = struct_->generic_declaration.value().generics;
+	auto& generics          = candidate.generics;
+	auto& declared_generics = struct_->generic_declaration.value().generics;
 
 	// add trait constraints from the struct generics
 	assert(generics.size() == declared_generics.size());
 	for (size_t i = 0; i < generics.size(); ++i) {
 		ensure_has_constraints(declared_generics.at(i), get_single_symbol(candidate.name).file_id);
-		auto generic    = instantiate_type(get_single_symbol(declared_generics.at(i).name.value).type);
+		auto const& declared_constraints
+			= type_pool_.at(get_single_symbol(declared_generics.at(i).name.value).type)
+		                  .get_generic()
+		                  .declared_constraints;
 		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value()[0]);
-		unify(generified, generic, get_type_file_id(generified));
+		std::copy(
+			declared_constraints.cbegin(),
+			declared_constraints.cend(),
+			std::back_inserter(type_pool_.at(generified).get_generic().imposed_constraints)
+		);
+		generics.at(i) = generified;
 	}
 }
 
 void Resolver::constrain_known_named_type_generics() {
 	for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
-		TypeInfo const& type = type_pool_.at(id);
+		TypeInfo& type = type_pool_.at(id);
 		if (!type.is_named()) continue;
 		if (type.get_named().candidates().size() != 1) continue;
-		auto const& candidate = type.get_named().candidates().at(0);
+		auto& candidate = type.get_named().candidates().at(0);
 		constrain_candidate(candidate);
 	}
 }
