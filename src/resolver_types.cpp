@@ -1549,7 +1549,7 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 		debug_print_type(undecided_member_access);
 		std::cout << std::endl;
 		return true;
-	} else if (decided == 1) {
+	} else if (decided == 0) {
 		// if it is to be determined, we must wait
 		return false;
 	}
