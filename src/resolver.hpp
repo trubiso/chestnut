@@ -772,6 +772,9 @@ private:
 	/// since these types will get overlooked by the main type decision loop, because they are already decided.
 	void constrain_known_named_type_generics();
 
+	/// Returns whether there are any undecided named types left.
+	bool has_undecided_named_types() const;
+
 	/// Tries to decide all remaining function overloads and member accesses, returning whether there are
 	/// still any remaining types which were not able to be decided.
 	bool try_decide_remaining_types();

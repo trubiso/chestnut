@@ -2742,13 +2742,23 @@ void Resolver::constrain_known_named_type_generics() {
 	}
 }
 
+bool Resolver::has_undecided_named_types() const {
+	for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
+		TypeInfo const& type = type_pool_.at(id);
+		if (!type.is_named()) continue;
+		int decided = type.is_decided(type_pool_);
+		if (decided == 0) return true;
+	}
+	return false;
+}
+
 bool Resolver::try_decide_remaining_types() {
 	// PERF: use std::copy_if
-	// TODO: check whether any undecided named types are left as well
 	while (!undecided_overloads.empty()
 	       || !undecided_member_accesses.empty()
 	       || !undecided_generics.empty()
-	       || !unchecked_generics.empty()) {
+	       || !unchecked_generics.empty()
+	       || has_undecided_named_types()) {
 		bool any_succeeded = false;
 
 		// we first try to decide the overloads
@@ -2804,7 +2814,8 @@ bool Resolver::try_decide_remaining_types() {
 	return undecided_overloads.empty()
 	    && undecided_member_accesses.empty()
 	    && undecided_generics.empty()
-	    && unchecked_generics.empty();
+	    && unchecked_generics.empty()
+	    && !has_undecided_named_types();
 }
 
 void Resolver::decide_remaining_types() {
