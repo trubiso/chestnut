@@ -13,9 +13,6 @@ using Identifier = AST::SymbolID;
 
 struct Type {
 	struct Atom {
-		// TODO: eventually support types which are identifiers. for now, we won't, as there is no way to create
-		// them.
-
 		class Integer {
 			uint32_t width;
 			bool signed_;  // TODO: maybe express this as a bit in width, although that's kinda ridiculous
