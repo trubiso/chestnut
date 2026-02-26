@@ -437,28 +437,40 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 	for (auto& statement : ast_scope) { resolve(statement, resolver_scope, file_id); }
 }
 
+bool Resolver::resolve_trait_name(Spanned<AST::Identifier>& name, Scope const& scope, FileContext::ID file_id) {
+	resolve(name, scope, file_id);
+	// diagnostic already thrown
+	if (!name.value.id.has_value() || name.value.id.value().empty()) return false;
+	// TODO: maybe a trait and a struct share a name, and we need to filter this to only traits!
+	if (name.value.id.value().size() > 1) {
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"ambiguous trait",
+				"there exist several traits with this name, and trait disambiguation is not a supported feature",
+				{Diagnostic::Sample(get_context(file_id), name.span, OutFmt::Color::Red)}
+			)
+		);
+		return false;
+	}
+	if (!std::holds_alternative<AST::Trait*>(get_single_symbol(name.value).item)) {
+		parsed_files.at(file_id).diagnostics.push_back(
+			Diagnostic::error(
+				"name does not point to a trait",
+				"a trait name was expected in this position",
+				{Diagnostic::Sample(get_context(file_id), name.span, OutFmt::Color::Red)}
+			)
+		);
+		return false;
+	}
+	return true;
+}
+
 void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scope, FileContext::ID file_id) {
 	// we now actually create these generics
 	for (auto& generic : generic_declaration.generics) {
 		for (auto& constraint : generic.constraints) {
 			auto& name = constraint.name;
-			resolve(name, scope, file_id);
-			if (!name.value.id.has_value()) {
-				std::cout << "error: no such trait: " << name.value << std::endl;
-				std::exit(1);
-			}
-			// TODO: deal with this possibility possibly (most likely we won't support trait overloading)
-			if (name.value.id.value().size() != 1) {
-				std::cout << "todo: ambiguous trait: " << name.value << std::endl;
-				std::exit(1);
-			}
-			if (!std::holds_alternative<AST::Trait*>(get_single_symbol(name.value).item)) {
-				std::cout
-					<< "todo: diagnostic for non-trait specified in trait bound: "
-					<< name.value
-					<< std::endl;
-				std::exit(1);
-			}
+			resolve_trait_name(name, scope, file_id);
 			// FIXME: resolving subgenerics this early has the side effect that we cannot reference generics
 			// that appear later in the generic declaration!
 			if (constraint.generic_list.has_value()) {
@@ -505,23 +517,7 @@ void Resolver::resolve(AST::Trait& trait, Scope scope, FileContext::ID file_id) 
 		// TODO: resolve existential requirements or remove them
 		if (std::holds_alternative<AST::Trait::Has>(constraint)) continue;
 		auto& named = std::get<AST::Trait::Named>(constraint);
-		resolve(named.name, scope, file_id);
-		if (!named.name.value.id.has_value()) {
-			std::cout << "error: no such trait: " << named.name.value << std::endl;
-			std::exit(1);
-		}
-		// TODO: deal with this possibility possibly
-		if (named.name.value.id.value().size() != 1) {
-			std::cout << "todo: ambiguous trait: " << named.name.value << std::endl;
-			std::exit(1);
-		}
-		if (!std::holds_alternative<AST::Trait*>(get_single_symbol(named.name.value).item)) {
-			std::cout
-				<< "todo: diagnostic for non-trait specified in trait bound: "
-				<< named.name.value
-				<< std::endl;
-			std::exit(1);
-		}
+		resolve_trait_name(named.name, scope, file_id);
 		if (named.generic_list.has_value()) {
 			for (auto& generic : named.generic_list.value().ordered) resolve(generic, child_scope, file_id);
 			for (auto& generic : named.generic_list.value().labeled)

@@ -2592,18 +2592,13 @@ void Resolver::ensure_has_constraints(AST::GenericDeclaration::Generic& generic,
 
 std::optional<Resolver::TypeInfo::Generic::TraitConstraint>
 Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint const& constraint, FileContext::ID file_id) {
-	if (!constraint.name.value.id.has_value() || constraint.name.value.id.value().empty()) {
+	if (!constraint.name.value.id.has_value()
+	    || constraint.name.value.id.value().size() != 1
+	    || !std::holds_alternative<AST::Trait*>(get_single_symbol(constraint.name.value).item)) {
 		// name resolver will already have thrown errors about this
 		return std::nullopt;
 	}
-	if (constraint.name.value.id.value().size() != 1) {
-		std::cout << "todo: diagnostic for unsupported ambiguous trait" << std::endl;
-		std::exit(1);
-	}
 
-	if (!std::holds_alternative<AST::Trait*>(get_single_symbol(constraint.name.value).item))
-		// TODO: diagnostic
-		return std::nullopt;
 	AST::Trait& trait = *std::get<AST::Trait*>(get_single_symbol(constraint.name.value).item);
 
 	if (!constraint.generic_list.has_value()

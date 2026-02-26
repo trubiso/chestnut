@@ -525,6 +525,8 @@ private:
 		bool add_import_suggestion = false
 	);
 
+	bool resolve_trait_name(Spanned<AST::Identifier>&, Scope const&, FileContext::ID);
+
 	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
 	void resolve(AST::Type::Atom&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type&, Span, Scope const&, FileContext::ID);
