@@ -1454,9 +1454,7 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 	// filter the candidates
 	std::vector<UndecidedOverload::Candidate> new_candidates {};
 	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
-		if (can_unify(candidate.call_type, candidate.function)) {
-			new_candidates.push_back(std::move(candidate));
-		} else {
+		if (!can_unify(candidate.call_type, candidate.function)) {
 			// TODO: specify how it is incompatible?
 			std::stringstream text {};
 			text
@@ -1475,7 +1473,56 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 					)}
 				)
 			);
+			continue;
 		}
+
+		// also check trait bounds
+		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
+		auto const& call_generics     = candidate.call_type.get_function().generics;
+		assert(function_generics.size() == call_generics.size());
+		bool satisfies_bounds = true;
+		for (size_t i = 0; i < function_generics.size(); ++i) {
+			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
+			assert(!function_generic.is_bottom());
+
+			auto satisfies = satisfies_trait_constraint(
+				std::get<1>(call_generics.at(i)),
+				function_generic.get_generic().declared_constraints
+			);
+			if (!satisfies.has_value()) {
+				// we must delay this once more
+				// TODO: ensure the function resolution is actually delayed
+				std::cout << "delayed function res!" << std::endl;
+				continue;
+			}
+
+			if (!satisfies.value()) {
+				std::stringstream text {};
+				text
+					<< "generic #"
+					<< i + 1
+					<< " ("
+					<< get_type_name(std::get<1>(call_generics.at(i)))
+					<< ") does not satisfy declared trait bounds ("
+					<< get_type_name(function_generic)
+					<< ")";
+				undecided_overload.rejections.push_back(
+					Diagnostic::Sample(
+						get_context(get_type_file_id(candidate.function)),
+						{Diagnostic::Sample::Label(
+							get_type_span(candidate.function),
+							text.str(),
+							OutFmt::Color::Magenta
+						)}
+					)
+				);
+				satisfies_bounds = false;
+				break;
+			}
+		}
+		if (!satisfies_bounds) continue;
+
+		new_candidates.push_back(std::move(candidate));
 	}
 	undecided_overload.candidates = std::move(new_candidates);
 
