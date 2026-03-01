@@ -743,8 +743,11 @@ private:
 
 	/// Returns whether a concrete type satisfies a set of trait constraints.
 	std::optional<bool> satisfies_trait_constraint(TypeInfo::ID, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
-	/// Expands a trait into itself plus its required traits, recursively.
+	/// Expands a trait into itself plus its required traits, recursively. Does not ensure that the traits within are unique!
+	/// To do that, you may want to use reduce_to_unique with the result of this function.
 	std::vector<TypeInfo::Generic::TraitConstraint> expand_trait(TypeInfo::Generic::TraitConstraint const&) const;
+	/// Reduces a list of traits into only the unique ones. Returns null if any are not yet resolved.
+	std::optional<std::vector<TypeInfo::Generic::TraitConstraint>> reduce_to_unique(std::vector<TypeInfo::Generic::TraitConstraint>&&) const;
 	/// Returns whether the checked list of trait constraints is stricter than the other list.
 	std::optional<bool> satisfies_trait_constraint(std::vector<TypeInfo::Generic::TraitConstraint> const& checked, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
 

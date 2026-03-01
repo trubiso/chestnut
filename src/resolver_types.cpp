@@ -1680,6 +1680,14 @@ std::optional<bool> Resolver::check_bound_equality_generic(TypeInfo const& gener
 			std::move(expanded.begin(), expanded.end(), std::back_inserter(b));
 		}
 
+		auto maybe_a = reduce_to_unique(std::move(a));
+		if (!maybe_a.has_value()) return std::nullopt;
+		a = std::move(maybe_a.value());
+
+		auto maybe_b = reduce_to_unique(std::move(b));
+		if (!maybe_b.has_value()) return std::nullopt;
+		b = std::move(maybe_b.value());
+
 		for (auto const& trait_constraint : a) {
 			// we need to check that this trait constraint exists in the other expanded traits list
 			bool any_matched = false;
@@ -1830,9 +1838,6 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 
 std::vector<Resolver::TypeInfo::Generic::TraitConstraint>
 Resolver::expand_trait(TypeInfo::Generic::TraitConstraint const& trait_constraint) const {
-	// FIXME: this does not ensure traits are unique. that means that if we have a trait A and a trait B: A, B + A
-	// is considered more specific than B! we must ensure traits are unique then.
-
 	auto const& subconstraints = symbol_pool_.at(trait_constraint.name).trait_constraints;
 	// TODO: do sth with generics
 	std::vector<Resolver::TypeInfo::Generic::TraitConstraint> expanded {trait_constraint};
@@ -1841,6 +1846,24 @@ Resolver::expand_trait(TypeInfo::Generic::TraitConstraint const& trait_constrain
 		std::move(subexpansion.begin(), subexpansion.end(), std::back_inserter(expanded));
 	}
 	return expanded;
+}
+
+std::optional<std::vector<Resolver::TypeInfo::Generic::TraitConstraint>>
+Resolver::reduce_to_unique(std::vector<TypeInfo::Generic::TraitConstraint>&& traits) const {
+	std::vector<TypeInfo::Generic::TraitConstraint> constraints {};
+	for (auto& constraint : traits) {
+		bool found = false;
+		for (auto const& given_constraint : constraints) {
+			auto equality = check_bound_equality(constraint, given_constraint);
+			if (!equality.has_value()) return std::nullopt;
+			if (equality.value()) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) constraints.push_back(std::move(constraint));
+	}
+	return constraints;
 }
 
 std::optional<bool> Resolver::satisfies_trait_constraint(
@@ -1853,6 +1876,10 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 		std::vector<TypeInfo::Generic::TraitConstraint> expanded = expand_trait(trait_constraint);
 		std::move(expanded.begin(), expanded.end(), std::back_inserter(expanded_traits));
 	}
+
+	auto maybe_expanded = reduce_to_unique(std::move(expanded_traits));
+	if (!maybe_expanded.has_value()) return std::nullopt;
+	expanded_traits = std::move(maybe_expanded.value());
 
 	for (auto const& trait_constraint : other) {
 		// we need to check that this trait constraint exists in the expanded traits list
@@ -3135,12 +3162,20 @@ bool Resolver::specialize_overload(UndecidedOverload& undecided_overload) {
 				return false;
 			}
 
-			trait_counts.back().push_back(0);
+			// PERF: we could create a function that counts instead of using actual expensive trait
+			// expansion
+			std::vector<TypeInfo::Generic::TraitConstraint> constraints {};
 			for (auto const& constraint : function_generic.get_generic().declared_constraints) {
-				// PERF: we could create a function that counts instead of using actual expensive trait
-				// expansion
-				trait_counts.back().back() += expand_trait(constraint).size();
+				auto expanded_traits = expand_trait(constraint);
+				std::move(
+					expanded_traits.begin(),
+					expanded_traits.end(),
+					std::back_inserter(constraints)
+				);
 			}
+			auto reduced_constraints = reduce_to_unique(std::move(constraints));
+			if (!reduced_constraints.has_value()) return false;
+			trait_counts.back().push_back(reduced_constraints.value().size());
 		}
 	}
 
@@ -3192,12 +3227,20 @@ bool Resolver::specialize_overload_named_type(TypeInfo::ID id) {
 				return false;
 			}
 
-			trait_counts.back().push_back(0);
+			// PERF: we could create a function that counts instead of using actual expensive trait
+			// expansion
+			std::vector<TypeInfo::Generic::TraitConstraint> constraints {};
 			for (auto const& constraint : instantiated_generic.get_generic().declared_constraints) {
-				// PERF: we could create a function that counts instead of using actual expensive trait
-				// expansion
-				trait_counts.back().back() += expand_trait(constraint).size();
+				auto expanded_traits = expand_trait(constraint);
+				std::move(
+					expanded_traits.begin(),
+					expanded_traits.end(),
+					std::back_inserter(constraints)
+				);
 			}
+			auto reduced_constraints = reduce_to_unique(std::move(constraints));
+			if (!reduced_constraints.has_value()) return false;
+			trait_counts.back().push_back(reduced_constraints.value().size());
 		}
 	}
 
