@@ -1671,6 +1671,10 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 	} else if (type_pool_.at(type_id).is_bottom()) {
 		// we ignore bottoms
 		return true;
+	} else if (type_pool_.at(type_id).is_same_as()) {
+		// TODO: should we do sth different in this case?
+		if (type_pool_.at(type_id).get_same_as().ids.size() != 1) return false;
+		return satisfies_trait_constraint(type_pool_.at(type_id).get_same_as().ids.at(0), constraints);
 	} else {
 		// TODO: obtain implemented traits for type
 		return false;
