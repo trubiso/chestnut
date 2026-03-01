@@ -1725,9 +1725,72 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	// there should be candidates
 	assert(!candidates.empty());
 
-	// if it's non-generic candidates, decide by specialization
-	// TODO: we need specialization for this
-	return false;
+	// filter the candidates
+	// TODO: rejections
+	std::vector<TypeInfo::Named::Candidate> new_candidates {};
+	for (TypeInfo::Named::Candidate& candidate : candidates) {
+		// check trait bounds
+		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate.name).item);
+		if (!struct_.generic_declaration.has_value() || struct_.generic_declaration.value().generics.empty())
+			continue;
+		auto const& struct_generics = struct_.generic_declaration.value().generics;
+		auto const& our_generics    = candidate.generics;
+		assert(struct_generics.size() == our_generics.size());
+		bool satisfies_bounds = true;
+		for (size_t i = 0; i < struct_generics.size(); ++i) {
+			auto const& struct_generic = get_single_symbol(struct_generics.at(i).name.value).type;
+			// FIXME: instantiating every single time is insane
+			auto const& instantiated_generic = type_pool_.at(instantiate_type(struct_generic));
+			assert(!instantiated_generic.is_bottom());
+
+			auto satisfies = satisfies_trait_constraint(
+				our_generics.at(i),
+				instantiated_generic.get_generic().declared_constraints
+			);
+			if (!satisfies.has_value()) {
+				// we must delay this once more
+				// TODO: ensure the named type resolution is actually delayed
+				std::cout << "delayed named res!" << std::endl;
+				continue;
+			}
+
+			if (!satisfies.value()) {
+				satisfies_bounds = false;
+				break;
+			}
+		}
+		if (!satisfies_bounds) continue;
+
+		new_candidates.push_back(std::move(candidate));
+	}
+	candidates = std::move(new_candidates);
+
+	// if no candidates are unifiable, it's unresolved.
+	if (candidates.empty()) {
+		// we need to set the type to bottom to avoid causing more issues
+		type_pool_.at(id) = TypeInfo::make_bottom();
+
+		// TODO: show rejections instead of just (impossible) here
+		parsed_files.at(get_type_file_id(id))
+			.diagnostics.push_back(
+				Diagnostic::error(
+					"could not resolve named type",
+					"no named type matched the imposed constraints",
+					{get_type_sample(id, OutFmt::Color::Red)}
+				)
+			);
+
+		return true;
+	}
+
+	// if too many candidates are unifiable, we fail to decide.
+	// TODO: unless we can decide by specialization
+	if (candidates.size() > 1) { return false; }
+
+	// if only one is unifiable, we've finally found the one and only type
+	assert(candidates.size() == 1);
+	constrain_candidate(candidates.at(0));
+	return true;
 }
 
 bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
