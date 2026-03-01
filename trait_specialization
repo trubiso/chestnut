@@ -1,0 +1,16 @@
+trait A;
+trait B: A;
+trait C: B;
+
+func specialize<X: A>() {}
+func specialize<X: B>() {}
+func specialize<X: C>() {}
+
+struct Specialize<X: A> {}
+struct Specialize<X: B> {}
+struct Specialize<X: C> {}
+
+func try<T: B>() {
+	const x: Specialize<T>;
+	specialize<T>();
+}

@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 
 class Resolver {
 public:
@@ -778,6 +779,14 @@ private:
 	/// Tries to decide all remaining function overloads and member accesses, returning whether there are
 	/// still any remaining types which were not able to be decided.
 	bool try_decide_remaining_types();
+
+	std::unordered_set<size_t> specialize_overload(std::vector<std::vector<size_t>>&& trait_counts) const;
+
+	bool specialize_overload(UndecidedOverload&);
+	bool specialize_overload_named_type(TypeInfo::ID);
+	/// Specializes all remaining type and function overloads, that is, chooses the most specific one(s).
+	/// Returns whether any change was made.
+	bool specialize_overloads();
 
 	/// Decides all remaining types (that is, function overloads and member accesses). All types not decided
 	/// here throw diagnostics.

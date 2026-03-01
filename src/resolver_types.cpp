@@ -1683,6 +1683,9 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 
 std::vector<Resolver::TypeInfo::Generic::TraitConstraint>
 Resolver::expand_trait(TypeInfo::Generic::TraitConstraint const& trait_constraint) const {
+	// FIXME: this does not ensure traits are unique. that means that if we have a trait A and a trait B: A, B + A
+	// is considered more specific than B! we must ensure traits are unique then.
+
 	auto const& subconstraints = symbol_pool_.at(trait_constraint.name).trait_constraints;
 	// TODO: do sth with generics
 	std::vector<Resolver::TypeInfo::Generic::TraitConstraint> expanded {trait_constraint};
@@ -2928,9 +2931,170 @@ bool Resolver::try_decide_remaining_types() {
 	    && !has_undecided_named_types();
 }
 
+std::unordered_set<size_t> Resolver::specialize_overload(std::vector<std::vector<size_t>>&& trait_counts) const {
+	// TODO: this assumes all overloads have the same generic count, which will break once we have default values.
+
+	// first, we create a set of global compliant overloads
+	std::unordered_set<size_t> global_compliant {};
+	for (size_t i = 0; i < trait_counts.size(); ++i) global_compliant.insert(i);
+
+	// then, we get the overloads with most specific generics on a per-generic basis
+	for (size_t i = 0; i < trait_counts.at(0).size(); ++i) {
+		size_t max = trait_counts.at(0).at(i);
+
+		// contains the overloads which are as specific as possible
+		std::unordered_set<size_t> compliant {};
+		for (size_t j = 0; j < trait_counts.size(); ++j) {
+			if (trait_counts.at(j).at(i) > max) {
+				max = trait_counts.at(j).at(i);
+				// if we set a new maximum, the old overloads don't count
+				compliant.clear();
+			}
+			if (trait_counts.at(j).at(i) >= max) compliant.insert(j);
+		}
+
+		// remove all non-compliant overloads from the global compliant set
+		std::erase_if(global_compliant, [&compliant](size_t j) { return !compliant.contains(j); });
+
+		// if the global compliant set is empty, we're done
+		if (global_compliant.empty()) return global_compliant;
+	}
+
+	return global_compliant;
+}
+
+bool Resolver::specialize_overload(UndecidedOverload& undecided_overload) {
+	// we can only specialize if all candidates are known to satisfy trait bounds
+	std::vector<std::vector<size_t>> trait_counts {};
+	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
+		trait_counts.push_back({});
+		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
+		auto const& call_generics     = candidate.call_type.get_function().generics;
+		assert(function_generics.size() == call_generics.size());
+		for (size_t i = 0; i < function_generics.size(); ++i) {
+			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
+			assert(!function_generic.is_bottom());
+
+			auto satisfies = satisfies_trait_constraint(
+				std::get<1>(call_generics.at(i)),
+				function_generic.get_generic().declared_constraints
+			);
+			if (!satisfies.has_value()) {
+				// we must delay this once more
+				return false;
+			}
+
+			trait_counts.back().push_back(0);
+			for (auto const& constraint : function_generic.get_generic().declared_constraints) {
+				// PERF: we could create a function that counts instead of using actual expensive trait
+				// expansion
+				trait_counts.back().back() += expand_trait(constraint).size();
+			}
+		}
+	}
+
+	// since they all do, we will decide based on trait counts
+	std::unordered_set<size_t> compliant_set = specialize_overload(std::move(trait_counts));
+
+	// if none are compliant, we don't do anything and just let it be
+	if (compliant_set.empty()) return false;
+
+	// if all are compliant, this didn't help us at all
+	if (compliant_set.size() == undecided_overload.candidates.size()) return false;
+
+	// if some are compliant, we reduce the set to those
+	std::vector<UndecidedOverload::Candidate> new_candidates {};
+	for (size_t i = 0; i < undecided_overload.candidates.size(); ++i)
+		if (compliant_set.contains(i)) new_candidates.push_back(std::move(undecided_overload.candidates.at(i)));
+	undecided_overload.candidates = std::move(new_candidates);
+
+	// function overload resolution will take care of the rest
+	return true;
+}
+
+bool Resolver::specialize_overload_named_type(TypeInfo::ID id) {
+	assert(type_pool_.at(id).is_named());
+	auto& candidates = type_pool_.at(id).get_named().candidates();
+	// we can only specialize if all candidates are known to satisfy trait bounds
+	std::vector<std::vector<size_t>> trait_counts {};
+	for (TypeInfo::Named::Candidate& candidate : candidates) {
+		trait_counts.push_back({});
+
+		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate.name).item);
+		if (!struct_.generic_declaration.has_value() || struct_.generic_declaration.value().generics.empty())
+			continue;
+		auto const& struct_generics = struct_.generic_declaration.value().generics;
+		auto const& our_generics    = candidate.generics;
+		assert(struct_generics.size() == our_generics.size());
+		for (size_t i = 0; i < struct_generics.size(); ++i) {
+			auto const& struct_generic = get_single_symbol(struct_generics.at(i).name.value).type;
+			// FIXME: instantiating every single time is insane
+			auto const& instantiated_generic = type_pool_.at(instantiate_type(struct_generic));
+			assert(!instantiated_generic.is_bottom());
+
+			auto satisfies = satisfies_trait_constraint(
+				our_generics.at(i),
+				instantiated_generic.get_generic().declared_constraints
+			);
+			if (!satisfies.has_value()) {
+				// we must delay this once more
+				return false;
+			}
+
+			trait_counts.back().push_back(0);
+			for (auto const& constraint : instantiated_generic.get_generic().declared_constraints) {
+				// PERF: we could create a function that counts instead of using actual expensive trait
+				// expansion
+				trait_counts.back().back() += expand_trait(constraint).size();
+			}
+		}
+	}
+
+	// since they all do, we will decide based on trait counts
+	std::unordered_set<size_t> compliant_set = specialize_overload(std::move(trait_counts));
+
+	// if none are compliant, we don't do anything and just let it be
+	if (compliant_set.empty()) return false;
+
+	// if all are compliant, this didn't help us at all
+	if (compliant_set.size() == candidates.size()) return false;
+
+	// if some are compliant, we reduce the set to those
+	std::vector<TypeInfo::Named::Candidate> new_candidates {};
+	for (size_t i = 0; i < candidates.size(); ++i)
+		if (compliant_set.contains(i)) new_candidates.push_back(std::move(candidates.at(i)));
+	candidates = std::move(new_candidates);
+
+	// if only one is compliant, we have to constrain the type, since try_decide_named_type won't be called!
+	if (candidates.size() == 1) constrain_candidate(candidates.at(0));
+
+	// if more are compliant, this will likely be decided at a later iteration
+	return true;
+}
+
+bool Resolver::specialize_overloads() {
+	bool any_succeeded = false;
+	// specialize functions
+	for (UndecidedOverload& undecided_overload : undecided_overloads)
+		any_succeeded = any_succeeded || specialize_overload(undecided_overload);
+
+	// specialize types
+	for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
+		TypeInfo const& type = type_pool_.at(id);
+		if (!type.is_named()) continue;
+		int decided = type.is_decided(type_pool_);
+		if (decided != 0) continue;
+		any_succeeded = any_succeeded || specialize_overload_named_type(id);
+	}
+
+	return any_succeeded;
+}
+
 void Resolver::decide_remaining_types() {
-	// we try to decide remaining overloads and member accesses now that the entire program is known
-	if (try_decide_remaining_types()) return;
+	do {
+		// we try to decide remaining overloads and member accesses now that the entire program is known
+		if (try_decide_remaining_types()) return;
+	} while (specialize_overloads());  // we specialize overloads on fail
 
 	// we will try a more destructive approach now: we will fill in all partial numeric types and try to decide.
 	// this doesn't really have an effect if it doesn't work, because the lowering phase would have done this
@@ -2988,7 +3152,9 @@ void Resolver::decide_remaining_types() {
 	// if no type was filled in, there is no hope left
 	if (changes_made) {
 		// if any type was filled in, though, let's try again!
-		if (try_decide_remaining_types()) return;
+		do {
+			if (try_decide_remaining_types()) return;
+		} while (specialize_overloads());
 	}
 
 	// if we did not manage to decide any overload, we gotta throw diagnostics (we literally tried everything we can
