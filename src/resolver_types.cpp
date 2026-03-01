@@ -2772,17 +2772,9 @@ void Resolver::constrain_candidate(TypeInfo::Named::Candidate& candidate) {
 	assert(generics.size() == declared_generics.size());
 	for (size_t i = 0; i < generics.size(); ++i) {
 		ensure_has_constraints(declared_generics.at(i), get_single_symbol(candidate.name).file_id);
-		auto const& declared_constraints
-			= type_pool_.at(get_single_symbol(declared_generics.at(i).name.value).type)
-		                  .get_generic()
-		                  .declared_constraints;
+		auto generic    = instantiate_type(get_single_symbol(declared_generics.at(i).name.value).type);
 		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value()[0]);
-		// FIXME: this is incorrect. we should go back to instantiation!
-		std::copy(
-			declared_constraints.cbegin(),
-			declared_constraints.cend(),
-			std::back_inserter(type_pool_.at(generified).get_generic().imposed_constraints)
-		);
+		unify(generified, generic, get_type_file_id(generified));
 		generics.at(i) = generified;
 	}
 }
