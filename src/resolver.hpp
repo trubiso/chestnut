@@ -729,6 +729,18 @@ private:
 	/// Tries to decide a named type.
 	bool try_decide_named_type(TypeInfo::ID);
 
+	std::optional<bool> check_bound_equality_function(TypeInfo const& function, TypeInfo const& other) const;
+	std::optional<bool> check_bound_equality_same_as(TypeInfo const& same_as, TypeInfo const& other) const;
+	std::optional<bool> check_bound_equality_generic(TypeInfo const& generic, TypeInfo const& other) const;
+	std::optional<bool> check_bound_equality_named(TypeInfo const& named, TypeInfo const& other) const;
+	std::optional<bool> check_bound_equality_pointer(TypeInfo const& pointer, TypeInfo const& other) const;
+	/// Checks bound equality between two types, which is stricter than can_unify, because it does not
+	/// blindly unify generics but checks trait bounds.
+	std::optional<bool> check_bound_equality(TypeInfo const&, TypeInfo const&) const;
+	std::optional<bool> check_bound_equality(TypeInfo::ID, TypeInfo::ID) const;
+	/// Returns whether two trait constraints are equal if they are fully known.
+	std::optional<bool> check_bound_equality(TypeInfo::Generic::TraitConstraint const&, TypeInfo::Generic::TraitConstraint const&) const;
+
 	/// Returns whether a concrete type satisfies a set of trait constraints.
 	std::optional<bool> satisfies_trait_constraint(TypeInfo::ID, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
 	/// Expands a trait into itself plus its required traits, recursively.
