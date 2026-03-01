@@ -2049,6 +2049,7 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 			symbol
 		);
 	} else if (type.is_generic()) {
+		// TODO: ensure that trait constraints point back to the correct generics in generic declaration
 		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
 		declared_constraints.reserve(type.get_generic().declared_constraints.size());
 		std::transform(
@@ -2075,7 +2076,9 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 			file_id,
 			symbol
 		);
-		undecided_generics.push_back(generic_id);
+		// TODO: do we need this?
+		// we probably don't, since we don't care about the contaminated generic.
+		// undecided_generics.push_back(generic_id);
 		return generic_id;
 	} else if (type.is_member_access()) {
 		assert(false && "tried to instantiate member access");
@@ -2774,6 +2777,7 @@ void Resolver::constrain_candidate(TypeInfo::Named::Candidate& candidate) {
 		                  .get_generic()
 		                  .declared_constraints;
 		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value()[0]);
+		// FIXME: this is incorrect. we should go back to instantiation!
 		std::copy(
 			declared_constraints.cbegin(),
 			declared_constraints.cend(),
