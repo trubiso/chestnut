@@ -1970,8 +1970,9 @@ bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
 		}
 	}
 	// trait constraints must satisfy declared trait constraints
-	satisfies_trait_constraints = satisfies_trait_constraints
-	                           && satisfies_trait_constraint(trait_constraints, generic.declared_constraints);
+	auto satisfies_declared = satisfies_trait_constraint(trait_constraints, generic.declared_constraints);
+	if (!satisfies_declared.has_value()) return false;
+	satisfies_trait_constraints = satisfies_trait_constraints && satisfies_declared.value();
 	if (!satisfies_trait_constraints) {
 		type_pool_.at(id) = TypeInfo::make_bottom();
 		// TODO: rejections list
@@ -1998,8 +1999,9 @@ bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
 	// imposed type constraints must satisfy imposed trait constraints
 	satisfies_trait_constraints = true;
 	for (auto const& type_constraint : type_constraints) {
-		if (!satisfies_trait_constraint(type_constraint.type, trait_constraints))
-			satisfies_trait_constraints = false;
+		auto satisfies = satisfies_trait_constraint(type_constraint.type, trait_constraints);
+		if (!satisfies.has_value()) return false;
+		if (!satisfies.value()) satisfies_trait_constraints = false;
 	}
 	if (!satisfies_trait_constraints) {
 		type_pool_.at(id) = TypeInfo::make_bottom();
@@ -2041,7 +2043,9 @@ bool Resolver::check_generic_type(TypeInfo::ID id) {
 			return true;
 		} else trait_constraints.push_back(std::get<TypeInfo::Generic::TraitConstraint>(constraint));
 	}
-	if (!satisfies_trait_constraint(generic.declared_constraints, trait_constraints)) {
+	auto satisfies = satisfies_trait_constraint(generic.declared_constraints, trait_constraints);
+	if (!satisfies.has_value()) return false;
+	if (!satisfies.value()) {
 		type_pool_.at(id) = TypeInfo::make_bottom();
 		// TODO: rejections list, and better diagnostic??
 		parsed_files.at(get_type_file_id(id))
@@ -2055,7 +2059,6 @@ bool Resolver::check_generic_type(TypeInfo::ID id) {
 					)}
 				)
 			);
-		return true;
 	}
 
 	return true;
