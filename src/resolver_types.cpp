@@ -1843,7 +1843,7 @@ Resolver::expand_trait(TypeInfo::Generic::TraitConstraint const& trait_constrain
 	return expanded;
 }
 
-bool Resolver::satisfies_trait_constraint(
+std::optional<bool> Resolver::satisfies_trait_constraint(
 	std::vector<TypeInfo::Generic::TraitConstraint> const& checked,
 	std::vector<TypeInfo::Generic::TraitConstraint> const& other
 ) const {
@@ -1858,8 +1858,9 @@ bool Resolver::satisfies_trait_constraint(
 		// we need to check that this trait constraint exists in the expanded traits list
 		bool any_matched = false;
 		for (auto const& trait : expanded_traits) {
-			if (trait_constraint.name != trait.name) continue;
-			// TODO: check generics, potentially returning null if any of them are not yet decided
+			auto equality = check_bound_equality(trait_constraint, trait);
+			if (!equality.has_value()) return std::nullopt;
+			if (!equality.value()) continue;
 			any_matched = true;
 			break;
 		}

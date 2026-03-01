@@ -746,7 +746,7 @@ private:
 	/// Expands a trait into itself plus its required traits, recursively.
 	std::vector<TypeInfo::Generic::TraitConstraint> expand_trait(TypeInfo::Generic::TraitConstraint const&) const;
 	/// Returns whether the checked list of trait constraints is stricter than the other list.
-	bool satisfies_trait_constraint(std::vector<TypeInfo::Generic::TraitConstraint> const& checked, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
+	std::optional<bool> satisfies_trait_constraint(std::vector<TypeInfo::Generic::TraitConstraint> const& checked, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
 
 	/// Checks whether a generic type's imposed constraints are at least as strict as its declared
 	/// constraints. If possible, turns it into a concrete type.
