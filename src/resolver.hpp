@@ -847,7 +847,7 @@ private:
 	IR::Value::Atom lower_atom(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 
 	Spanned<IR::Value> lower_value(AST::Expression::AddressOperation const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
-	Spanned<IR::Value> lower_value(AST::Expression::FunctionCall const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
+	Spanned<IR::Value> lower_value(AST::Expression::FunctionCall&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Value> lower_value(AST::Expression::Atom const&, TypeInfo::ID, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 	Spanned<IR::Value> lower_value(AST::Expression const&, Span, std::vector<IR::BasicBlock>&, FileContext::ID, bool allow_functions = false);
 

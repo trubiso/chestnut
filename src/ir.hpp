@@ -403,6 +403,8 @@ struct Value {
 	struct FunctionCall {
 		// we need to know what we're calling directly
 		std::variant<Spanned<Identifier>, BuiltInFunction> callee;
+		// all generics will have been resolved :)
+		GenericList generic_list;
 		// labeled arguments are mere syntactic sugar
 		std::vector<Spanned<Atom>> arguments;
 	};
@@ -431,12 +433,13 @@ struct Value {
 
 	inline static Value make_function_call(
 		std::variant<Spanned<Identifier>, BuiltInFunction>&& callee,
+		GenericList&&                                        generic_list,
 		std::vector<Spanned<Atom>>&&                         arguments
 	) {
 		return Value(
 			value_t {
 				std::in_place_index<(size_t) Kind::FunctionCall>,
-				FunctionCall {std::move(callee), std::move(arguments)}
+				FunctionCall {std::move(callee), std::move(generic_list), std::move(arguments)}
                 }
 		);
 	}

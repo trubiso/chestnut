@@ -509,11 +509,11 @@ Spanned<IR::Value> Resolver::lower_value(
 }
 
 Spanned<IR::Value> Resolver::lower_value(
-	AST::Expression::FunctionCall const& function_call,
-	Span                                 span,
-	std::vector<IR::BasicBlock>&         basic_blocks,
-	FileContext::ID                      file_id,
-	bool                                 allow_functions
+	AST::Expression::FunctionCall& function_call,
+	Span                           span,
+	std::vector<IR::BasicBlock>&   basic_blocks,
+	FileContext::ID                file_id,
+	bool                           allow_functions
 ) {
 	auto error  = Spanned<IR::Value> {span, IR::Value::make_atom(IR::Value::Atom::make_error())};
 	auto callee = lower_value(*function_call.callee, basic_blocks, file_id, true);
@@ -554,9 +554,46 @@ Spanned<IR::Value> Resolver::lower_value(
 	}
 	assert(arguments.size() == argument_count);
 
+	// then we need to reconstruct the generic order from the type
+	IR::GenericList generic_list {};
+	if (function_call.generic_list.has_value()) {
+		size_t generic_count = function_call.generic_list.value().ordered.size()
+		                     + function_call.generic_list.value().labeled.size();
+		assert(function.generics.size() == generic_count);
+		generic_list.reserve(generic_count);
+		// ordered generics are freebies
+		std::transform(
+			function_call.generic_list.value().ordered.begin(),
+			function_call.generic_list.value().ordered.end(),
+			std::back_inserter(generic_list),
+			[this, file_id](auto& ordered_generic) {
+				return lower_type(std::move(ordered_generic), file_id);
+			}
+		);
+		// labeled generics have to be reordered according to the function call type
+		for (size_t i = function_call.generic_list.value().ordered.size(); i < generic_count; ++i) {
+			assert(std::get<0>(function.generics.at(i)).has_value());
+			std::string generic_name  = std::get<0>(function.generics.at(i)).value();
+			bool        generic_found = false;
+			for (auto& [label, generic] : function_call.generic_list.value().labeled) {
+				if (label.value == generic_name) {
+					generic_list.push_back(lower_type(std::move(generic), file_id));
+					generic_found = true;
+				}
+			}
+			assert(generic_found);
+		}
+		assert(generic_list.size() == generic_count);
+	}
+
 	// finally, we have the callee and the arguments
 	// TODO: check if the result is a function for allow_functions
-	return {span, IR::Value::make_function_call(std::move(callee_identifier), std::move(arguments))};
+	return {span,
+	        IR::Value::make_function_call(
+			std::move(callee_identifier),
+			std::move(generic_list),
+			std::move(arguments)
+		)};
 }
 
 Spanned<IR::Value> Resolver::lower_value(
@@ -588,7 +625,14 @@ Spanned<IR::Value> Resolver::lower_value(
 			allow_functions
 		);
 	case AST::Expression::Kind::FunctionCall:
-		return lower_value(expression.get_function_call(), span, basic_blocks, file_id, allow_functions);
+		// this const cast is ugly, but at least we don't change every function due to it :P
+		return lower_value(
+			const_cast<AST::Expression::FunctionCall&>(expression.get_function_call()),
+			span,
+			basic_blocks,
+			file_id,
+			allow_functions
+		);
 	case AST::Expression::Kind::MemberAccess:
 		return {span,
 		        IR::Value::make_load(lower_place(
@@ -645,8 +689,15 @@ Spanned<IR::Place> Resolver::lower_place(
 	FileContext::ID                      file_id,
 	bool                                 allow_functions
 ) {
+	// this const cast is ugly, but at least we don't change every function due to it :P
 	return place_from_value(
-		lower_value(function_call, span, basic_blocks, file_id, allow_functions),
+		lower_value(
+			const_cast<AST::Expression::FunctionCall&>(function_call),
+			span,
+			basic_blocks,
+			file_id,
+			allow_functions
+		),
 		reconstruct_type(type_id),
 		type_id,
 		basic_blocks,

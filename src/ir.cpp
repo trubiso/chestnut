@@ -280,6 +280,7 @@ std::ostream& operator<<(std::ostream& os, Value::FunctionCall const& call) {
 	if (std::holds_alternative<Spanned<Identifier>>(call.callee))
 		os << '@' << std::get<Spanned<Identifier>>(call.callee).value;
 	else os << std::get<BuiltInFunction>(call.callee);
+	os << call.generic_list;
 	if (!call.arguments.empty()) {
 		os << " w/ args: (";
 		for (size_t i = 0; i < call.arguments.size(); ++i) {
