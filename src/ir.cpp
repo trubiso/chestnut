@@ -31,11 +31,37 @@ std::ostream& operator<<(std::ostream& os, GenericList const& generic_list) {
 	return os << '>';
 }
 
-Type Type::clone() const {
-	if (is_atom()) {
-		Type::Atom atom = get_atom();
-		return Type::make_atom(std::move(atom));
+Type::Atom Type::Atom::clone() const {
+	switch (kind()) {
+	case Kind::Integer: break;
+	case Kind::Float:   return make_float(get_float().width);
+	case Kind::Void:    return make_void();
+	case Kind::Char:    return make_char();
+	case Kind::Bool:    return make_bool();
+	case Kind::Named:   break;
+	case Kind::Error:   return make_error();
 	}
+
+	if (is_integer()) {
+		auto integer = get_integer();
+		return make_integer(std::move(integer));
+	}
+
+	// named types must clone their entire generic list
+	GenericList generic_list {};
+	generic_list.reserve(get_named().generic_list.size());
+	std::transform(
+		get_named().generic_list.cbegin(),
+		get_named().generic_list.cend(),
+		std::back_inserter(generic_list),
+		[](Spanned<Type> const& type) { return Spanned {type.span, type.value.clone()}; }
+	);
+
+	return make_named(get_named().name, std::move(generic_list));
+}
+
+Type Type::clone() const {
+	if (is_atom()) { return Type::make_atom(get_atom().clone()); }
 
 	Type::Pointer const& pointer = get_pointer();
 	return Type::make_pointer(
@@ -46,6 +72,10 @@ Type Type::clone() const {
 	);
 }
 
+std::ostream& operator<<(std::ostream& os, Type::Atom::Named const& named) {
+	return os << '@' << named.name.value << named.generic_list;
+}
+
 std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	switch (atom.kind()) {
 	case Type::Atom::Kind::Integer: break;
@@ -53,7 +83,7 @@ std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	case Type::Atom::Kind::Void:    return os << "void";
 	case Type::Atom::Kind::Char:    return os << "char";
 	case Type::Atom::Kind::Bool:    return os << "bool";
-	case Type::Atom::Kind::Named:   return os << '@' << atom.get_named();
+	case Type::Atom::Kind::Named:   return os << atom.get_named();
 	case Type::Atom::Kind::Error:   return os << "(error)";
 	}
 

@@ -127,7 +127,9 @@ llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom) {
 			return program_.getDataLayout().getIndexType(context_, 0);
 		}
 		[[assume(false)]];
-	case IR::Type::Atom::Kind::Named: return llvm::StructType::getTypeByName(context_, get_name(atom.get_named()));
+	case IR::Type::Atom::Kind::Named:
+		// FIXME: this breaks for generics
+		return llvm::StructType::getTypeByName(context_, get_name(atom.get_named().name.value));
 	}
 }
 
@@ -301,7 +303,11 @@ llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom) {
 			std::back_inserter(fields),
 			[&](Spanned<IR::Value::Atom> const& value) { return generate_value(value.value); }
 		);
-		auto type = llvm::StructType::getTypeByName(context_, get_name(atom.type.get_atom().get_named()));
+		// FIXME: this breaks from within generic functions, because we don't yet monomorphize
+		auto type = llvm::StructType::getTypeByName(
+			context_,
+			get_name(atom.type.get_atom().get_named().name.value)
+		);
 
 		// we have to manually create it this way because we don't have a guarantee that the values are constant
 		llvm::Value* value = llvm::UndefValue::get(type);

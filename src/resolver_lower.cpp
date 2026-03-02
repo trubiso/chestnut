@@ -24,6 +24,7 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 	case TypeInfo::Kind::Module:
 	case TypeInfo::Kind::Function:
 	case TypeInfo::Kind::SameAs:
+	case TypeInfo::Kind::Generic:
 	case TypeInfo::Kind::MemberAccess:
 	case TypeInfo::Kind::Named:
 	case TypeInfo::Kind::Pointer:
@@ -76,10 +77,29 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 			)
 		);
 		return IR::Type::make_atom(IR::Type::Atom::make_error());
+	} else if (type.is_generic()) {
+		return IR::Type::make_atom(
+			IR::Type::Atom::make_named(Spanned {get_type_span(type_origin), type.get_generic().name}, {})
+		);
 	} else if (type.is_named()) {
-		// TODO: IR named types with generic arguments
-		// TODO: diagnostic if it wasn't fully resolved
-		// return IR::Type::make_atom(IR::Type::Atom::make_named(type.get_named()));
+		assert(type.get_named().candidates().size() == 1 && "this named type should've become a bottom!");
+		auto const&     candidate = type.get_named().candidates().at(0);
+		IR::GenericList generic_list {};
+		generic_list.reserve(candidate.generics.size());
+		std::transform(
+			candidate.generics.cbegin(),
+			candidate.generics.cend(),
+			std::back_inserter(generic_list),
+			[this](TypeInfo::ID type) {
+				return Spanned {get_type_span(type), reconstruct_type(type, true)};
+			}
+		);
+		return IR::Type::make_atom(
+			IR::Type::Atom::make_named(
+				Spanned {get_type_span(type_origin), candidate.name},
+				std::move(generic_list)
+			)
+		);
 	} else if (type.is_pointer()) {
 		return IR::Type::make_pointer(
 			IR::Type::Pointer {
@@ -196,8 +216,14 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom&& atom, Span span, FileCo
 		// the resolver will already have thrown diagnostics, so let's error
 		if (!atom.get_named().name.value.id.has_value() || atom.get_named().name.value.id.value().empty())
 			return {span, IR::Type::make_atom(IR::Type::Atom::make_error())};
+		// FIXME: this discards all generics
 		return {span,
-		        IR::Type::make_atom(IR::Type::Atom::make_named(atom.get_named().name.value.id.value()[0]))};
+		        IR::Type::make_atom(
+				IR::Type::Atom::make_named(
+					{atom.get_named().name.span, atom.get_named().name.value.id.value()[0]},
+					{}
+				)
+			)};
 	} else if (atom.is_inferred()) {
 		// this is invalid!! top level types must not be inferred
 		parsed_files.at(file_id).diagnostics.push_back(
@@ -685,7 +711,8 @@ Spanned<IR::Place> Resolver::lower_place(
 	auto accessee = lower_place(*member_access.accessee, basic_blocks, file_id);
 
 	if (!accessee.value.type.is_atom() || !accessee.value.type.get_atom().is_named()) return error_place;
-	IR::Identifier    struct_id   = accessee.value.type.get_atom().get_named();
+	// FIXME: this completely discards generics
+	IR::Identifier    struct_id   = accessee.value.type.get_atom().get_named().name.value;
 	IR::Struct const& struct_     = std::get<IR::Struct>(symbol_pool_.at(struct_id).item);
 	size_t            field_index = 0;
 	// we know the field is in there somewhere

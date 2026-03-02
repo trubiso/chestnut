@@ -19,10 +19,10 @@ std::ostream& operator<<(std::ostream&, GenericList const&);
 
 struct Generic {
 	Identifier name;
-	
+
 	struct Constraint {
 		Spanned<Identifier> name;
-		GenericList generic_list;
+		GenericList         generic_list;
 	};
 
 	std::vector<Constraint> constraints;
@@ -95,17 +95,15 @@ struct Type {
 			}
 		};
 
+		struct Named {
+			Spanned<Identifier> name;
+			GenericList         generic_list;
+		};
 		enum class Kind { Integer, Float, Void, Char, Bool, Named, Error };
 
-		typedef std::variant<
-			Integer,
-			Float,
-			std::monostate,
-			std::monostate,
-			std::monostate,
-			Identifier,
-			std::monostate>
-			value_t;
+		typedef std::
+			variant<Integer, Float, std::monostate, std::monostate, std::monostate, Named, std::monostate>
+				value_t;
 
 		value_t value;
 
@@ -145,8 +143,13 @@ struct Type {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Bool>, std::monostate {}});
 		}
 
-		inline static Atom make_named(Identifier id) {
-			return Atom(value_t {std::in_place_index<(size_t) Kind::Named>, id});
+		inline static Atom make_named(Spanned<Identifier> id, GenericList&& generic_list) {
+			return Atom(
+				value_t {
+					std::in_place_index<(size_t) Kind::Named>,
+					Named {std::move(id), std::move(generic_list)}
+                        }
+			);
 		}
 
 		inline static Atom make_error() {
@@ -157,7 +160,9 @@ struct Type {
 
 		inline Float get_float() const { return std::get<(size_t) Kind::Float>(value); }
 
-		inline Identifier const& get_named() const { return std::get<(size_t) Kind::Named>(value); }
+		inline Named const& get_named() const { return std::get<(size_t) Kind::Named>(value); }
+
+		Atom clone() const;
 	};
 
 	struct Pointer {
@@ -174,7 +179,7 @@ struct Type {
 	inline constexpr Kind kind() const { return (Kind) value.index(); }
 
 	inline static Type make_atom(Atom&& atom) {
-		return Type(value_t {std::in_place_index<(size_t) Kind::Atom>, atom});
+		return Type(value_t {std::in_place_index<(size_t) Kind::Atom>, std::move(atom)});
 	}
 
 	inline static Type make_pointer(Pointer&& pointer) {
@@ -195,6 +200,7 @@ struct Type {
 uint32_t const                 DEFAULT_INTEGER_WIDTH = 32;
 Type::Atom::Float::Width const DEFAULT_FLOAT_WIDTH   = Type::Atom::Float::Width::F32;
 
+std::ostream& operator<<(std::ostream&, Type::Atom::Named const&);
 std::ostream& operator<<(std::ostream&, Type::Atom const&);
 std::ostream& operator<<(std::ostream&, Type::Pointer const&);
 std::ostream& operator<<(std::ostream&, Type const&);
