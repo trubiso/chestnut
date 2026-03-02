@@ -211,6 +211,8 @@ struct Type {
 	inline Atom& get_atom() { return std::get<(size_t) Kind::Atom>(value); }
 
 	inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
+
+	inline Pointer& get_pointer() { return std::get<(size_t) Kind::Pointer>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Type::Atom::Named const&);

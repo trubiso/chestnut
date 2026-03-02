@@ -7,11 +7,12 @@
 #include <sstream>
 #include <variant>
 
-Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Span span, FileContext::ID file_id) {
+Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named&& named, Span span, FileContext::ID file_id) {
+	auto const& partial = std::get<TypeInfo::Named::Partial>(named.value);
 	// first, we ignore name resolver issues
-	if (!partial.name->id.has_value() || partial.name->id.value().empty()) return TypeInfo::make_bottom();
+	if (!named.name->id.has_value() || named.name->id.value().empty()) return TypeInfo::make_bottom();
 
-	std::vector<AST::SymbolID>              candidate_ids = partial.name->id.value();
+	std::vector<AST::SymbolID>              candidate_ids = named.name->id.value();
 	std::vector<TypeInfo::Named::Candidate> candidates {};
 
 	// TODO: rejections list for diagnostic
@@ -104,10 +105,10 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Sp
 		assert(candidates.size() == 1);
 		return TypeInfo::make_same_as(symbol_pool_.at(candidates.at(0).name).type);
 	}
-	return TypeInfo::make_named(std::move(candidates));
+	return TypeInfo::make_named(named.name, std::move(candidates));
 }
 
-Resolver::TypeInfo Resolver::from_type(AST::Type::Atom const& atom, FileContext::ID file_id, bool partial) {
+Resolver::TypeInfo Resolver::from_type(AST::Type::Atom& atom, FileContext::ID file_id, bool partial) {
 	switch (atom.kind()) {
 	case AST::Type::Atom::Kind::Float:
 		return TypeInfo::make_known_float(TypeInfo::KnownFloat {atom.get_float().width});
@@ -120,7 +121,7 @@ Resolver::TypeInfo Resolver::from_type(AST::Type::Atom const& atom, FileContext:
 	}
 
 	if (atom.is_named()) {
-		auto const& named = atom.get_named();
+		auto& named = atom.get_named();
 
 		// for named types, we need to extract the generic list first
 		std::vector<TypeInfo::ID>                          ordered_generics {};
@@ -128,26 +129,25 @@ Resolver::TypeInfo Resolver::from_type(AST::Type::Atom const& atom, FileContext:
 		if (named.generic_list.has_value()) {
 			ordered_generics.reserve(named.generic_list.value().ordered.size());
 			labeled_generics.reserve(named.generic_list.value().labeled.size());
-			for (auto const& generic : named.generic_list.value().ordered) {
+			for (auto& generic : named.generic_list.value().ordered) {
 				TypeInfo     type    = from_type(generic.value, file_id, partial);
 				TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
 				ordered_generics.push_back(type_id);
 			}
-			for (auto const& [label, generic] : named.generic_list.value().labeled) {
+			for (auto& [label, generic] : named.generic_list.value().labeled) {
 				TypeInfo     type    = from_type(generic.value, file_id, partial);
 				TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
 				labeled_generics.emplace_back(label.value, type_id);
 			}
 		}
 
-		TypeInfo::Named::Partial partial_named {
+		TypeInfo::Named partial_named {
 			&named.name.value,
-			std::move(ordered_generics),
-			std::move(labeled_generics)
+			TypeInfo::Named::Partial {std::move(ordered_generics), std::move(labeled_generics)}
 		};
 
 		// resolve the partial only if this is not a partial scenario
-		return partial ? TypeInfo {TypeInfo::Named {std::move(partial_named)}}
+		return partial ? TypeInfo {std::move(partial_named)}
 		               : from_partial(std::move(partial_named), named.name.span, file_id);
 	}
 
@@ -158,13 +158,13 @@ Resolver::TypeInfo Resolver::from_type(AST::Type::Atom const& atom, FileContext:
 	else return TypeInfo::make_partial_integer(TypeInfo::PartialInteger {integer, true});
 }
 
-Resolver::TypeInfo Resolver::from_type(AST::Type::Pointer const& pointer, FileContext::ID file_id, bool partial) {
+Resolver::TypeInfo Resolver::from_type(AST::Type::Pointer& pointer, FileContext::ID file_id, bool partial) {
 	TypeInfo     inner   = from_type(pointer.type->value, file_id, partial);
 	TypeInfo::ID pointee = register_type(std::move(inner), pointer.type->span, file_id);
 	return TypeInfo::make_pointer(TypeInfo::Pointer {pointee, pointer.mutable_});
 }
 
-Resolver::TypeInfo Resolver::from_type(AST::Type const& type, FileContext::ID file_id, bool partial) {
+Resolver::TypeInfo Resolver::from_type(AST::Type& type, FileContext::ID file_id, bool partial) {
 	switch (type.kind()) {
 	case AST::Type::Kind::Atom:    return from_type(type.get_atom(), file_id, partial);
 	case AST::Type::Kind::Pointer: return from_type(type.get_pointer(), file_id, partial);
@@ -377,7 +377,7 @@ std::ostream& Resolver::debug_print_type(std::ostream& os, TypeInfo const& type)
 
 		if (named.is_partial()) {
 			auto const& partial = std::get<TypeInfo::Named::Partial>(named.value);
-			os << *partial.name;
+			os << *named.name;
 
 			size_t generic_count = partial.ordered_generics.size() + partial.labeled_generics.size();
 			if (generic_count == 0) return os;
@@ -1004,7 +1004,8 @@ void Resolver::unify_named(
 	}
 
 	// otherwise, we can proceed with unification
-	TypeInfo common_type = TypeInfo::make_named(std::move(common_candidates));
+	// FIXME: we need to bind this to both identifiers!!!
+	TypeInfo common_type = TypeInfo::make_named(a.name, std::move(common_candidates));
 	type_pool_.at(named) = common_type;
 	type_pool_.at(other) = TypeInfo::make_same_as(named);
 }
@@ -1603,7 +1604,7 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	// this member access will 100% be resolved now! :D
 
 	// let's ensure that we have the proper generic constraints
-	constrain_candidate(underlying.get_named().candidates().at(0));
+	constrain_candidate(underlying.get_named().name, underlying.get_named().candidates().at(0));
 	AST::SymbolID type_name_id = underlying.get_named().candidates().at(0).name;
 
 	// we don't have any other user type as of now :P
@@ -1611,8 +1612,8 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 
 	// first of all, let's check whether the struct even has the field
 	auto maybe_field = std::find_if(
-		struct_->fields.cbegin(),
-		struct_->fields.cend(),
+		struct_->fields.begin(),
+		struct_->fields.end(),
 		[&member_access](AST::Struct::Field const& field) { return field.name.value == member_access.field; }
 	);
 	if (maybe_field == struct_->fields.cend()) {
@@ -1643,8 +1644,8 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	}
 
 	// let's get the type of the field
-	AST::Struct::Field const& field = *maybe_field;
-	TypeInfo field_type             = from_type(field.type.value, symbol_pool_.at(type_name_id).file_id, false);
+	AST::Struct::Field& field      = *maybe_field;
+	TypeInfo            field_type = from_type(field.type.value, symbol_pool_.at(type_name_id).file_id, false);
 
 	// finally, let's set the type and unify all possible types
 	type_pool_.at(undecided_member_access) = field_type;
@@ -1968,12 +1969,11 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	}
 
 	// if too many candidates are unifiable, we fail to decide.
-	// TODO: unless we can decide by specialization
 	if (candidates.size() > 1) { return false; }
 
 	// if only one is unifiable, we've finally found the one and only type
 	assert(candidates.size() == 1);
-	constrain_candidate(candidates.at(0));
+	constrain_candidate(type_pool_.at(id).get_named().name, candidates.at(0));
 	return true;
 }
 
@@ -2104,13 +2104,11 @@ Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span,
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
-	TypeInfo named_type = from_type(
-		AST::Type::Atom::make_named(
-			AST::Type::Atom::Named {struct_literal.name, std::move(struct_literal.generic_list)}
-		),
-		file_id,
-		false
+	// FIXME: this will 100% cause issues with this ptr getting invalidated!!!
+	auto temp_atom = AST::Type::Atom::make_named(
+		AST::Type::Atom::Named {struct_literal.name, std::move(struct_literal.generic_list)}
 	);
+	TypeInfo named_type = from_type(temp_atom, file_id, false);
 	if (named_type.is_bottom()) {
 		// the function will have complained
 		return register_type(TypeInfo::make_bottom(), span, file_id);
@@ -2348,7 +2346,8 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 				TypeInfo::Named::Candidate const& candidate
 			) { return TypeInfo::Named::Candidate {candidate.name, instantiate_types(candidate.generics)}; }
 		);
-		return register_type(TypeInfo::make_named(std::move(new_candidates)), span, file_id, symbol);
+		// we don't want to link it back to the same identifier, since this is just a copy!
+		return register_type(TypeInfo::make_named(nullptr, std::move(new_candidates)), span, file_id, symbol);
 	} else if (type.is_pointer()) {
 		return register_type(
 			TypeInfo::make_pointer(
@@ -2885,13 +2884,11 @@ void Resolver::infer(AST::Trait& trait, FileContext::ID file_id) {
 	if (trait.generic_declaration.has_value()) infer(trait.generic_declaration.value(), file_id);
 	for (auto& constraint : trait.constraints) {
 		// we generate the constraint and that does all of the generics for us :P
-		auto trait_constraint = generate_constraint(
-			AST::GenericDeclaration::Generic::Constraint {
-				constraint.name,
-				std::move(constraint.generic_list)
-			},
-			file_id
-		);
+		auto temp_constraint = AST::GenericDeclaration::Generic::Constraint {
+			constraint.name,
+			std::move(constraint.generic_list)
+		};
+		auto trait_constraint = generate_constraint(temp_constraint, file_id);
 		if (!trait_constraint.has_value()) continue;
 		get_single_symbol(trait.name.value).trait_constraints.push_back(trait_constraint.value());
 	}
@@ -2930,7 +2927,7 @@ void Resolver::ensure_has_constraints(AST::GenericDeclaration::Generic& generic,
 }
 
 std::optional<Resolver::TypeInfo::Generic::TraitConstraint>
-Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint const& constraint, FileContext::ID file_id) {
+Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint& constraint, FileContext::ID file_id) {
 	if (!constraint.name.value.id.has_value()
 	    || constraint.name.value.id.value().size() != 1
 	    || !std::holds_alternative<AST::Trait*>(get_single_symbol(constraint.name.value).item)) {
@@ -2989,19 +2986,19 @@ Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint const
 		constraint.generic_list.value().ordered.begin(),
 		constraint.generic_list.value().ordered.end(),
 		std::back_inserter(arguments),
-		[this, file_id](auto const& type) {
+		[this, file_id](auto& type) {
 			return register_type(from_type(type.value, file_id, false), type.span, file_id);
 		}
 	);
 	for (size_t i = arguments.size(); i < trait_generics.size(); ++i) {
 		auto corresponding_generic = std::find_if(
-			constraint.generic_list.value().labeled.cbegin(),
-			constraint.generic_list.value().labeled.cend(),
-			[&trait_generics, i](auto const& generic) {
+			constraint.generic_list.value().labeled.begin(),
+			constraint.generic_list.value().labeled.end(),
+			[&trait_generics, i](auto& generic) {
 				return std::get<0>(generic).value == trait_generics.at(i).name.value.name();
 			}
 		);
-		auto const& type = std::get<1>(*corresponding_generic);
+		auto& type = std::get<1>(*corresponding_generic);
 		arguments.push_back(register_type(from_type(type.value, file_id, false), type.span, file_id));
 	}
 
@@ -3017,7 +3014,10 @@ Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint const
 	return TypeInfo::Generic::TraitConstraint {constraint.name.value.id.value()[0], std::move(arguments)};
 }
 
-void Resolver::constrain_candidate(TypeInfo::Named::Candidate& candidate) {
+void Resolver::constrain_candidate(AST::Identifier* identifier, TypeInfo::Named::Candidate& candidate) {
+	// constrain the identifier for lowering later
+	if (identifier) identifier->id = {candidate.name};
+
 	AST::Struct* struct_ = std::get<AST::Struct*>(get_single_symbol(candidate.name).item);
 	if (!struct_->generic_declaration.has_value()) return;
 	auto& generics          = candidate.generics;
@@ -3040,7 +3040,7 @@ void Resolver::constrain_known_named_type_generics() {
 		if (!type.is_named()) continue;
 		if (type.get_named().candidates().size() != 1) continue;
 		auto& candidate = type.get_named().candidates().at(0);
-		constrain_candidate(candidate);
+		constrain_candidate(type.get_named().name, candidate);
 	}
 }
 
@@ -3271,7 +3271,7 @@ bool Resolver::specialize_overload_named_type(TypeInfo::ID id) {
 	candidates = std::move(new_candidates);
 
 	// if only one is compliant, we have to constrain the type, since try_decide_named_type won't be called!
-	if (candidates.size() == 1) constrain_candidate(candidates.at(0));
+	if (candidates.size() == 1) constrain_candidate(type_pool_.at(id).get_named().name, candidates.at(0));
 
 	// if more are compliant, this will likely be decided at a later iteration
 	return true;

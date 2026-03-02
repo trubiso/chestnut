@@ -79,9 +79,9 @@ private:
 		};
 
 		struct Named {
-			struct Partial {
-				AST::Identifier const* name;
+			AST::Identifier* name;
 
+			struct Partial {
 				std::vector<ID>                          ordered_generics;
 				std::vector<std::tuple<std::string, ID>> labeled_generics;
 			};
@@ -215,12 +215,11 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named(AST::Identifier const* name, std::vector<ID>&& ordered_generics = {}, std::vector<std::tuple<std::string, ID>> labeled_generics = {}) {
+		inline static TypeInfo make_named(AST::Identifier* name, std::vector<ID>&& ordered_generics = {}, std::vector<std::tuple<std::string, ID>> labeled_generics = {}) {
 			return TypeInfo(
 				value_t {
 					std::in_place_index<(size_t) Kind::Named>,
-					Named {Named::Partial {
-						name,
+					Named {name, Named::Partial {
 						std::move(ordered_generics),
 						std::move(labeled_generics)
 					}}
@@ -228,8 +227,8 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named(std::vector<Named::Candidate>&& candidates) {
-			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{std::move(candidates)}});
+		inline static TypeInfo make_named(AST::Identifier* name, std::vector<Named::Candidate>&& candidates) {
+			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{name, std::move(candidates)}});
 		}
 		
 		inline static TypeInfo make_pointer(Pointer&& pointer) {
@@ -591,11 +590,11 @@ private:
 
 	/// Turns a partial named type into a full named type with candidates. May return a bottom if the
 	/// identifier is not resolved, or if no candidates match (in which case it throws a diagnostic).
-	TypeInfo from_partial(TypeInfo::Named::Partial&&, Span, FileContext::ID);
+	TypeInfo from_partial(TypeInfo::Named&&, Span, FileContext::ID);
 
-	TypeInfo from_type(AST::Type::Atom const&, FileContext::ID, bool partial = true);
-	TypeInfo from_type(AST::Type::Pointer const&, FileContext::ID, bool partial = true);
-	TypeInfo from_type(AST::Type const&, FileContext::ID, bool partial = true);
+	TypeInfo from_type(AST::Type::Atom&, FileContext::ID, bool partial = true);
+	TypeInfo from_type(AST::Type::Pointer&, FileContext::ID, bool partial = true);
+	TypeInfo from_type(AST::Type&, FileContext::ID, bool partial = true);
 
 	/// Returns the span for a given type ID.
 	inline Span get_type_span(TypeInfo::ID id) const { return std::get<0>(type_span_pool_.at(id)); }
@@ -782,10 +781,10 @@ private:
 	/// Ensures a generic declaration generic has its constraints added.
 	void ensure_has_constraints(AST::GenericDeclaration::Generic&, FileContext::ID);
 	/// Turns a generic declaration constraint into a type inference engine trait constraint. Returns null if an error happens.
-	std::optional<TypeInfo::Generic::TraitConstraint> generate_constraint(AST::GenericDeclaration::Generic::Constraint const&, FileContext::ID);
+	std::optional<TypeInfo::Generic::TraitConstraint> generate_constraint(AST::GenericDeclaration::Generic::Constraint&, FileContext::ID);
 
 	/// Adds the correct trait constraints to a named type's generics according to the provided candidate.
-	void constrain_candidate(TypeInfo::Named::Candidate&);
+	void constrain_candidate(AST::Identifier*, TypeInfo::Named::Candidate&);
 	/// Adds generic constraints to all single-candidate named types' generics. It's necessary to do this,
 	/// since these types will get overlooked by the main type decision loop, because they are already decided.
 	void constrain_known_named_type_generics();

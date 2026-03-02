@@ -644,11 +644,7 @@ void Resolver::prune_named_partial_types() {
 	for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
 		TypeInfo& type = type_pool_.at(id);
 		if (type.is_named() && type.get_named().is_partial()) {
-			type = from_partial(
-				std::move(std::get<TypeInfo::Named::Partial>(type.get_named().value)),
-				get_type_span(id),
-				get_type_file_id(id)
-			);
+			type = from_partial(std::move(type.get_named()), get_type_span(id), get_type_file_id(id));
 		}
 	}
 }
