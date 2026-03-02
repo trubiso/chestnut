@@ -1665,59 +1665,63 @@ std::optional<bool> Resolver::check_bound_equality_same_as(TypeInfo const& same_
 }
 
 std::optional<bool> Resolver::check_bound_equality_generic(TypeInfo const& generic, TypeInfo const& other) const {
+	std::vector<TypeInfo::Generic::TraitConstraint> a {}, b {};
+
+	for (auto const& trait_constraint : generic.get_generic().declared_constraints) {
+		std::vector<TypeInfo::Generic::TraitConstraint> expanded = expand_trait(trait_constraint);
+		std::move(expanded.begin(), expanded.end(), std::back_inserter(a));
+	}
+
+	auto maybe_a = reduce_to_unique(std::move(a));
+	if (!maybe_a.has_value()) return std::nullopt;
+	a = std::move(maybe_a.value());
+
+	// the second set of traits comes from the declared traits of the other generic or the implemented traits
+	// otherwise
+	// TODO: maybe consolidate both cases into one and deal with the distinction in get_implemented_traits?
 	if (other.is_generic()) {
-		// FIXME: there has to be an easier way to do this
-		std::vector<TypeInfo::Generic::TraitConstraint> a {}, b {};
-
-		for (auto const& trait_constraint : generic.get_generic().declared_constraints) {
-			std::vector<TypeInfo::Generic::TraitConstraint> expanded = expand_trait(trait_constraint);
-			std::move(expanded.begin(), expanded.end(), std::back_inserter(a));
-		}
-
 		for (auto const& trait_constraint : other.get_generic().declared_constraints) {
 			std::vector<TypeInfo::Generic::TraitConstraint> expanded = expand_trait(trait_constraint);
 			std::move(expanded.begin(), expanded.end(), std::back_inserter(b));
 		}
 
-		auto maybe_a = reduce_to_unique(std::move(a));
-		if (!maybe_a.has_value()) return std::nullopt;
-		a = std::move(maybe_a.value());
-
 		auto maybe_b = reduce_to_unique(std::move(b));
 		if (!maybe_b.has_value()) return std::nullopt;
 		b = std::move(maybe_b.value());
-
-		for (auto const& trait_constraint : a) {
-			// we need to check that this trait constraint exists in the other expanded traits list
-			bool any_matched = false;
-			for (auto const& trait : b) {
-				auto equality = check_bound_equality(trait_constraint, trait);
-				if (!equality.has_value()) return std::nullopt;
-				if (!equality.value()) continue;
-				any_matched = true;
-				break;
-			}
-			if (!any_matched) return false;
-		}
-
-		for (auto const& trait_constraint : b) {
-			// we need to check that this trait constraint exists in the other expanded traits list
-			bool any_matched = false;
-			for (auto const& trait : a) {
-				auto equality = check_bound_equality(trait_constraint, trait);
-				if (!equality.has_value()) return std::nullopt;
-				if (!equality.value()) continue;
-				any_matched = true;
-				break;
-			}
-			if (!any_matched) return false;
-		}
-
-		return true;
 	} else {
-		// TODO: obtain implemented traits for type
-		return false;
+		auto maybe_b = reduce_to_unique(get_implemented_traits(other));
+		if (!maybe_b.has_value()) return std::nullopt;
+		b = std::move(maybe_b.value());
 	}
+
+	// FIXME: there has to be an easier way to do this
+	for (auto const& trait_constraint : a) {
+		// we need to check that this trait constraint exists in the other expanded traits list
+		bool any_matched = false;
+		for (auto const& trait : b) {
+			auto equality = check_bound_equality(trait_constraint, trait);
+			if (!equality.has_value()) return std::nullopt;
+			if (!equality.value()) continue;
+			any_matched = true;
+			break;
+		}
+		if (!any_matched) return false;
+	}
+
+	for (auto const& trait_constraint : b) {
+		// we need to check that this trait constraint exists in the other expanded traits list
+		bool any_matched = false;
+		for (auto const& trait : a) {
+			auto equality = check_bound_equality(trait_constraint, trait);
+			if (!equality.has_value()) return std::nullopt;
+			if (!equality.value()) continue;
+			any_matched = true;
+			break;
+		}
+		if (!any_matched) return false;
+	}
+
+	return true;
 }
 
 std::optional<bool> Resolver::check_bound_equality_named(TypeInfo const& named, TypeInfo const& other) const {
@@ -1810,6 +1814,11 @@ std::optional<bool> Resolver::check_bound_equality(
 	return true;
 }
 
+std::vector<Resolver::TypeInfo::Generic::TraitConstraint> Resolver::get_implemented_traits(TypeInfo const&) const {
+	// TODO: obtain implemented traits for type
+	return {};
+}
+
 std::optional<bool> Resolver::satisfies_trait_constraint(
 	TypeInfo::ID                                           type_id,
 	std::vector<TypeInfo::Generic::TraitConstraint> const& constraints
@@ -1826,12 +1835,10 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 		// we ignore bottoms
 		return true;
 	} else if (type_pool_.at(type_id).is_same_as()) {
-		// TODO: should we do sth different in this case?
 		if (type_pool_.at(type_id).get_same_as().ids.size() != 1) return false;
 		return satisfies_trait_constraint(type_pool_.at(type_id).get_same_as().ids.at(0), constraints);
 	} else {
-		// TODO: obtain implemented traits for type
-		return false;
+		return satisfies_trait_constraint(get_implemented_traits(type_pool_.at(type_id)), constraints);
 	}
 }
 
