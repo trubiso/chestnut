@@ -69,9 +69,10 @@ std::vector<IR::Symbol> Resolver::export_symbols() {
 	return symbols;
 }
 
-void Resolver::dump() const {
+void Resolver::dump(bool print_built_ins) const {
 	std::cout << symbol_pool_.size() << " symbols, " << type_pool_.size() << " types\n";
 	for (Symbol const& symbol : symbol_pool_) {
+		if (!print_built_ins && symbol.file_id == UINT32_MAX) continue;
 		std::cout << '@' << symbol.id << " (file #" << symbol.file_id << "): " << symbol.name;
 		if (symbol.mutable_) std::cout << " (mutable)";
 		std::cout << "\n    ";

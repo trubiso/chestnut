@@ -33,7 +33,7 @@ public:
 	/// Exports all symbols as IR symbols.
 	std::vector<IR::Symbol> export_symbols();
 	/// Prints a dump of all symbols and their corresponding types.
-	void dump() const;
+	void dump(bool print_built_ins = false) const;
 	/// Prints an IR module using the symbol table.
 	std::ostream& print(std::ostream&, IR::Module const&) const;
 
