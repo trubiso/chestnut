@@ -23,6 +23,7 @@ std::ostream& operator<<(std::ostream& os, GenericDeclaration const& generic_dec
 }
 
 std::ostream& operator<<(std::ostream& os, GenericList const& generic_list) {
+	if (generic_list.empty()) return os;
 	os << '<';
 	for (size_t i = 0; i < generic_list.size(); ++i) {
 		os << generic_list[i].value;
