@@ -294,15 +294,22 @@ std::optional<Expression> Parser::consume_expression_atom() {
 			// we check it here because the function call calls this for its callee, meaning that the
 			// function call won't check for generics before we do.
 			if (peek_symbol(Token::Symbol::Lt)) {
-				// we don't have to check for whitespace, because there's no reason why you would do
-				// A<B, C>{...} since there are no scope expressions :-)
-				generic_list = consume_generic_list();
+				// we disambiguate via whitespace to avoid confusing comparison expressions
+				if (identifier.value().span.end != tokens_.peek().value().span().start) goto bail;
+				generic_list = expect_generic_list(
+					"expected generic list after opening angle bracket (if you wanted a comparison operator, add a space before `<`)"
+				);
 				// we bail if it's invalid
-				if (!generic_list.has_value() || !peek_symbol(Token::Symbol::LBrace)) {
+				if (!generic_list.has_value()) {
 					tokens_.set_index(index);
 					goto bail;
 				}
-			}
+				// if we don't get an opening brace, this is probably a function call :P
+				if (!consume_symbol(Token::Symbol::LBrace)) {
+					tokens_.set_index(index);
+					goto bail;
+				}
+			} else assert(consume_symbol(Token::Symbol::LBrace));
 			assert(consume_symbol(Token::Symbol::LBrace));
 			std::optional<Expression::Atom::StructLiteral::Field> maybe_field;
 			std::vector<Expression::Atom::StructLiteral::Field>   fields {};
