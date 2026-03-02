@@ -4,6 +4,33 @@
 
 namespace IR {
 
+std::ostream& operator<<(std::ostream& os, GenericDeclaration const& generic_declaration) {
+	os << '<';
+	size_t count = 0;
+	for (auto const& generic : generic_declaration) {
+		os << '@' << generic.name;
+		if (!generic.constraints.empty()) {
+			size_t subcount = 0;
+			os << ": ";
+			for (auto const& constraint : generic.constraints) {
+				os << '@' << constraint.name.value << constraint.generic_list;
+				if (++subcount < generic.constraints.size()) os << " + ";
+			}
+		}
+		if (++count < generic_declaration.size()) os << ", ";
+	}
+	return os << '>';
+}
+
+std::ostream& operator<<(std::ostream& os, GenericList const& generic_list) {
+	os << '<';
+	for (size_t i = 0; i < generic_list.size(); ++i) {
+		os << generic_list[i].value;
+		if (i + 1 < generic_list.size()) os << ", ";
+	}
+	return os << '>';
+}
+
 Type Type::clone() const {
 	if (is_atom()) {
 		Type::Atom atom = get_atom();

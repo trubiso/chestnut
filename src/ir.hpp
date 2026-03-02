@@ -11,6 +11,27 @@ namespace IR {
 // all identifiers are now symbols
 using Identifier = AST::SymbolID;
 
+struct Type;
+
+using GenericList = std::vector<Spanned<Type>>;
+
+std::ostream& operator<<(std::ostream&, GenericList const&);
+
+struct Generic {
+	Identifier name;
+	
+	struct Constraint {
+		Spanned<Identifier> name;
+		GenericList generic_list;
+	};
+
+	std::vector<Constraint> constraints;
+};
+
+using GenericDeclaration = std::vector<Generic>;
+
+std::ostream& operator<<(std::ostream&, GenericDeclaration const&);
+
 struct Type {
 	struct Atom {
 		class Integer {
