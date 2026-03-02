@@ -102,7 +102,6 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named::Partial&& partial, Sp
 
 	if (any_generic_candidate) {
 		assert(candidates.size() == 1);
-		// TODO: should we clone the generic instead?
 		return TypeInfo::make_same_as(symbol_pool_.at(candidates.at(0).name).type);
 	}
 	return TypeInfo::make_named(std::move(candidates));
@@ -2165,7 +2164,11 @@ Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span,
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
 
+	// remember to set the candidates to be the suitable ones
+	named_type.get_named().candidates() = std::move(suitable_candidates);
+
 	// we can get the field types via member access now and delegate the work there
+	// TODO: make the span include the generic list
 	TypeInfo::ID type_id = register_type(std::move(named_type), struct_literal.name.span, file_id);
 	for (auto& field : struct_literal.fields) {
 		TypeInfo::ID field_type  = infer(field.value->value, field.value->span, file_id);

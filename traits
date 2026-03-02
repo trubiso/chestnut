@@ -31,8 +31,7 @@ struct Mango { x: char }
 
 func use_ambiguous_structs() {
 	const x: Struct<uint32>;
-	// FIXME: this makes an assertion fail
-	// const y = Struct<char> { x: 'u' };
+	const y = Struct<char> { x: 'u' };
 	const z: Struct<uint8>;
 	const a = Mango { x: 'a' };
 }
