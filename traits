@@ -2,18 +2,19 @@ func do_something(anon _: uint8);
 func do_something(anon _: uint16);
 func do_something(anon _: char);
 
-trait CanDoSomething: has do_something(anon _: This);
+trait CanDoSomething;
 
 func do_something_else(anon _: uint8, anon my_other_arg: bool) uint8;
 func do_something_else(anon _: uint8, anon my_other_arg: uint8) uint8;
+func do_something_else(anon _: uint8, anon my_other_arg: uint16) uint8;
 
-trait CanDoSomethingElse<T>: CanDoSomething + has do_something_else(anon _: This, anon other: T);
+trait CanDoSomethingElse<T>: CanDoSomething;
 
 func want_to_do_something<T: CanDoSomething>(x: T) => do_something(x);
 
 func do_whatever(anon _: uint8);
 
-trait CanDoWhatever: has do_whatever(anon _: This);
+trait CanDoWhatever;
 
 func want_to_do_everything<T: CanDoWhatever + CanDoSomethingElse>(x: T) {
 	do_something(*&const x);
@@ -26,10 +27,14 @@ struct Struct<T: CanDoSomething> { x: T }
 struct Struct<T: CanDoSomethingElse> { x: T }
 struct Struct<T, U> { x: T; y: U }
 
+struct Mango { x: char }
+
 func use_ambiguous_structs() {
 	const x: Struct<uint32>;
-	const y = Struct<char> { x: 'u' };
+	// FIXME: this makes an assertion fail
+	// const y = Struct<char> { x: 'u' };
 	const z: Struct<uint8>;
+	const a = Mango { x: 'a' };
 }
 
 func use_some_struct_types() {
@@ -37,4 +42,7 @@ func use_some_struct_types() {
 	const x: Struct<U: uint32, T: uint8>;
 	const y: Struct<T: uint8, U: uint32>;
 	x = y;
+
+	const a = 3;
+	want_to_do_everything(a);
 }

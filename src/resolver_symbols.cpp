@@ -514,13 +514,11 @@ void Resolver::resolve(AST::Trait& trait, Scope scope, FileContext::ID file_id) 
 	Scope child_scope {&scope, {}};
 	if (trait.generic_declaration.has_value()) resolve(trait.generic_declaration.value(), child_scope, file_id);
 	for (auto& constraint : trait.constraints) {
-		// TODO: resolve existential requirements or remove them
-		if (std::holds_alternative<AST::Trait::Has>(constraint)) continue;
-		auto& named = std::get<AST::Trait::Named>(constraint);
-		resolve_trait_name(named.name, scope, file_id);
-		if (named.generic_list.has_value()) {
-			for (auto& generic : named.generic_list.value().ordered) resolve(generic, child_scope, file_id);
-			for (auto& generic : named.generic_list.value().labeled)
+		resolve_trait_name(constraint.name, scope, file_id);
+		if (constraint.generic_list.has_value()) {
+			for (auto& generic : constraint.generic_list.value().ordered)
+				resolve(generic, child_scope, file_id);
+			for (auto& generic : constraint.generic_list.value().labeled)
 				resolve(std::get<1>(generic), child_scope, file_id);
 		}
 	}

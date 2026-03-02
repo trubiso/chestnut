@@ -2874,11 +2874,12 @@ void Resolver::infer(AST::Struct& struct_, FileContext::ID file_id) {
 void Resolver::infer(AST::Trait& trait, FileContext::ID file_id) {
 	if (trait.generic_declaration.has_value()) infer(trait.generic_declaration.value(), file_id);
 	for (auto& constraint : trait.constraints) {
-		if (std::holds_alternative<AST::Trait::Has>(constraint)) continue;
-		auto& named = std::get<AST::Trait::Named>(constraint);
 		// we generate the constraint and that does all of the generics for us :P
 		auto trait_constraint = generate_constraint(
-			AST::GenericDeclaration::Generic::Constraint {named.name, std::move(named.generic_list)},
+			AST::GenericDeclaration::Generic::Constraint {
+				constraint.name,
+				std::move(constraint.generic_list)
+			},
 			file_id
 		);
 		if (!trait_constraint.has_value()) continue;
