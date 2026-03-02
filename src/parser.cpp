@@ -310,7 +310,6 @@ std::optional<Expression> Parser::consume_expression_atom() {
 					goto bail;
 				}
 			} else assert(consume_symbol(Token::Symbol::LBrace));
-			assert(consume_symbol(Token::Symbol::LBrace));
 			std::optional<Expression::Atom::StructLiteral::Field> maybe_field;
 			std::vector<Expression::Atom::StructLiteral::Field>   fields {};
 
