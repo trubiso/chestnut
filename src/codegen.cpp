@@ -19,7 +19,7 @@
 
 void CodeGenerator::process(std::vector<IR::Module> const& modules, std::string of, Optimization optimization) {
 	create_all(modules);
-	emit_all(modules);
+	emit_remaining();
 
 	// TODO: move all of this to main and make this more sophisticated
 	auto target_triple = llvm::sys::getDefaultTargetTriple();
@@ -99,11 +99,54 @@ std::string CodeGenerator::get_name(IR::Identifier identifier) const {
 	return std::format("{}_{}", symbols_.at(identifier).name, identifier);
 }
 
+std::string CodeGenerator::get_name_generics(IR::Identifier name, IR::GenericList const& generic_list) const {
+	size_t      instantiation_idx = SIZE_MAX;
+	auto const& instantiations    = symbols_.at(name).instantiations;
+	for (size_t i = 0; i < instantiations.size(); ++i) {
+		if (instantiations.at(i) == generic_list) {
+			instantiation_idx = i;
+			break;
+		}
+	}
+	assert(instantiation_idx != SIZE_MAX && "we missed an instantiation somehow!");
+	return std::format("{}_{}i{}", symbols_.at(name).name, name, instantiation_idx);
+}
+
 std::string CodeGenerator::get_block_name(IR::BasicBlock::ID id) const {
 	return std::format("_{}b", id);
 }
 
-llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom) {
+bool CodeGenerator::has_instantiation(IR::Identifier name, IR::GenericList const& generic_list) {
+	auto const& instantiations = symbols_.at(name).instantiations;
+	return std::find(instantiations.cbegin(), instantiations.cend(), generic_list) != instantiations.cend();
+}
+
+void CodeGenerator::add_instantiation(IR::Identifier name, IR::GenericList const& generic_list) {
+	assert(!has_instantiation(name, generic_list));
+	symbols_.at(name).instantiations.push_back(clone(generic_list));
+}
+
+CodeGenerator::GenericCtx CodeGenerator::create_generic_ctx(
+	IR::GenericDeclaration const& generic_declaration,
+	IR::GenericList const&        generic_list
+) {
+	GenericCtx generic_ctx {};
+	assert(generic_declaration.size() == generic_list.size());
+	for (size_t i = 0; i < generic_declaration.size(); ++i) {
+		auto name = generic_declaration.at(i).name;
+		assert(!generic_ctx.contains(name));
+		auto type = generic_list.at(i).value.clone();
+		generic_ctx.insert_or_assign(name, std::move(type));
+	}
+	return generic_ctx;
+}
+
+llvm::Type* CodeGenerator::get_struct_type(IR::Type::Atom::Named const& named) {
+	create_struct(std::get<IR::Struct>(symbols_.at(named.name.value).item), named.name.value, named.generic_list);
+	return llvm::StructType::getTypeByName(context_, get_name_generics(named.name.value, named.generic_list));
+}
+
+llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom, GenericCtx const& generic_ctx) {
 	switch (atom.kind()) {
 	case IR::Type::Atom::Kind::Void:  return builder_.getVoidTy();
 	case IR::Type::Atom::Kind::Char:  return builder_.getInt8Ty();
@@ -127,21 +170,24 @@ llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom) {
 			return program_.getDataLayout().getIndexType(context_, 0);
 		}
 		[[assume(false)]];
-	case IR::Type::Atom::Kind::Named:
-		// FIXME: this breaks for generics
-		return llvm::StructType::getTypeByName(context_, get_name(atom.get_named().name.value));
+	case IR::Type::Atom::Kind::Named: break;
 	}
+
+	if (generic_ctx.contains(atom.get_named().name.value))
+		return generate_type(generic_ctx.at(atom.get_named().name.value), generic_ctx);
+	return get_struct_type(atom.get_named());
 }
 
-llvm::Type* CodeGenerator::generate_type(IR::Type const& type) {
+llvm::Type* CodeGenerator::generate_type(IR::Type const& type, GenericCtx const& generic_ctx) {
 	switch (type.kind()) {
-	case IR::Type::Kind::Atom:    return generate_type(type.get_atom());
+	case IR::Type::Kind::Atom:    return generate_type(type.get_atom(), generic_ctx);
 	case IR::Type::Kind::Pointer: return builder_.getPtrTy();
 	}
 }
 
 llvm::Value* CodeGenerator::call_built_in(
 	IR::BuiltInFunction                          function,
+	GenericCtx const&                            generic_ctx,
 	std::vector<Spanned<IR::Value::Atom>> const& function_arguments
 ) {
 	std::vector<llvm::Value*> arguments {};
@@ -149,7 +195,7 @@ llvm::Value* CodeGenerator::call_built_in(
 		function_arguments.cbegin(),
 		function_arguments.cend(),
 		std::back_inserter(arguments),
-		[this](auto const& argument) { return generate_value(argument.value); }
+		[this, &generic_ctx](auto const& argument) { return generate_value(argument.value, generic_ctx); }
 	);
 	switch (function) {
 	case IR::BuiltInFunction::AddUIntegers:
@@ -269,25 +315,25 @@ llvm::Value* CodeGenerator::call_built_in(
 	}
 }
 
-llvm::Value* CodeGenerator::get_place_pointer(IR::Place const& place) {
+llvm::Value* CodeGenerator::get_place_pointer(IR::Place const& place, GenericCtx const& generic_ctx) {
 	// derefs don't actually deref because pointers are pointers seemingly
 	switch (place.kind()) {
 	case IR::Place::Kind::Symbol: return variables_[place.get_symbol()];
-	case IR::Place::Kind::Deref:  return get_place_pointer(place.get_deref().address->value);
+	case IR::Place::Kind::Deref:  return get_place_pointer(place.get_deref().address->value, generic_ctx);
 	case IR::Place::Kind::Access:
 		return builder_.CreateStructGEP(
-			generate_type(place.get_access().accessee->value.type),
-			get_place_pointer(place.get_access().accessee->value),
+			generate_type(place.get_access().accessee->value.type, generic_ctx),
+			get_place_pointer(place.get_access().accessee->value, generic_ctx),
 			place.get_access().field_index
 		);
 	case IR::Place::Kind::Error: [[assume(false)]];
 	}
 }
 
-llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom) {
+llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom, GenericCtx const& generic_ctx) {
 	switch (atom.kind()) {
 	case IR::Value::Atom::Kind::Identifier:
-		return builder_.CreateLoad(generate_type(atom.type), variables_[atom.get_identifier()]);
+		return builder_.CreateLoad(generate_type(atom.type, generic_ctx), variables_[atom.get_identifier()]);
 	case IR::Value::Atom::Kind::Literal:       break;
 	case IR::Value::Atom::Kind::Bool:          return builder_.getInt1(atom.get_bool());
 	case IR::Value::Atom::Kind::StructLiteral: break;
@@ -301,13 +347,11 @@ llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom) {
 			atom.get_struct_literal().fields.cbegin(),
 			atom.get_struct_literal().fields.cend(),
 			std::back_inserter(fields),
-			[&](Spanned<IR::Value::Atom> const& value) { return generate_value(value.value); }
+			[this, &generic_ctx](Spanned<IR::Value::Atom> const& value) {
+				return generate_value(value.value, generic_ctx);
+			}
 		);
-		// FIXME: this breaks from within generic functions, because we don't yet monomorphize
-		auto type = llvm::StructType::getTypeByName(
-			context_,
-			get_name(atom.type.get_atom().get_named().name.value)
-		);
+		auto type = get_struct_type(atom.type.get_atom().get_named());
 
 		// we have to manually create it this way because we don't have a guarantee that the values are constant
 		llvm::Value* value = llvm::UndefValue::get(type);
@@ -402,73 +446,97 @@ llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom) {
 	return builder_.getInt8(codepoint);
 }
 
-llvm::Value* CodeGenerator::generate_value(IR::Value::FunctionCall const& function_call) {
+llvm::Value*
+CodeGenerator::generate_value(IR::Value::FunctionCall const& function_call, GenericCtx const& generic_ctx) {
 	// we might be calling a built-in function
 	if (std::holds_alternative<IR::BuiltInFunction>(function_call.callee))
-		return call_built_in(std::get<IR::BuiltInFunction>(function_call.callee), function_call.arguments);
+		return call_built_in(
+			std::get<IR::BuiltInFunction>(function_call.callee),
+			generic_ctx,
+			function_call.arguments
+		);
 	IR::Identifier callee_id = std::get<Spanned<IR::Identifier>>(function_call.callee).value;
 	// or even a symbol that points to a built-in function!
 	if (std::holds_alternative<IR::BuiltInFunction>(symbols_.at(callee_id).item))
 		return call_built_in(
 			std::get<IR::BuiltInFunction>(symbols_.at(callee_id).item),
+			generic_ctx,
 			function_call.arguments
 		);
 	// this should be an actual function now hopefully
-	llvm::Function*           callee = program_.getFunction(get_name(callee_id));
+	// ensure the function is created first
+	create_function(std::get<IR::Function>(symbols_.at(callee_id).item), callee_id, function_call.generic_list);
+	llvm::Function* callee = program_.getFunction(get_name_generics(callee_id, function_call.generic_list));
 	std::vector<llvm::Value*> arguments {};
 	std::transform(
 		function_call.arguments.cbegin(),
 		function_call.arguments.cend(),
 		std::back_inserter(arguments),
-		[this](auto const& argument) { return generate_value(argument.value); }
+		[this, &generic_ctx](auto const& argument) { return generate_value(argument.value, generic_ctx); }
 	);
 	return builder_.CreateCall(callee, arguments);
 }
 
-llvm::Value* CodeGenerator::generate_value(IR::Value::Ref const& ref) {
-	return get_place_pointer(ref.value.value);
+llvm::Value* CodeGenerator::generate_value(IR::Value::Ref const& ref, GenericCtx const& generic_ctx) {
+	return get_place_pointer(ref.value.value, generic_ctx);
 }
 
-llvm::Value* CodeGenerator::generate_value(IR::Value::Load const& load) {
-	return builder_.CreateLoad(generate_type(load.value.value.type), get_place_pointer(load.value.value));
+llvm::Value* CodeGenerator::generate_value(IR::Value::Load const& load, GenericCtx const& generic_ctx) {
+	return builder_.CreateLoad(
+		generate_type(load.value.value.type, generic_ctx),
+		get_place_pointer(load.value.value, generic_ctx)
+	);
 }
 
-llvm::Value* CodeGenerator::generate_value(IR::Value const& value) {
+llvm::Value* CodeGenerator::generate_value(IR::Value const& value, GenericCtx const& generic_ctx) {
 	switch (value.kind()) {
-	case IR::Value::Kind::Atom:         return generate_value(value.get_atom());
-	case IR::Value::Kind::FunctionCall: return generate_value(value.get_function_call());
-	case IR::Value::Kind::Ref:          return generate_value(value.get_ref());
-	case IR::Value::Kind::Load:         return generate_value(value.get_load());
+	case IR::Value::Kind::Atom:         return generate_value(value.get_atom(), generic_ctx);
+	case IR::Value::Kind::FunctionCall: return generate_value(value.get_function_call(), generic_ctx);
+	case IR::Value::Kind::Ref:          return generate_value(value.get_ref(), generic_ctx);
+	case IR::Value::Kind::Load:         return generate_value(value.get_load(), generic_ctx);
 	}
 }
 
-void CodeGenerator::emit_statement(IR::Statement::Declare const& declare, llvm::BasicBlock* block) {
-	llvm::Type* type = generate_type(declare.type);
+void CodeGenerator::emit_statement(
+	IR::Statement::Declare const& declare,
+	GenericCtx const&             generic_ctx,
+	llvm::BasicBlock*             block
+) {
+	llvm::Type* type = generate_type(declare.type, generic_ctx);
 	// FIXME: we should probably create this variable in the entry of the function
 	variables_[declare.name.value]
 		= llvm::IRBuilder<>(block, block->begin()).CreateAlloca(type, nullptr, get_name(declare.name.value));
 }
 
-void CodeGenerator::emit_statement(IR::Statement::Set const& set) {
-	llvm::Value* value = generate_value(set.value.value);
-	builder_.CreateStore(value, get_place_pointer(set.place.value));
+void CodeGenerator::emit_statement(IR::Statement::Set const& set, GenericCtx const& generic_ctx) {
+	llvm::Value* value = generate_value(set.value.value, generic_ctx);
+	builder_.CreateStore(value, get_place_pointer(set.place.value, generic_ctx));
 }
 
-void CodeGenerator::emit_statement(IR::Statement const& statement, llvm::BasicBlock* block) {
+void CodeGenerator::emit_statement(
+	IR::Statement const& statement,
+	GenericCtx const&    generic_ctx,
+	llvm::BasicBlock*    block
+) {
 	switch (statement.kind()) {
-	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare(), block);
-	case IR::Statement::Kind::Set:     return emit_statement(statement.get_set());
-	case IR::Statement::Kind::Call:    generate_value(statement.get_call()); return;
+	case IR::Statement::Kind::Declare: return emit_statement(statement.get_declare(), generic_ctx, block);
+	case IR::Statement::Kind::Set:     return emit_statement(statement.get_set(), generic_ctx);
+	case IR::Statement::Kind::Call:    generate_value(statement.get_call(), generic_ctx); return;
 	}
 }
 
-void CodeGenerator::emit_basic_block(IR::BasicBlock const& basic_block, llvm::BasicBlock* block) {
+void CodeGenerator::emit_basic_block(
+	IR::BasicBlock const& basic_block,
+	GenericCtx const&     generic_ctx,
+	llvm::BasicBlock*     block
+) {
 	// this just emits the statements
-	for (auto const& statement : basic_block.statements) emit_statement(statement.value, block);
+	for (auto const& statement : basic_block.statements) emit_statement(statement.value, generic_ctx, block);
 }
 
 void CodeGenerator::emit_basic_block_jump(
 	IR::BasicBlock const&                                     basic_block,
+	GenericCtx const&                                         generic_ctx,
 	std::unordered_map<IR::BasicBlock::ID, llvm::BasicBlock*> blocks
 ) {
 	if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
@@ -476,7 +544,7 @@ void CodeGenerator::emit_basic_block_jump(
 		builder_.CreateBr(blocks.at(goto_.id));
 	} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
 		IR::BasicBlock::Branch const& branch    = std::get<IR::BasicBlock::Branch>(basic_block.jump);
-		llvm::Value*                  condition = generate_value(branch.condition.value);
+		llvm::Value*                  condition = generate_value(branch.condition.value, generic_ctx);
 		builder_.CreateCondBr(condition, blocks.at(branch.true_), blocks.at(branch.false_));
 	} else if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
 		IR::BasicBlock::Return const& return_ = std::get<IR::BasicBlock::Return>(basic_block.jump);
@@ -484,7 +552,7 @@ void CodeGenerator::emit_basic_block_jump(
 			builder_.CreateRetVoid();
 			return;
 		}
-		llvm::Value* value = generate_value(return_.value.value().value);
+		llvm::Value* value = generate_value(return_.value.value().value, generic_ctx);
 		if (value->getType()->isVoidTy()) {
 			builder_.CreateRetVoid();
 			return;
@@ -497,9 +565,13 @@ void CodeGenerator::emit_basic_block_jump(
 	}
 }
 
-void CodeGenerator::emit_function(IR::Function const& ir_function) {
+void CodeGenerator::emit_function(
+	IR::Function const&    ir_function,
+	IR::GenericList const& generic_list,
+	GenericCtx const&      generic_ctx
+) {
 	if (ir_function.body.empty()) return;
-	llvm::Function* function = program_.getFunction(get_name(ir_function.name.value));
+	llvm::Function* function = program_.getFunction(get_name_generics(ir_function.name.value, generic_list));
 	assert(function);
 
 	size_t count = 0;
@@ -520,7 +592,7 @@ void CodeGenerator::emit_function(IR::Function const& ir_function) {
 				builder_.CreateStore(&arg, variables_[argument_id]);
 			}
 		}
-		emit_basic_block(basic_block, block);
+		emit_basic_block(basic_block, generic_ctx, block);
 		blocks.emplace(basic_block.id, block);
 		basic_blocks.emplace(basic_block.id, &basic_block);
 	}
@@ -528,14 +600,19 @@ void CodeGenerator::emit_function(IR::Function const& ir_function) {
 	// after emitting all statements, we can now emit all jumps
 	for (auto const& [id, block] : blocks) {
 		builder_.SetInsertPoint(block);
-		emit_basic_block_jump(*basic_blocks.at(id), blocks);
+		emit_basic_block_jump(*basic_blocks.at(id), generic_ctx, blocks);
 	}
 
 	llvm::verifyFunction(*function, &llvm::errs());
 }
 
-void CodeGenerator::emit_struct(IR::Struct const& struct_) {
-	llvm::StructType* struct_type = llvm::StructType::getTypeByName(context_, get_name(struct_.name.value));
+void CodeGenerator::emit_struct(
+	IR::Struct const&      struct_,
+	IR::GenericList const& generic_list,
+	GenericCtx const&      generic_ctx
+) {
+	llvm::StructType* struct_type
+		= llvm::StructType::getTypeByName(context_, get_name_generics(struct_.name.value, generic_list));
 
 	std::vector<llvm::Type*> field_types {};
 	field_types.reserve(struct_.fields.size());
@@ -543,21 +620,32 @@ void CodeGenerator::emit_struct(IR::Struct const& struct_) {
 		struct_.fields.cbegin(),
 		struct_.fields.cend(),
 		std::back_inserter(field_types),
-		[this](IR::Struct::Field const& field) { return generate_type(field.type.value); }
+		[this, &generic_ctx](IR::Struct::Field const& field) {
+			return generate_type(field.type.value, generic_ctx);
+		}
 	);
 
 	struct_type->setBody(field_types);
 }
 
-void CodeGenerator::create_function(IR::Function const& function) {
+void CodeGenerator::create_function(
+	IR::Function const&    function,
+	IR::Identifier         name,
+	IR::GenericList const& generic_list
+) {
+	if (has_instantiation(name, generic_list)) return;
+	add_instantiation(name, generic_list);
+
+	GenericCtx generic_ctx = create_generic_ctx(function.generic_declaration, generic_list);
+
 	std::vector<llvm::Type*> argument_types {};
 	std::transform(
 		function.arguments.cbegin(),
 		function.arguments.cend(),
 		std::back_inserter(argument_types),
-		[this](auto const& argument) { return generate_type(argument.type.value); }
+		[this, &generic_ctx](auto const& argument) { return generate_type(argument.type.value, generic_ctx); }
 	);
-	llvm::Type*         return_type   = generate_type(function.return_type.value);
+	llvm::Type*         return_type   = generate_type(function.return_type.value, generic_ctx);
 	llvm::FunctionType* function_type = llvm::FunctionType::get(return_type, argument_types, false);
 
 	if (function.extern_) {
@@ -572,13 +660,14 @@ void CodeGenerator::create_function(IR::Function const& function) {
 		llvm::Function* stub_function = llvm::Function::Create(
 			function_type,
 			llvm::Function::ExternalLinkage,
-			get_name(function.name.value),
+			get_name_generics(function.name.value, generic_list),
 			&program_
 		);
 		// we need to make sure that if we're exporting a definition, the definition is on the correct one
 		// though! that is, if we have a body, the exported one becomes the stub
 		llvm::Function* defined = function.body.empty() ? actual_function : stub_function;
 		llvm::Function* alias   = function.body.empty() ? stub_function : actual_function;
+		emission_queue.push(Emission {&function, clone(generic_list), std::move(generic_ctx)});
 		// this stub just calls the function and returns whatever it returns
 		llvm::BasicBlock* block = llvm::BasicBlock::Create(context_, "entry", alias);
 		builder_.SetInsertPoint(block);
@@ -603,23 +692,39 @@ void CodeGenerator::create_function(IR::Function const& function) {
 	llvm::Function::Create(
 		function_type,
 		llvm::Function::ExternalLinkage,
-		get_name(function.name.value),
+		get_name_generics(function.name.value, generic_list),
 		&program_
 	);
+
+	emission_queue.push(Emission {&function, clone(generic_list), std::move(generic_ctx)});
 }
 
-void CodeGenerator::create_struct(IR::Struct const& struct_) {
-	llvm::StructType::create(context_, get_name(struct_.name.value));
+void CodeGenerator::create_struct(IR::Struct const& struct_, IR::Identifier name, IR::GenericList const& generic_list) {
+	if (has_instantiation(name, generic_list)) return;
+	add_instantiation(name, generic_list);
+
+	GenericCtx generic_ctx = create_generic_ctx(struct_.generic_declaration, generic_list);
+
+	llvm::StructType::create(context_, get_name_generics(struct_.name.value, generic_list));
+
+	emission_queue.push(Emission {&struct_, clone(generic_list), std::move(generic_ctx)});
 }
 
 void CodeGenerator::create_all(IR::Module const& module) {
 	for (IR::Identifier item : module.items) {
 		if (std::holds_alternative<IR::Module>(symbols_.at(item).item))
 			create_all(std::get<IR::Module>(symbols_.at(item).item));
-		else if (std::holds_alternative<IR::Function>(symbols_.at(item).item))
-			create_function(std::get<IR::Function>(symbols_.at(item).item));
-		else if (std::holds_alternative<IR::Struct>(symbols_.at(item).item))
-			create_struct(std::get<IR::Struct>(symbols_.at(item).item));
+		else if (std::holds_alternative<IR::Function>(symbols_.at(item).item)) {
+			auto& function = std::get<IR::Function>(symbols_.at(item).item);
+			// we skip functions with generics, we instantiate them later
+			if (!function.generic_declaration.empty()) continue;
+			create_function(function, item, {});
+		} else if (std::holds_alternative<IR::Struct>(symbols_.at(item).item)) {
+			auto& struct_ = std::get<IR::Struct>(symbols_.at(item).item);
+			// we skip structs with generics, we instatiate them later
+			if (!struct_.generic_declaration.empty()) continue;
+			create_struct(struct_, item, {});
+		}
 	}
 }
 
@@ -627,18 +732,21 @@ void CodeGenerator::create_all(std::vector<IR::Module> const& modules) {
 	for (IR::Module const& module : modules) { create_all(module); }
 }
 
-void CodeGenerator::emit_all(IR::Module const& module) {
-	for (IR::Identifier item : module.items) {
-		if (std::holds_alternative<IR::Module>(symbols_.at(item).item))
-			emit_all(std::get<IR::Module>(symbols_.at(item).item));
-		else if (std::holds_alternative<IR::Function>(symbols_.at(item).item))
-			emit_function(std::get<IR::Function>(symbols_.at(item).item));
-		else if (std::holds_alternative<IR::Struct>(symbols_.at(item).item))
-			emit_struct(std::get<IR::Struct>(symbols_.at(item).item));
+void CodeGenerator::emit_remaining() {
+	while (!emission_queue.empty()) {
+		auto emission = std::move(emission_queue.front());
+		emission_queue.pop();
+		if (std::holds_alternative<IR::Function const*>(emission.what))
+			emit_function(
+				*std::get<IR::Function const*>(emission.what),
+				emission.generic_list,
+				emission.generic_ctx
+			);
+		else
+			emit_struct(
+				*std::get<IR::Struct const*>(emission.what),
+				emission.generic_list,
+				emission.generic_ctx
+			);
 	}
-}
-
-void CodeGenerator::emit_all(std::vector<IR::Module> const& modules) {
-	for (IR::Module const& module : modules) { emit_all(module); }
-	llvm::verifyModule(program_, &llvm::errs());
 }

@@ -18,6 +18,8 @@ using GenericList = std::vector<Spanned<Type>>;
 std::ostream& operator<<(std::ostream&, GenericList const&);
 bool          operator==(GenericList const&, GenericList const&);
 
+GenericList clone(GenericList const&);
+
 struct Generic {
 	Identifier name;
 
@@ -631,6 +633,8 @@ struct Symbol {
 
 	/// Whether this symbol can be mutated (should be true only for mutable declarations and arguments).
 	bool mutable_;
+
+	std::vector<GenericList> instantiations = {};
 };
 
 }  // namespace IR

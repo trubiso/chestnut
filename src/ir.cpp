@@ -4,6 +4,18 @@
 
 namespace IR {
 
+GenericList clone(GenericList const& generic_list) {
+	GenericList new_list {};
+	new_list.reserve(generic_list.size());
+	std::transform(
+		generic_list.cbegin(),
+		generic_list.cend(),
+		std::back_inserter(new_list),
+		[](Spanned<Type> const& type) { return Spanned {type.span, type.value.clone()}; }
+	);
+	return new_list;
+}
+
 std::ostream& operator<<(std::ostream& os, GenericDeclaration const& generic_declaration) {
 	os << '<';
 	size_t count = 0;

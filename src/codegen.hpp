@@ -5,6 +5,7 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
+#include <queue>
 #include <unordered_map>
 
 class CodeGenerator {
@@ -29,40 +30,62 @@ private:
 
 	std::vector<IR::Symbol> symbols_;
 
+	using GenericCtx = std::unordered_map<IR::Identifier, IR::Type>;
+
 	std::string get_name(IR::Identifier) const;
+	std::string get_name_generics(IR::Identifier, IR::GenericList const&) const;
 	std::string get_block_name(IR::BasicBlock::ID) const;
 
-	llvm::Type* generate_type(IR::Type::Atom const&);
-	llvm::Type* generate_type(IR::Type const&);
+	bool has_instantiation(IR::Identifier, IR::GenericList const&);
+	void add_instantiation(IR::Identifier, IR::GenericList const&);
 
-	llvm::Value* call_built_in(IR::BuiltInFunction, std::vector<Spanned<IR::Value::Atom>> const& arguments);
+	GenericCtx create_generic_ctx(IR::GenericDeclaration const&, IR::GenericList const&);
 
-	llvm::Value* get_place_pointer(IR::Place const&);
+	llvm::Type* get_struct_type(IR::Type::Atom::Named const&);
 
-	llvm::Value* generate_value(IR::Value::Atom const&);
-	llvm::Value* generate_value(IR::Value::FunctionCall const&);
-	llvm::Value* generate_value(IR::Value::Ref const&);
-	llvm::Value* generate_value(IR::Value::Load const&);
-	llvm::Value* generate_value(IR::Value const&);
+	llvm::Type* generate_type(IR::Type::Atom const&, GenericCtx const&);
+	llvm::Type* generate_type(IR::Type const&, GenericCtx const&);
 
-	void emit_statement(IR::Statement::Declare const&, llvm::BasicBlock*);
-	void emit_statement(IR::Statement::Set const&);
-	void emit_statement(IR::Statement const&, llvm::BasicBlock*);
+	llvm::Value*
+	call_built_in(IR::BuiltInFunction, GenericCtx const&, std::vector<Spanned<IR::Value::Atom>> const& arguments);
 
-	void emit_basic_block(IR::BasicBlock const&, llvm::BasicBlock*);
-	void emit_basic_block_jump(IR::BasicBlock const&, std::unordered_map<IR::BasicBlock::ID, llvm::BasicBlock*>);
+	llvm::Value* get_place_pointer(IR::Place const&, GenericCtx const&);
+
+	llvm::Value* generate_value(IR::Value::Atom const&, GenericCtx const&);
+	llvm::Value* generate_value(IR::Value::FunctionCall const&, GenericCtx const&);
+	llvm::Value* generate_value(IR::Value::Ref const&, GenericCtx const&);
+	llvm::Value* generate_value(IR::Value::Load const&, GenericCtx const&);
+	llvm::Value* generate_value(IR::Value const&, GenericCtx const&);
+
+	void emit_statement(IR::Statement::Declare const&, GenericCtx const&, llvm::BasicBlock*);
+	void emit_statement(IR::Statement::Set const&, GenericCtx const&);
+	void emit_statement(IR::Statement const&, GenericCtx const&, llvm::BasicBlock*);
+
+	void emit_basic_block(IR::BasicBlock const&, GenericCtx const&, llvm::BasicBlock*);
+	void emit_basic_block_jump(
+		IR::BasicBlock const&,
+		GenericCtx const&,
+		std::unordered_map<IR::BasicBlock::ID, llvm::BasicBlock*>
+	);
 
 	/// Assumes the function has already been created.
-	void emit_function(IR::Function const&);
+	void emit_function(IR::Function const&, IR::GenericList const&, GenericCtx const&);
 	/// Assumes the struct has already been created.
-	void emit_struct(IR::Struct const&);
+	void emit_struct(IR::Struct const&, IR::GenericList const&, GenericCtx const&);
 
-	void create_function(IR::Function const&);
-	void create_struct(IR::Struct const&);
+	struct Emission {
+		std::variant<IR::Function const*, IR::Struct const*> what;
+		IR::GenericList                                      generic_list;
+		GenericCtx                                           generic_ctx;
+	};
+
+	std::queue<Emission> emission_queue;
+
+	void create_function(IR::Function const&, IR::Identifier, IR::GenericList const&);
+	void create_struct(IR::Struct const&, IR::Identifier, IR::GenericList const&);
 
 	void create_all(IR::Module const&);
 	void create_all(std::vector<IR::Module> const&);
 
-	void emit_all(IR::Module const&);
-	void emit_all(std::vector<IR::Module> const&);
+	void emit_remaining();
 };

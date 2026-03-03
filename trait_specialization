@@ -2,15 +2,22 @@ trait A;
 trait B: A;
 trait C: B;
 
+func specialize<X>() {}
 func specialize<X: A>() {}
 func specialize<X: B>() {}
 func specialize<X: C>() {}
 
-struct Specialize<X: A> {}
-struct Specialize<X: B> {}
-struct Specialize<X: C> {}
+struct Specialize<X> { elem: X }
+struct Specialize<X: A> { elem: X }
+struct Specialize<X: B> { elem: X }
+struct Specialize<X: C> { elem: X }
 
-func try<T: B>() {
-	const x: Specialize<T>;
+func try<T>() {
+	const x: Specialize<T> = undefined;
 	specialize<T>();
+}
+
+@extern
+func main() {
+	try<uint8>();
 }

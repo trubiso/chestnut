@@ -1,0 +1,12 @@
+func do<X, Y>() {}
+
+func do<X>() {
+	do<Y: X, X: bool>();
+	do<X, bool>();
+}
+
+@extern
+func main() {
+	do<char>();
+	do<uint32, uint8>();
+}
