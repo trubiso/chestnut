@@ -1183,13 +1183,7 @@ IR::Struct Resolver::lower(AST::Struct& struct_, FileContext::ID file_id) {
 	);
 
 	auto generic_declaration = lower(struct_.generic_declaration, file_id);
-	// we can't use the identifier lowering function because otherwise this identifier gets moved into oblivion and
-	// then we can't lower things that inferred that they belonged to this struct LOL
-	return IR::Struct {
-		{struct_.name.span, struct_.name.value.id.value()[0]},
-		std::move(generic_declaration),
-		std::move(fields)
-	};
+	return IR::Struct {lower_identifier(struct_.name), std::move(generic_declaration), std::move(fields)};
 }
 
 IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id) {
