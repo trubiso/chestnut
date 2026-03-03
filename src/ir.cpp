@@ -13,7 +13,7 @@ std::ostream& operator<<(std::ostream& os, GenericDeclaration const& generic_dec
 			size_t subcount = 0;
 			os << ": ";
 			for (auto const& constraint : generic.constraints) {
-				os << '@' << constraint.name.value << constraint.generic_list;
+				os << '@' << constraint.name << constraint.generic_list;
 				if (++subcount < generic.constraints.size()) os << " + ";
 			}
 		}
@@ -359,7 +359,12 @@ BasicBlock& Function::find_block(BasicBlock::ID id) {
 }
 
 std::ostream& operator<<(std::ostream& os, Function const& function) {
-	os << "declare function @" << function.name.value << " w/ args (";
+	os
+		<< "declare function @"
+		<< function.name.value
+		<< " w/ generics "
+		<< function.generic_declaration
+		<< " w/ args (";
 	size_t count = 0;
 	for (auto const& arg : function.arguments) {
 		os << '@' << arg.name.value << ": " << arg.type.value;
@@ -378,7 +383,12 @@ std::ostream& operator<<(std::ostream& os, Function const& function) {
 }
 
 std::ostream& operator<<(std::ostream& os, Struct const& struct_) {
-	os << "declare struct @" << struct_.name.value << " w/ fields: {\n";
+	os
+		<< "declare struct @"
+		<< struct_.name.value
+		<< " w/ generics "
+		<< struct_.generic_declaration
+		<< " w/ fields: {\n";
 	os.iword(0)++;
 	for (Struct::Field const& field : struct_.fields) {
 		for (long i = 0; i < os.iword(0); ++i) os << "    ";

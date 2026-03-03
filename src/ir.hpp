@@ -21,8 +21,8 @@ struct Generic {
 	Identifier name;
 
 	struct Constraint {
-		Spanned<Identifier> name;
-		GenericList         generic_list;
+		Identifier  name;
+		GenericList generic_list;
 	};
 
 	std::vector<Constraint> constraints;
@@ -580,6 +580,7 @@ struct Function {
 	};
 
 	Spanned<Identifier>   name;
+	GenericDeclaration    generic_declaration;
 	std::vector<Argument> arguments;
 	Spanned<Type>         return_type;
 
@@ -594,6 +595,7 @@ std::ostream& operator<<(std::ostream&, Function const&);
 
 struct Struct {
 	Spanned<Identifier> name;
+	GenericDeclaration  generic_declaration;
 
 	struct Field {
 		Spanned<std::string> name;

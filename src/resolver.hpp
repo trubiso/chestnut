@@ -869,6 +869,8 @@ private:
 	std::optional<Spanned<IR::Statement>> lower(Spanned<AST::Statement> const&, AST::Function&, std::vector<IR::BasicBlock>&, FileContext::ID);
 	void                                  lower(std::vector<Spanned<AST::Statement>> const&, AST::Function&, std::vector<IR::BasicBlock>&, FileContext::ID);
 
+	IR::GenericDeclaration lower(std::optional<AST::GenericDeclaration>&, FileContext::ID);
+
 	IR::Function lower(AST::Function&, FileContext::ID);
 	IR::Struct   lower(AST::Struct&, FileContext::ID);
 	IR::Module   lower(AST::Module&, FileContext::ID);
