@@ -16,6 +16,7 @@ struct Type;
 using GenericList = std::vector<Spanned<Type>>;
 
 std::ostream& operator<<(std::ostream&, GenericList const&);
+bool          operator==(GenericList const&, GenericList const&);
 
 struct Generic {
 	Identifier name;
@@ -204,6 +205,12 @@ std::ostream& operator<<(std::ostream&, Type::Atom::Named const&);
 std::ostream& operator<<(std::ostream&, Type::Atom const&);
 std::ostream& operator<<(std::ostream&, Type::Pointer const&);
 std::ostream& operator<<(std::ostream&, Type const&);
+
+bool operator==(Type::Atom::Integer const&, Type::Atom::Integer const&);
+bool operator==(Type::Atom::Named const&, Type::Atom::Named const&);
+bool operator==(Type::Atom const&, Type::Atom const&);
+bool operator==(Type::Pointer const&, Type::Pointer const&);
+bool operator==(Type const&, Type const&);
 
 // TODO: deal with the partial ordering of floats
 enum class BuiltInFunction {

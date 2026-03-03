@@ -32,6 +32,14 @@ std::ostream& operator<<(std::ostream& os, GenericList const& generic_list) {
 	return os << '>';
 }
 
+bool operator==(GenericList const& a, GenericList const& b) {
+	if (a.size() != b.size()) return false;
+	for (size_t i = 0; i < a.size(); ++i) {
+		if (a.at(i).value != b.at(i).value) return false;
+	}
+	return true;
+}
+
 Type::Atom Type::Atom::clone() const {
 	switch (kind()) {
 	case Kind::Integer: break;
@@ -111,6 +119,43 @@ std::ostream& operator<<(std::ostream& os, Type const& type) {
 	case Type::Kind::Pointer: return os << type.get_pointer();
 	}
 	[[assume(false)]];
+}
+
+bool operator==(Type::Atom::Integer const& a, Type::Atom::Integer const& b) {
+	if (a.is_signed() != b.is_signed()) return false;
+	if (a.width_type() != b.width_type()) return false;
+	if (a.width_type() == Type::Atom::Integer::WidthType::Fixed && a.bit_width().value() != b.bit_width().value())
+		return false;
+	return true;
+}
+
+bool operator==(Type::Atom::Named const& a, Type::Atom::Named const& b) {
+	if (a.name.value != b.name.value) return false;
+	return a.generic_list == b.generic_list;
+}
+
+bool operator==(Type::Atom const& a, Type::Atom const& b) {
+	if (a.kind() != b.kind()) return false;
+	switch (a.kind()) {
+	case Type::Atom::Kind::Integer: return a.get_integer() == b.get_integer();
+	case Type::Atom::Kind::Float:   return a.get_float().width == b.get_float().width;
+	case Type::Atom::Kind::Void:
+	case Type::Atom::Kind::Char:
+	case Type::Atom::Kind::Bool:    return true;
+	case Type::Atom::Kind::Named:   return a.get_named() == b.get_named();
+	case Type::Atom::Kind::Error:   return true;
+	}
+}
+
+bool operator==(Type::Pointer const& a, Type::Pointer const& b) {
+	return a.mutable_ == b.mutable_ && a.type->value == b.type->value;
+}
+
+bool operator==(Type const& a, Type const& b) {
+	if (a.kind() != b.kind()) return false;
+	if (a.is_pointer()) return a.get_pointer() == b.get_pointer();
+	if (a.is_atom()) return a.get_atom() == b.get_atom();
+	assert(false && "non-exhaustive");
 }
 
 std::ostream& operator<<(std::ostream& os, BuiltInFunction const& built_in_function) {
