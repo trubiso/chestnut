@@ -41,7 +41,9 @@ private:
 
 	GenericCtx create_generic_ctx(IR::GenericDeclaration const&, IR::GenericList const&);
 
-	llvm::Type* get_struct_type(IR::Type::Atom::Named const&);
+	IR::Type apply_generic_ctx(IR::Type const&, GenericCtx const&);
+
+	llvm::Type* get_struct_type(IR::Type::Atom::Named const&, GenericCtx const&);
 
 	llvm::Type* generate_type(IR::Type::Atom const&, GenericCtx const&);
 	llvm::Type* generate_type(IR::Type const&, GenericCtx const&);
@@ -82,7 +84,7 @@ private:
 	std::queue<Emission> emission_queue;
 
 	void create_function(IR::Function const&, IR::Identifier, IR::GenericList const&);
-	void create_struct(IR::Struct const&, IR::Identifier, IR::GenericList const&);
+	void create_struct(IR::Struct const&, IR::Identifier, IR::GenericList const&, GenericCtx const& inherit);
 
 	void create_all(IR::Module const&);
 	void create_all(std::vector<IR::Module> const&);

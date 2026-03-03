@@ -141,8 +141,44 @@ CodeGenerator::GenericCtx CodeGenerator::create_generic_ctx(
 	return generic_ctx;
 }
 
-llvm::Type* CodeGenerator::get_struct_type(IR::Type::Atom::Named const& named) {
-	create_struct(std::get<IR::Struct>(symbols_.at(named.name.value).item), named.name.value, named.generic_list);
+IR::Type CodeGenerator::apply_generic_ctx(IR::Type const& type, GenericCtx const& generic_ctx) {
+	switch (type.kind()) {
+	case IR::Type::Kind::Atom: break;
+	case IR::Type::Kind::Pointer:
+		return IR::Type::make_pointer(
+			IR::Type::Pointer {
+				std::make_unique<Spanned<IR::Type>>(
+					type.get_pointer().type->span,
+					apply_generic_ctx(type.get_pointer().type->value, generic_ctx)
+				),
+				type.get_pointer().mutable_
+			}
+		);
+	}
+
+	if (!type.get_atom().is_named()) return type.clone();
+	if (generic_ctx.contains(type.get_atom().get_named().name.value))
+		return apply_generic_ctx(generic_ctx.at(type.get_atom().get_named().name.value), generic_ctx);
+	return type.clone();
+}
+
+llvm::Type* CodeGenerator::get_struct_type(IR::Type::Atom::Named const& named, GenericCtx const& generic_ctx) {
+	IR::GenericList actual_generic_list {};
+	actual_generic_list.reserve(named.generic_list.size());
+	std::transform(
+		named.generic_list.cbegin(),
+		named.generic_list.cend(),
+		std::back_inserter(actual_generic_list),
+		[this, &generic_ctx](Spanned<IR::Type> const& type) {
+			return Spanned {type.span, apply_generic_ctx(type.value, generic_ctx)};
+		}
+	);
+	create_struct(
+		std::get<IR::Struct>(symbols_.at(named.name.value).item),
+		named.name.value,
+		named.generic_list,
+		generic_ctx
+	);
 	return llvm::StructType::getTypeByName(context_, get_name_generics(named.name.value, named.generic_list));
 }
 
@@ -175,7 +211,7 @@ llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom, GenericCtx 
 
 	if (generic_ctx.contains(atom.get_named().name.value))
 		return generate_type(generic_ctx.at(atom.get_named().name.value), generic_ctx);
-	return get_struct_type(atom.get_named());
+	return get_struct_type(atom.get_named(), generic_ctx);
 }
 
 llvm::Type* CodeGenerator::generate_type(IR::Type const& type, GenericCtx const& generic_ctx) {
@@ -351,7 +387,7 @@ llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom, GenericC
 				return generate_value(value.value, generic_ctx);
 			}
 		);
-		auto type = get_struct_type(atom.get_struct_literal().type);
+		auto type = get_struct_type(atom.get_struct_literal().type, generic_ctx);
 
 		// we have to manually create it this way because we don't have a guarantee that the values are constant
 		llvm::Value* value = llvm::UndefValue::get(type);
@@ -699,11 +735,17 @@ void CodeGenerator::create_function(
 	emission_queue.push(Emission {&function, clone(generic_list), std::move(generic_ctx)});
 }
 
-void CodeGenerator::create_struct(IR::Struct const& struct_, IR::Identifier name, IR::GenericList const& generic_list) {
+void CodeGenerator::create_struct(
+	IR::Struct const&      struct_,
+	IR::Identifier         name,
+	IR::GenericList const& generic_list,
+	GenericCtx const&      inherit
+) {
 	if (has_instantiation(name, generic_list)) return;
 	add_instantiation(name, generic_list);
 
 	GenericCtx generic_ctx = create_generic_ctx(struct_.generic_declaration, generic_list);
+	for (auto const& [type_name, type] : inherit) { generic_ctx.insert_or_assign(type_name, type.clone()); }
 
 	llvm::StructType::create(context_, get_name_generics(struct_.name.value, generic_list));
 
@@ -723,7 +765,7 @@ void CodeGenerator::create_all(IR::Module const& module) {
 			auto& struct_ = std::get<IR::Struct>(symbols_.at(item).item);
 			// we skip structs with generics, we instatiate them later
 			if (!struct_.generic_declaration.empty()) continue;
-			create_struct(struct_, item, {});
+			create_struct(struct_, item, {}, {});
 		}
 	}
 }
