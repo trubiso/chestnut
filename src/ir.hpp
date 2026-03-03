@@ -631,8 +631,6 @@ struct Symbol {
 
 	/// Whether this symbol can be mutated (should be true only for mutable declarations and arguments).
 	bool mutable_;
-
-	std::vector<GenericList> instantiations = {};
 };
 
 }  // namespace IR

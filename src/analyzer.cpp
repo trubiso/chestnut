@@ -6,7 +6,6 @@
 void Analyzer::analyze(bool print_ir) {
 	optimize_blocks();
 	check_assigned();
-	collect_instantiations();
 	if (print_ir)
 		for (ResolvedFile const& file : resolved_files) print(std::cout, file.module) << std::endl;
 }
@@ -679,99 +678,4 @@ void Analyzer::check_assigned(IR::Module& module, FileContext::ID file_id) {
 
 void Analyzer::check_assigned() {
 	for (ResolvedFile& file : resolved_files) check_assigned(file.module, file.file_id);
-}
-
-void Analyzer::add_instantiation(IR::Identifier name, IR::GenericList const& generic_list) {
-	auto& instantiations = symbols.at(name).instantiations;
-	if (std::find(instantiations.cbegin(), instantiations.cend(), generic_list) != instantiations.cend()) return;
-	IR::GenericList cloned {};
-	cloned.reserve(generic_list.size());
-	std::transform(
-		generic_list.cbegin(),
-		generic_list.cend(),
-		std::back_inserter(cloned),
-		[](Spanned<IR::Type> const& type) { return Spanned {type.span, type.value.clone()}; }
-	);
-	instantiations.push_back(std::move(cloned));
-}
-
-void Analyzer::collect_instantiations(IR::Type::Atom const& atom) {
-	if (!atom.is_named()) return;
-	add_instantiation(atom.get_named().name.value, atom.get_named().generic_list);
-}
-
-void Analyzer::collect_instantiations(IR::Type::Pointer const& pointer) {
-	return collect_instantiations(pointer.type->value);
-}
-
-void Analyzer::collect_instantiations(IR::Type const& type) {
-	switch (type.kind()) {
-	case IR::Type::Kind::Atom:    return collect_instantiations(type.get_atom());
-	case IR::Type::Kind::Pointer: return collect_instantiations(type.get_pointer());
-	}
-}
-
-void Analyzer::collect_instantiations(IR::Value::Atom const& atom) {
-	if (!atom.is_struct_literal()) return;
-	// TODO: do something with struct literals
-	assert(false);
-}
-
-void Analyzer::collect_instantiations(IR::Value::FunctionCall const& function_call) {
-	if (!std::holds_alternative<Spanned<IR::Identifier>>(function_call.callee)) return;
-	IR::Identifier callee = std::get<Spanned<IR::Identifier>>(function_call.callee).value;
-	add_instantiation(callee, function_call.generic_list);
-}
-
-void Analyzer::collect_instantiations(IR::Value const& value) {
-	switch (value.kind()) {
-	case IR::Value::Kind::Atom:         return collect_instantiations(value.get_atom());
-	case IR::Value::Kind::FunctionCall: return collect_instantiations(value.get_function_call());
-	case IR::Value::Kind::Ref:
-	case IR::Value::Kind::Load:         return;  // load & ref can't do anything that instantiates a type
-	}
-}
-
-void Analyzer::collect_instantiations(IR::Statement::Declare const& declare) {
-	return collect_instantiations(declare.type);
-}
-
-void Analyzer::collect_instantiations(IR::Statement::Set const& set) {
-	return collect_instantiations(set.value.value);
-}
-
-void Analyzer::collect_instantiations(IR::Statement const& statement) {
-	switch (statement.kind()) {
-	case IR::Statement::Kind::Declare: return collect_instantiations(statement.get_declare());
-	case IR::Statement::Kind::Set:     return collect_instantiations(statement.get_set());
-	case IR::Statement::Kind::Call:    return collect_instantiations(statement.get_call());
-	}
-}
-
-void Analyzer::collect_instantiations(IR::BasicBlock const& basic_block) {
-	for (auto const& statement : basic_block.statements) collect_instantiations(statement.value);
-	if (std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump)) {
-		auto const& value = std::get<IR::BasicBlock::Return>(basic_block.jump).value;
-		if (value.has_value()) collect_instantiations(value.value().value);
-	}
-}
-
-void Analyzer::collect_instantiations(IR::Function const& function) {
-	for (auto const& basic_block : function.body) collect_instantiations(basic_block);
-}
-
-void Analyzer::collect_instantiations(IR::Module const& module) {
-	for (IR::Identifier item : module.items) {
-		auto const& value = symbols.at(item).item;
-		if (std::holds_alternative<IR::Module>(value)) {
-			collect_instantiations(std::get<IR::Module>(value));
-		} else if (std::holds_alternative<IR::Function>(value)) {
-			collect_instantiations(std::get<IR::Function>(value));
-		}
-	}
-}
-
-/// Collects all instantiations of functions and structs, so codegen can monomorphize.
-void Analyzer::collect_instantiations() {
-	for (ResolvedFile const& file : resolved_files) collect_instantiations(file.module);
 }
