@@ -528,6 +528,7 @@ private:
 	bool resolve_trait_name(Spanned<AST::Identifier>&, Scope const&, FileContext::ID);
 
 	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
+	void resolve(AST::Type::Atom::Named&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type::Atom&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type&, Span, Scope const&, FileContext::ID);
 	void resolve(Spanned<AST::Type>&, Scope const&, FileContext::ID);
@@ -592,6 +593,7 @@ private:
 	/// identifier is not resolved, or if no candidates match (in which case it throws a diagnostic).
 	TypeInfo from_partial(TypeInfo::Named&&, Span, FileContext::ID);
 
+	TypeInfo from_type(AST::Type::Atom::Named&, FileContext::ID, bool partial = true);
 	TypeInfo from_type(AST::Type::Atom&, FileContext::ID, bool partial = true);
 	TypeInfo from_type(AST::Type::Pointer&, FileContext::ID, bool partial = true);
 	TypeInfo from_type(AST::Type&, FileContext::ID, bool partial = true);
@@ -820,6 +822,7 @@ private:
 	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
 	/// values and expressions, as it does not allow functions or modules to be values directly.
 	IR::Type reconstruct_type(TypeInfo::ID, bool allow_functions = false);
+	std::optional<IR::Type::Atom::Named> lower_type(AST::Type::Atom::Named&&);
 	/// Lowers a type atom known since parsing, turning non-specific types specific.
 	Spanned<IR::Type> lower_type(AST::Type::Atom&&, Span, FileContext::ID);
 	/// Lowers a type known since parsing, turning non-specific types specific.

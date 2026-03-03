@@ -13,10 +13,9 @@ namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
 // FIXME: clang-format won't stop jiggling this macro around LOL
-#define SPANNED_REASON(fn, reason)                                                               \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
-		return (fn) (reason);                                                            \
-	})
+#define SPANNED_REASON(fn, reason)                                                                                     \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
+		                                                                      this] { return (fn) (reason); })
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -310,6 +309,13 @@ std::optional<Expression> Parser::consume_expression_atom() {
 					goto bail;
 				}
 			} else assert(consume_symbol(Token::Symbol::LBrace));
+
+			// TODO: correct type
+			Spanned<Type::Atom::Named> type {
+				identifier.value().span,
+				Type::Atom::Named {identifier.value(), std::move(generic_list)}
+			};
+
 			std::optional<Expression::Atom::StructLiteral::Field> maybe_field;
 			std::vector<Expression::Atom::StructLiteral::Field>   fields {};
 
@@ -353,11 +359,7 @@ std::optional<Expression> Parser::consume_expression_atom() {
 			expect_symbol("expected closing brace to end struct literal", Token::Symbol::RBrace);
 
 			return Expression::make_atom(
-				Expression::Atom::make_struct_literal(
-					std::move(identifier.value()),
-					std::move(generic_list),
-					std::move(fields)
-				)
+				Expression::Atom::make_struct_literal(std::move(type), std::move(fields))
 			);
 		}
 

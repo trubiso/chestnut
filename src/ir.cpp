@@ -52,6 +52,20 @@ bool operator==(GenericList const& a, GenericList const& b) {
 	return true;
 }
 
+Type::Atom::Named Type::Atom::Named::clone() const {
+	// named types must clone their entire generic list
+	GenericList cloned_list {};
+	cloned_list.reserve(generic_list.size());
+	std::transform(
+		generic_list.cbegin(),
+		generic_list.cend(),
+		std::back_inserter(cloned_list),
+		[](Spanned<Type> const& type) { return Spanned {type.span, type.value.clone()}; }
+	);
+
+	return {name, std::move(cloned_list)};
+}
+
 Type::Atom Type::Atom::clone() const {
 	switch (kind()) {
 	case Kind::Integer: break;
@@ -59,26 +73,12 @@ Type::Atom Type::Atom::clone() const {
 	case Kind::Void:    return make_void();
 	case Kind::Char:    return make_char();
 	case Kind::Bool:    return make_bool();
-	case Kind::Named:   break;
+	case Kind::Named:   return {get_named().clone()};
 	case Kind::Error:   return make_error();
 	}
 
-	if (is_integer()) {
-		auto integer = get_integer();
-		return make_integer(std::move(integer));
-	}
-
-	// named types must clone their entire generic list
-	GenericList generic_list {};
-	generic_list.reserve(get_named().generic_list.size());
-	std::transform(
-		get_named().generic_list.cbegin(),
-		get_named().generic_list.cend(),
-		std::back_inserter(generic_list),
-		[](Spanned<Type> const& type) { return Spanned {type.span, type.value.clone()}; }
-	);
-
-	return make_named(get_named().name, std::move(generic_list));
+	auto integer = get_integer();
+	return make_integer(std::move(integer));
 }
 
 Type Type::clone() const {
@@ -296,7 +296,7 @@ Value::Atom Value::Atom::clone() const {
 		[](Spanned<Atom> const& atom) { return Spanned {atom.span, atom.value.clone()}; }
 	);
 	return {
-		StructLiteral {get_struct_literal().name, std::move(fields)},
+		StructLiteral {get_struct_literal().type.clone(), std::move(fields)},
 		type.clone()
 	};
 }
@@ -311,7 +311,7 @@ std::ostream& operator<<(std::ostream& os, Value::Atom::Literal const& literal) 
 }
 
 std::ostream& operator<<(std::ostream& os, Value::Atom::StructLiteral const& struct_literal) {
-	os << "[struct literal of type @" << struct_literal.name.value << " with ";
+	os << "[struct literal of type " << struct_literal.type << " with ";
 	if (struct_literal.fields.empty()) return os << "no fields]";
 	os << "fields ";
 	size_t count = 0;

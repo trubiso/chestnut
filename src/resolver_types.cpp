@@ -108,6 +108,35 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named&& named, Span span, Fi
 	return TypeInfo::make_named(named.name, std::move(candidates));
 }
 
+Resolver::TypeInfo Resolver::from_type(AST::Type::Atom::Named& named, FileContext::ID file_id, bool partial) {
+	// for named types, we need to extract the generic list first
+	std::vector<TypeInfo::ID>                          ordered_generics {};
+	std::vector<std::tuple<std::string, TypeInfo::ID>> labeled_generics {};
+	if (named.generic_list.has_value()) {
+		ordered_generics.reserve(named.generic_list.value().ordered.size());
+		labeled_generics.reserve(named.generic_list.value().labeled.size());
+		for (auto& generic : named.generic_list.value().ordered) {
+			TypeInfo     type    = from_type(generic.value, file_id, partial);
+			TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
+			ordered_generics.push_back(type_id);
+		}
+		for (auto& [label, generic] : named.generic_list.value().labeled) {
+			TypeInfo     type    = from_type(generic.value, file_id, partial);
+			TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
+			labeled_generics.emplace_back(label.value, type_id);
+		}
+	}
+
+	TypeInfo::Named partial_named {
+		&named.name.value,
+		TypeInfo::Named::Partial {std::move(ordered_generics), std::move(labeled_generics)}
+	};
+
+	// resolve the partial only if this is not a partial scenario
+	return partial ? TypeInfo {std::move(partial_named)}
+	               : from_partial(std::move(partial_named), named.name.span, file_id);
+}
+
 Resolver::TypeInfo Resolver::from_type(AST::Type::Atom& atom, FileContext::ID file_id, bool partial) {
 	switch (atom.kind()) {
 	case AST::Type::Atom::Kind::Float:
@@ -115,40 +144,9 @@ Resolver::TypeInfo Resolver::from_type(AST::Type::Atom& atom, FileContext::ID fi
 	case AST::Type::Atom::Kind::Void:     return TypeInfo::make_known_void();
 	case AST::Type::Atom::Kind::Char:     return TypeInfo::make_known_char();
 	case AST::Type::Atom::Kind::Bool:     return TypeInfo::make_known_bool();
-	case AST::Type::Atom::Kind::Named:    break;
+	case AST::Type::Atom::Kind::Named:    return from_type(atom.get_named(), file_id, partial);
 	case AST::Type::Atom::Kind::Inferred: return TypeInfo::make_unknown();
 	case AST::Type::Atom::Kind::Integer:  break;
-	}
-
-	if (atom.is_named()) {
-		auto& named = atom.get_named();
-
-		// for named types, we need to extract the generic list first
-		std::vector<TypeInfo::ID>                          ordered_generics {};
-		std::vector<std::tuple<std::string, TypeInfo::ID>> labeled_generics {};
-		if (named.generic_list.has_value()) {
-			ordered_generics.reserve(named.generic_list.value().ordered.size());
-			labeled_generics.reserve(named.generic_list.value().labeled.size());
-			for (auto& generic : named.generic_list.value().ordered) {
-				TypeInfo     type    = from_type(generic.value, file_id, partial);
-				TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
-				ordered_generics.push_back(type_id);
-			}
-			for (auto& [label, generic] : named.generic_list.value().labeled) {
-				TypeInfo     type    = from_type(generic.value, file_id, partial);
-				TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
-				labeled_generics.emplace_back(label.value, type_id);
-			}
-		}
-
-		TypeInfo::Named partial_named {
-			&named.name.value,
-			TypeInfo::Named::Partial {std::move(ordered_generics), std::move(labeled_generics)}
-		};
-
-		// resolve the partial only if this is not a partial scenario
-		return partial ? TypeInfo {std::move(partial_named)}
-		               : from_partial(std::move(partial_named), named.name.span, file_id);
 	}
 
 	// for integers, we need to determine how much information we know
@@ -2099,16 +2097,7 @@ bool Resolver::check_generic_type(TypeInfo::ID id) {
 
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span, FileContext::ID file_id) {
-	if (!struct_literal.name.value.id.has_value() || struct_literal.name.value.id.value().empty()) {
-		// name resolver will have complained already
-		return register_type(TypeInfo::make_bottom(), span, file_id);
-	}
-
-	// FIXME: this will 100% cause issues with this ptr getting invalidated!!!
-	auto temp_atom = AST::Type::Atom::make_named(
-		AST::Type::Atom::Named {struct_literal.name, std::move(struct_literal.generic_list)}
-	);
-	TypeInfo named_type = from_type(temp_atom, file_id, false);
+	TypeInfo named_type = from_type(struct_literal.type.value, file_id, false);
 	if (named_type.is_bottom()) {
 		// the function will have complained
 		return register_type(TypeInfo::make_bottom(), span, file_id);
@@ -2174,7 +2163,7 @@ Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span,
 
 	// we can get the field types via member access now and delegate the work there
 	// TODO: make the span include the generic list
-	TypeInfo::ID type_id = register_type(std::move(named_type), struct_literal.name.span, file_id);
+	TypeInfo::ID type_id = register_type(std::move(named_type), struct_literal.type.span, file_id);
 	for (auto& field : struct_literal.fields) {
 		TypeInfo::ID field_type  = infer(field.value->value, field.value->span, file_id);
 		TypeInfo::ID access_type = register_type(

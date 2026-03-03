@@ -351,7 +351,7 @@ llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom, GenericC
 				return generate_value(value.value, generic_ctx);
 			}
 		);
-		auto type = get_struct_type(atom.type.get_atom().get_named());
+		auto type = get_struct_type(atom.get_struct_literal().type);
 
 		// we have to manually create it this way because we don't have a guarantee that the values are constant
 		llvm::Value* value = llvm::UndefValue::get(type);

@@ -169,6 +169,13 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, bool allow_functions) 
 	return reconstruct_type(type_id, type_id, allow_functions);
 }
 
+std::optional<IR::Type::Atom::Named> Resolver::lower_type(AST::Type::Atom::Named&& named) {
+	// the resolver or type inference engine will already have thrown diagnostics
+	if (!named.name.value.id.has_value() || named.name.value.id.value().size() != 1) return std::nullopt;
+	auto reconstructed_type = reconstruct_type(get_single_symbol(named.name.value).type);
+	return std::move(reconstructed_type.get_atom().get_named());
+}
+
 Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom&& atom, Span span, FileContext::ID file_id) {
 	switch (atom.kind()) {
 	case AST::Type::Atom::Kind::Float:
@@ -213,10 +220,13 @@ Spanned<IR::Type> Resolver::lower_type(AST::Type::Atom&& atom, Span span, FileCo
 				)};
 		}
 	} else if (atom.is_named()) {
-		// the resolver or type inference engine will already have thrown diagnostics, so let's error
-		if (!atom.get_named().name.value.id.has_value() || atom.get_named().name.value.id.value().size() != 1)
-			return {span, IR::Type::make_atom(IR::Type::Atom::make_error())};
-		return {span, reconstruct_type(get_single_symbol(atom.get_named().name.value).type)};
+		auto reconstructed = lower_type(std::move(atom.get_named()));
+		return Spanned {
+			span,
+			reconstructed.has_value()
+				? IR::Type::make_atom(IR::Type::Atom {std::move(reconstructed.value())})
+				: IR::Type::make_atom(IR::Type::Atom::make_error())
+		};
 	} else if (atom.is_inferred()) {
 		// this is invalid!! top level types must not be inferred
 		parsed_files.at(file_id).diagnostics.push_back(
@@ -423,14 +433,17 @@ IR::Value::Atom Resolver::lower_atom(
 ) {
 	if (!struct_literal.valid) return IR::Value::Atom::make_error();
 
+	IR::Type type = reconstruct_type(type_id);
+	if (!type.is_atom() || !type.get_atom().is_named()) return IR::Value::Atom::make_error();
+	auto named = std::move(type.get_atom().get_named());
+
 	// since the order of the struct literal's fields is not necessarily the same as the struct's, we need to
 	// iterate.
 
 	// PERF: at some point the struct literal's fields should then be replaced by a std::unordered_map
 	std::vector<Spanned<IR::Value::Atom>> fields {};
 	fields.reserve(struct_literal.fields.size());
-	IR::Struct const& struct_
-		= std::get<IR::Struct>(symbol_pool_.at(struct_literal.name.value.id.value().at(0)).item);
+	IR::Struct const& struct_ = std::get<IR::Struct>(symbol_pool_.at(named.name.value).item);
 	// TODO: exhaustiveness check (we must check that every field exists on the struct, and that every struct field
 	// exists on the literal)
 	for (auto const& field : struct_.fields) {
@@ -446,11 +459,7 @@ IR::Value::Atom Resolver::lower_atom(
 		fields.push_back(extract_value(*corresponding->value, basic_blocks, file_id, true));
 	}
 
-	return IR::Value::Atom::make_struct_literal(
-		lower_identifier(struct_literal.name),
-		std::move(fields),
-		reconstruct_type(type_id)
-	);
+	return IR::Value::Atom::make_struct_literal(std::move(named), std::move(fields));
 }
 
 IR::Value::Atom Resolver::lower_atom(

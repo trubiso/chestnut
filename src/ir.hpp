@@ -101,6 +101,8 @@ struct Type {
 		struct Named {
 			Spanned<Identifier> name;
 			GenericList         generic_list;
+
+			Named clone() const;
 		};
 		enum class Kind { Integer, Float, Void, Char, Bool, Named, Error };
 
@@ -165,6 +167,8 @@ struct Type {
 
 		inline Named const& get_named() const { return std::get<(size_t) Kind::Named>(value); }
 
+		inline Named& get_named() { return std::get<(size_t) Kind::Named>(value); }
+
 		Atom clone() const;
 	};
 
@@ -194,6 +198,8 @@ struct Type {
 	inline bool is_pointer() const { return kind() == Kind::Pointer; }
 
 	inline Atom const& get_atom() const { return std::get<(size_t) Kind::Atom>(value); }
+
+	inline Atom& get_atom() { return std::get<(size_t) Kind::Atom>(value); }
 
 	inline Pointer const& get_pointer() const { return std::get<(size_t) Kind::Pointer>(value); }
 
@@ -340,7 +346,7 @@ struct Value {
 		};
 
 		struct StructLiteral {
-			Spanned<Identifier> name;
+			Type::Atom::Named type;
 			// fields ordered according to the struct
 			std::vector<Spanned<Atom>> fields;
 		};
@@ -372,11 +378,11 @@ struct Value {
 		// TODO: the type should always be bool, idk if it's even worth having it as an arg
 		inline static Atom make_bool(bool value, IR::Type type) { return Atom {value, std::move(type)}; }
 
-		inline static Atom
-		make_struct_literal(Spanned<Identifier>&& name, std::vector<Spanned<Atom>>&& fields, IR::Type&& type) {
+		inline static Atom make_struct_literal(Type::Atom::Named&& type, std::vector<Spanned<Atom>>&& fields) {
 			return Atom {
-				Atom::StructLiteral {std::move(name), std::move(fields)},
-				std::move(type)
+				Atom::StructLiteral {type.clone(), std::move(fields)},
+				Type::make_atom(Type::Atom {std::move(type)}
+                                 )
 			};
 		}
 

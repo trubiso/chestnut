@@ -44,9 +44,7 @@ struct Expression {
 		};
 
 		struct StructLiteral {
-			Spanned<Identifier> name;
-
-			std::optional<GenericList> generic_list;
+			Spanned<Type::Atom::Named> type;
 
 			struct Field {
 				Spanned<std::string>                 name;
@@ -107,15 +105,12 @@ struct Expression {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::BoolLiteral>, BoolLiteral {value}});
 		}
 
-		inline static Atom make_struct_literal(
-			Spanned<Identifier>&&               name,
-			std::optional<GenericList>&&        generic_list,
-			std::vector<StructLiteral::Field>&& fields
-		) {
+		inline static Atom
+		make_struct_literal(Spanned<Type::Atom::Named>&& type, std::vector<StructLiteral::Field>&& fields) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::StructLiteral>,
-					StructLiteral {std::move(name), std::move(generic_list), std::move(fields)}
+					StructLiteral {std::move(type), std::move(fields)}
                         }
 			);
 		}

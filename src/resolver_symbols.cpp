@@ -262,16 +262,20 @@ void Resolver::resolve(
 	identifier.id = pointed_ids;
 }
 
-void Resolver::resolve(AST::Type::Atom& atom, Span span, Scope const& scope, FileContext::ID file_id) {
-	if (!atom.is_named()) return;
-	resolve(atom.get_named().name, scope, file_id);
-	if (atom.get_named().generic_list.has_value()) {
-		for (auto& generic : atom.get_named().generic_list.value().ordered) resolve(generic, scope, file_id);
-		for (auto& generic : atom.get_named().generic_list.value().labeled)
+void Resolver::resolve(AST::Type::Atom::Named& named, Span span, Scope const& scope, FileContext::ID file_id) {
+	resolve(named.name, scope, file_id);
+	if (named.generic_list.has_value()) {
+		for (auto& generic : named.generic_list.value().ordered) resolve(generic, scope, file_id);
+		for (auto& generic : named.generic_list.value().labeled)
 			resolve(std::get<1>(generic), scope, file_id);
 	}
 	// TODO: prune non-type items. we will need a flag on symbols which correspond to generics, then, to narrow
 	// types down to AST::Struct* or Generic{} or whatever
+}
+
+void Resolver::resolve(AST::Type::Atom& atom, Span span, Scope const& scope, FileContext::ID file_id) {
+	if (!atom.is_named()) return;
+	resolve(atom.get_named(), span, scope, file_id);
 }
 
 void Resolver::resolve(AST::Type& type, Span span, Scope const& scope, FileContext::ID file_id) {
@@ -355,19 +359,8 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 		// for struct literals, we need to resolve both the type and the fields
 		AST::Expression::Atom::StructLiteral& struct_literal = atom.get_struct_literal();
 
-		// we transfer the name to a type to resolve it and then back to maintain the ID
-		// in the future, we will have to ensure that this is a struct, but for now resolve already does that
-		AST::Type temp_type = AST::Type::make_atom(
-			AST::Type::Atom::make_named(
-				AST::Type::Atom::Named {
-					std::move(struct_literal.name),
-					std::move(struct_literal.generic_list)
-				}
-			)
-		);
-		resolve(temp_type, temp_type.get_atom().get_named().name.span, scope, file_id);
-		struct_literal.name         = std::move(temp_type.get_atom().get_named().name);
-		struct_literal.generic_list = std::move(temp_type.get_atom().get_named().generic_list);
+		// TODO: ensure that this is a struct
+		resolve(struct_literal.type.value, struct_literal.type.span, scope, file_id);
 
 		// now, we check if all given fields exist in the struct and we resolve all of them, regardless of
 		// whether they exist or not
