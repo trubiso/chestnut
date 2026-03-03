@@ -74,9 +74,9 @@ private:
 	void emit_struct(IR::Struct const&, IR::GenericList const&, GenericCtx const&);
 
 	struct Emission {
-		std::variant<IR::Function const*, IR::Struct const*> what;
-		IR::GenericList                                      generic_list;
-		GenericCtx                                           generic_ctx;
+		IR::Function const* what;
+		IR::GenericList     generic_list;
+		GenericCtx          generic_ctx;
 	};
 
 	std::queue<Emission> emission_queue;

@@ -707,7 +707,7 @@ void CodeGenerator::create_struct(IR::Struct const& struct_, IR::Identifier name
 
 	llvm::StructType::create(context_, get_name_generics(struct_.name.value, generic_list));
 
-	emission_queue.push(Emission {&struct_, clone(generic_list), std::move(generic_ctx)});
+	emit_struct(struct_, generic_list, generic_ctx);
 }
 
 void CodeGenerator::create_all(IR::Module const& module) {
@@ -736,17 +736,6 @@ void CodeGenerator::emit_remaining() {
 	while (!emission_queue.empty()) {
 		auto emission = std::move(emission_queue.front());
 		emission_queue.pop();
-		if (std::holds_alternative<IR::Function const*>(emission.what))
-			emit_function(
-				*std::get<IR::Function const*>(emission.what),
-				emission.generic_list,
-				emission.generic_ctx
-			);
-		else
-			emit_struct(
-				*std::get<IR::Struct const*>(emission.what),
-				emission.generic_list,
-				emission.generic_ctx
-			);
+		emit_function(*emission.what, emission.generic_list, emission.generic_ctx);
 	}
 }
