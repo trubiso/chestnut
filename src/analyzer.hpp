@@ -78,4 +78,21 @@ private:
 	/// statements, allowing constant variables to be set once if they were originally set to be undefined, and for
 	/// references. Enforces move semantics.
 	void check_assigned();
+
+	void add_instantiation(IR::Identifier, IR::GenericList const&);
+
+	void collect_instantiations(IR::Type::Atom const&);
+	void collect_instantiations(IR::Type::Pointer const&);
+	void collect_instantiations(IR::Type const&);
+	void collect_instantiations(IR::Value::Atom const&);
+	void collect_instantiations(IR::Value::FunctionCall const&);
+	void collect_instantiations(IR::Value const&);
+	void collect_instantiations(IR::Statement::Declare const&);
+	void collect_instantiations(IR::Statement::Set const&);
+	void collect_instantiations(IR::Statement const&);
+	void collect_instantiations(IR::BasicBlock const&);
+	void collect_instantiations(IR::Function const&);
+	void collect_instantiations(IR::Module const&);
+	/// Collects all instantiations of functions and structs, so codegen can monomorphize.
+	void collect_instantiations();
 };
