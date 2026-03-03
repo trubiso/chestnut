@@ -501,7 +501,12 @@ CodeGenerator::generate_value(IR::Value::FunctionCall const& function_call, Gene
 		);
 	// this should be an actual function now hopefully
 	// ensure the function is created first
-	create_function(std::get<IR::Function>(symbols_.at(callee_id).item), callee_id, function_call.generic_list);
+	create_function(
+		std::get<IR::Function>(symbols_.at(callee_id).item),
+		callee_id,
+		function_call.generic_list,
+		generic_ctx
+	);
 	llvm::Function* callee = program_.getFunction(get_name_generics(callee_id, function_call.generic_list));
 	std::vector<llvm::Value*> arguments {};
 	std::transform(
@@ -667,12 +672,14 @@ void CodeGenerator::emit_struct(
 void CodeGenerator::create_function(
 	IR::Function const&    function,
 	IR::Identifier         name,
-	IR::GenericList const& generic_list
+	IR::GenericList const& generic_list,
+	GenericCtx const&      inherit
 ) {
 	if (has_instantiation(name, generic_list)) return;
 	add_instantiation(name, generic_list);
 
 	GenericCtx generic_ctx = create_generic_ctx(function.generic_declaration, generic_list);
+	for (auto const& [type_name, type] : inherit) { generic_ctx.insert_or_assign(type_name, type.clone()); }
 
 	std::vector<llvm::Type*> argument_types {};
 	std::transform(
@@ -760,7 +767,7 @@ void CodeGenerator::create_all(IR::Module const& module) {
 			auto& function = std::get<IR::Function>(symbols_.at(item).item);
 			// we skip functions with generics, we instantiate them later
 			if (!function.generic_declaration.empty()) continue;
-			create_function(function, item, {});
+			create_function(function, item, {}, {});
 		} else if (std::holds_alternative<IR::Struct>(symbols_.at(item).item)) {
 			auto& struct_ = std::get<IR::Struct>(symbols_.at(item).item);
 			// we skip structs with generics, we instatiate them later

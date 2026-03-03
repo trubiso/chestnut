@@ -83,7 +83,7 @@ private:
 
 	std::queue<Emission> emission_queue;
 
-	void create_function(IR::Function const&, IR::Identifier, IR::GenericList const&);
+	void create_function(IR::Function const&, IR::Identifier, IR::GenericList const&, GenericCtx const& inherit);
 	void create_struct(IR::Struct const&, IR::Identifier, IR::GenericList const&, GenericCtx const& inherit);
 
 	void create_all(IR::Module const&);
