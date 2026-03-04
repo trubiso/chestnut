@@ -1688,6 +1688,9 @@ Resolver::check_bound_equality_generic(TypeInfo const& generic, TypeInfo const& 
 	// otherwise
 	// TODO: maybe consolidate both cases into one and deal with the distinction in get_implemented_traits?
 	if (other.is_generic()) {
+		// we need the names to be equal for the generics to be equal
+		if (generic.get_generic().name != other.get_generic().name) return false;
+
 		for (auto const& trait_constraint : other.get_generic().declared_constraints) {
 			std::vector<TypeInfo::Generic::TraitConstraint> expanded = expand_trait(trait_constraint);
 			std::move(expanded.begin(), expanded.end(), std::back_inserter(b));
