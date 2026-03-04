@@ -15,8 +15,12 @@ func lets_break_this_again<X: A, Y: C, Z: U<X, Y>, X2: A, Y2: B>() {
 	const x: Obj<X2, Y2, Z> = undefined;
 }
 
-func lets_do_this_well_but_doesnt_work<X: A, Y: C, Z: U<X, Y>>() {
+func lets_do_this_well_working<X: A, Y: C, Z: U<X, Y>>() {
 	const x: Obj<X, Y, Z> = undefined;
+}
+
+func lets_do_this_well_again<X: C, Z: U<X, X>>() {
+	const x: Obj<X, X, Z> = undefined;
 }
 
 func lets_do_this_well<X: A, Y: B, Z: U<X, Y>>() {
