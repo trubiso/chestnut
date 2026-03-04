@@ -1094,15 +1094,19 @@ Resolver::lower(std::optional<AST::GenericDeclaration>& maybe_generic_declaratio
 }
 
 IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
+	auto const& function_type = type_pool_.at(get_single_symbol(function.name.value).type).get_function();
 	std::vector<IR::Function::Argument> arguments {};
 	arguments.reserve(function.arguments.size());
 	for (auto& [name, type, _, mutable_] : function.arguments) {
 		// we don't need to push arguments as anonymous or mutable, we only cared during resolution and stuff
 		arguments.push_back(
-			IR::Function::Argument {lower_identifier(name), lower_type(std::move(type), file_id)}
+			IR::Function::Argument {
+				lower_identifier(name),
+				{type.span, reconstruct_type(get_single_symbol(name.value).type)}
+                }
 		);
 	}
-	Spanned<IR::Type>           return_type = lower_type(std::move(function.return_type), file_id);
+	Spanned<IR::Type>           return_type = {function.return_type.span, reconstruct_type(function_type.return_)};
 	std::vector<IR::BasicBlock> basic_blocks {};
 	if (function.body.has_value()) {
 		basic_blocks.push_back(IR::BasicBlock {0, {}, std::monostate {}});
