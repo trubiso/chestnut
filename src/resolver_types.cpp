@@ -1842,13 +1842,40 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 	}
 }
 
+Resolver::TypeInfo::Generic::TraitConstraint Resolver::instantiate_constraint(
+	TypeInfo::Generic::TraitConstraint const&             constraint,
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& generic_map
+) const {
+	// if everything has been done properly, the generic map should not be mutated and no new types should be
+	// created, so a couple const casts here won't hurt (please don't kill me)
+	std::vector<TypeInfo::ID> arguments = const_cast<Resolver*>(this)->instantiate_types(
+		constraint.arguments,
+		const_cast<std::unordered_map<TypeInfo::ID, TypeInfo::ID>&>(generic_map)
+	);
+	return TypeInfo::Generic::TraitConstraint {constraint.name, std::move(arguments)};
+}
+
 std::vector<Resolver::TypeInfo::Generic::TraitConstraint>
 Resolver::expand_trait(TypeInfo::Generic::TraitConstraint const& trait_constraint) const {
 	auto const& subconstraints = symbol_pool_.at(trait_constraint.name).trait_constraints;
-	// TODO: do sth with generics
+	auto const& trait          = *std::get<AST::Trait*>(symbol_pool_.at(trait_constraint.name).item);
+	// we create a generic map by comparing our generics and the trait's
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+	if (trait.generic_declaration.has_value()) {
+		assert(trait_constraint.arguments.size() == trait.generic_declaration.value().generics.size());
+		for (size_t i = 0; i < trait.generic_declaration.value().generics.size(); ++i) {
+			auto const& generic = trait.generic_declaration.value().generics.at(i);
+			generic_map.insert_or_assign(
+				symbol_pool_.at(generic.name.value.id.value().at(0)).type,
+				trait_constraint.arguments.at(i)
+			);
+		}
+	}
 	std::vector<Resolver::TypeInfo::Generic::TraitConstraint> expanded {trait_constraint};
 	for (auto const& subconstraint : subconstraints) {
-		auto subexpansion = expand_trait(subconstraint);
+		// we must instantiate every subconstraint to use this constraint's generic arguments!
+		auto actual_subconstraint = instantiate_constraint(subconstraint, generic_map);
+		auto subexpansion         = expand_trait(actual_subconstraint);
 		std::move(subexpansion.begin(), subexpansion.end(), std::back_inserter(expanded));
 	}
 	return expanded;

@@ -1,0 +1,24 @@
+trait A;
+trait B;
+trait C: A + B;
+
+trait U<X: A, Y: B>: C;
+trait V<X: A, Y: B>: U<X, Y>;
+
+struct Obj<X: A, Y: B, Z: U<X, Y>> {}
+
+func lets_break_this<X: A, Y: C, Z: V<X, Y>, X2: A, Y2: B>() {
+	const x: Obj<X2, Y2, Z> = undefined;
+}
+
+func lets_break_this_again<X: A, Y: C, Z: U<X, Y>, X2: A, Y2: B>() {
+	const x: Obj<X2, Y2, Z> = undefined;
+}
+
+func lets_do_this_well_but_doesnt_work<X: A, Y: C, Z: U<X, Y>>() {
+	const x: Obj<X, Y, Z> = undefined;
+}
+
+func lets_do_this_well<X: A, Y: B, Z: U<X, Y>>() {
+	const x: Obj<X, Y, Z> = undefined;
+}

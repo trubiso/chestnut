@@ -754,6 +754,8 @@ private:
 	std::vector<TypeInfo::Generic::TraitConstraint> get_implemented_traits(TypeInfo const&) const;
 	/// Returns whether a concrete type satisfies a set of trait constraints.
 	std::optional<bool> satisfies_trait_constraint(TypeInfo::ID, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
+	/// Replaces all generics within a trait constraint, thereby "instantiating" it.
+	TypeInfo::Generic::TraitConstraint instantiate_constraint(TypeInfo::Generic::TraitConstraint const&, std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& generic_map) const;
 	/// Expands a trait into itself plus its required traits, recursively. Does not ensure that the traits within are unique!
 	/// To do that, you may want to use reduce_to_unique with the result of this function.
 	std::vector<TypeInfo::Generic::TraitConstraint> expand_trait(TypeInfo::Generic::TraitConstraint const&) const;
