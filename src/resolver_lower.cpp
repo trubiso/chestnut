@@ -524,7 +524,10 @@ Spanned<IR::Value> Resolver::lower_value(
 	FileContext::ID                file_id,
 	bool                           allow_functions
 ) {
-	auto error  = Spanned<IR::Value> {span, IR::Value::make_atom(IR::Value::Atom::make_error())};
+	auto error = Spanned<IR::Value> {span, IR::Value::make_atom(IR::Value::Atom::make_error())};
+
+	if (!function_call.call_type.has_value()) return error;
+
 	auto callee = lower_value(*function_call.callee, basic_blocks, file_id, true);
 	// if the callee is not valid, we've already thrown diagnostics about it
 	if (!callee.value.is_atom() || !callee.value.get_atom().is_identifier()) return error;
@@ -565,32 +568,36 @@ Spanned<IR::Value> Resolver::lower_value(
 
 	// then we need to reconstruct the generic order from the type
 	IR::GenericList generic_list {};
+	auto const&     function_generics = type_pool_.at(function_call.call_type.value()).get_function().generics;
 	if (function_call.generic_list.has_value()) {
 		size_t generic_count = function_call.generic_list.value().ordered.size()
 		                     + function_call.generic_list.value().labeled.size();
-		assert(function.generics.size() == generic_count);
+		assert(function.generics.size() == generic_count && generic_count == function_generics.size());
 		generic_list.reserve(generic_count);
-		// ordered generics are freebies
-		std::transform(
-			function_call.generic_list.value().ordered.begin(),
-			function_call.generic_list.value().ordered.end(),
-			std::back_inserter(generic_list),
-			[this, file_id](auto& ordered_generic) {
-				return lower_type(std::move(ordered_generic), file_id);
-			}
-		);
-		// labeled generics have to be reordered according to the function call type
-		for (size_t i = function_call.generic_list.value().ordered.size(); i < generic_count; ++i) {
-			assert(std::get<0>(function.generics.at(i)).has_value());
-			std::string generic_name  = std::get<0>(function.generics.at(i)).value();
-			bool        generic_found = false;
-			for (auto& [label, generic] : function_call.generic_list.value().labeled) {
-				if (label.value == generic_name) {
-					generic_list.push_back(lower_type(std::move(generic), file_id));
-					generic_found = true;
+		for (size_t i = 0; i < generic_count; ++i) {
+			auto type = reconstruct_type(std::get<1>(function_generics.at(i)));
+			if (i < function_call.generic_list.value().ordered.size()) {
+				// ordered generics are freebies
+				generic_list.emplace_back(
+					function_call.generic_list.value().ordered.at(i).span,
+					std::move(type)
+				);
+			} else {
+				// we must find the labeled generic span
+				assert(std::get<0>(function.generics.at(i)).has_value());
+				std::string generic_name  = std::get<0>(function.generics.at(i)).value();
+				bool        generic_found = false;
+				Span        generic_span(0);
+				for (auto& [label, generic] : function_call.generic_list.value().labeled) {
+					if (label.value == generic_name) {
+						assert(!generic_found);
+						generic_span  = generic.span;
+						generic_found = true;
+					}
 				}
+				assert(generic_found);
+				generic_list.emplace_back(generic_span, std::move(type));
 			}
-			assert(generic_found);
 		}
 		assert(generic_list.size() == generic_count);
 	}

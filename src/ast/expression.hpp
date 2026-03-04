@@ -198,6 +198,8 @@ struct Expression {
 		} arguments;
 
 		std::optional<GenericList> generic_list;
+
+		std::optional<uint32_t> call_type = {};
 	};
 
 	struct If {

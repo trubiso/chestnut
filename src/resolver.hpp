@@ -580,6 +580,8 @@ private:
 		std::vector<Diagnostic::Sample> rejections;
 		Span                            span;
 		FileContext::ID                 file_id;
+
+		AST::Expression::FunctionCall* function_call;
 	};
 
 	std::vector<UndecidedOverload> undecided_overloads {};

@@ -1545,7 +1545,6 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 	}
 
 	// if too many candidates are unifiable, we fail to decide.
-	// TODO: unless we can decide by specialization
 	if (undecided_overload.candidates.size() > 1) { return false; }
 
 	// if only one is unifiable, we've finally found the one and only function
@@ -1569,6 +1568,8 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 				= {type_symbol_mapping_.at(undecided_overload.candidates.at(0).function).value()};
 		}
 	}
+
+	undecided_overload.function_call->call_type = {call_id};
 
 	return true;
 }
@@ -2655,7 +2656,15 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	if (function_call.callee->value.is_atom() || function_call.callee->value.get_atom().is_identifier())
 		identifier = &function_call.callee->value.get_atom().get_identifier();
 
-	UndecidedOverload overload {expr_type, identifier, std::move(candidates), std::move(rejections), span, file_id};
+	UndecidedOverload overload {
+		expr_type,
+		identifier,
+		std::move(candidates),
+		std::move(rejections),
+		span,
+		file_id,
+		&function_call
+	};
 
 	if (!try_decide(overload)) undecided_overloads.push_back(std::move(overload));
 
