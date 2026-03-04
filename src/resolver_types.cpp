@@ -1661,7 +1661,7 @@ std::optional<bool> Resolver::check_bound_equality_function(TypeInfo const&, Typ
 
 std::optional<bool> Resolver::check_bound_equality_same_as(TypeInfo const& same_as, TypeInfo const& other) const {
 	if (same_as.get_same_as().ids.size() != 1) return std::nullopt;
-	return check_bound_equality_same_as(type_pool_.at(same_as.get_same_as().ids.at(0)), other);
+	return check_bound_equality(type_pool_.at(same_as.get_same_as().ids.at(0)), other);
 }
 
 std::optional<bool> Resolver::check_bound_equality_generic(TypeInfo const& generic, TypeInfo const& other) const {
