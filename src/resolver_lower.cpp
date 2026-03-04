@@ -1118,6 +1118,7 @@ IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
 			AST::Function& function = std::get<AST::Function>(value);
+			if (!type_pool_.at(get_single_symbol(function.name.value).type).is_function()) continue;
 			// TODO: make a more sophisticated system for these kinds of things
 			IR::Function lowered_function = lower(function, file_id);
 			for (AST::Tag const& tag : std::get<std::vector<AST::Tag>>(item.value)) {
