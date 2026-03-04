@@ -971,40 +971,48 @@ Resolver::lower(std::optional<AST::GenericDeclaration>& maybe_generic_declaratio
 	for (auto& generic : generics) {
 		std::vector<IR::Generic::Constraint> constraints {};
 		assert(generic.name.value.id.has_value() && generic.name.value.id.value().size() == 1);
-		auto const& symbol            = get_single_symbol(generic.name.value);
-		auto const& trait_constraints = type_pool_.at(symbol.type).get_generic().declared_constraints;
+		auto const& symbol = get_single_symbol(generic.name.value);
+		if (type_pool_.at(symbol.type).is_bottom()) goto bail;
 
-		// PERF: we should maybe pre-expand these beforehand instead of doing it so many times
-		std::vector<TypeInfo::Generic::TraitConstraint> expanded_list {};
+		{
+			auto const& trait_constraints = type_pool_.at(symbol.type).get_generic().declared_constraints;
 
-		for (auto const& trait_constraint : trait_constraints) {
-			std::vector<TypeInfo::Generic::TraitConstraint> expanded = expand_trait(trait_constraint);
-			std::move(expanded.begin(), expanded.end(), std::back_inserter(expanded_list));
-		}
+			// PERF: we should maybe pre-expand these beforehand instead of doing it so many times
+			std::vector<TypeInfo::Generic::TraitConstraint> expanded_list {};
 
-		auto maybe_expanded = reduce_to_unique(std::move(expanded_list));
-		if (!maybe_expanded.has_value()) goto bail;
-		expanded_list = std::move(maybe_expanded.value());
-
-		constraints.reserve(expanded_list.size());
-		std::transform(
-			expanded_list.begin(),
-			expanded_list.end(),
-			std::back_inserter(constraints),
-			[this](TypeInfo::Generic::TraitConstraint& constraint) {
-				IR::GenericList generic_list {};
-				generic_list.reserve(constraint.arguments.size());
-				std::transform(
-					constraint.arguments.cbegin(),
-					constraint.arguments.cend(),
-					std::back_inserter(generic_list),
-					[this](TypeInfo::ID type_id) {
-						return Spanned {get_type_span(type_id), reconstruct_type(type_id)};
-					}
-				);
-				return IR::Generic::Constraint {constraint.name, std::move(generic_list)};
+			for (auto const& trait_constraint : trait_constraints) {
+				std::vector<TypeInfo::Generic::TraitConstraint> expanded
+					= expand_trait(trait_constraint);
+				std::move(expanded.begin(), expanded.end(), std::back_inserter(expanded_list));
 			}
-		);
+
+			auto maybe_expanded = reduce_to_unique(std::move(expanded_list));
+			if (!maybe_expanded.has_value()) goto bail;
+			expanded_list = std::move(maybe_expanded.value());
+
+			constraints.reserve(expanded_list.size());
+			std::transform(
+				expanded_list.begin(),
+				expanded_list.end(),
+				std::back_inserter(constraints),
+				[this](TypeInfo::Generic::TraitConstraint& constraint) {
+					IR::GenericList generic_list {};
+					generic_list.reserve(constraint.arguments.size());
+					std::transform(
+						constraint.arguments.cbegin(),
+						constraint.arguments.cend(),
+						std::back_inserter(generic_list),
+						[this](TypeInfo::ID type_id) {
+							return Spanned {
+								get_type_span(type_id),
+								reconstruct_type(type_id)
+							};
+						}
+					);
+					return IR::Generic::Constraint {constraint.name, std::move(generic_list)};
+				}
+			);
+		}
 	bail:
 		new_declaration.emplace_back(generic.name.value.id.value().at(0), std::move(constraints));
 	}
