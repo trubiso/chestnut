@@ -633,9 +633,9 @@ private:
 	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
 
 	/// Instantiates a type, that is, clones all of the generics within it.
-	TypeInfo::ID instantiate_type(TypeInfo::ID);
+	TypeInfo::ID instantiate_type(TypeInfo::ID, std::unordered_map<TypeInfo::ID, TypeInfo::ID>& generic_map);
 	/// Instantiates a vector of types, that is, clones all of the generics within them.
-	std::vector<TypeInfo::ID> instantiate_types(std::vector<TypeInfo::ID> const&);
+	std::vector<TypeInfo::ID> instantiate_types(std::vector<TypeInfo::ID> const&, std::unordered_map<TypeInfo::ID, TypeInfo::ID>& generic_map);
 
 	/// Gets all candidate functions for an operator.
 	std::vector<AST::SymbolID> get_operator_candidates(Token::Symbol operator_, bool binary) const;

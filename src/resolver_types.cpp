@@ -1924,7 +1924,9 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 		for (size_t i = 0; i < struct_generics.size(); ++i) {
 			auto const& struct_generic = get_single_symbol(struct_generics.at(i).name.value).type;
 			// FIXME: instantiating every single time is insane
-			auto const& instantiated_generic = type_pool_.at(instantiate_type(struct_generic));
+			// FIXME: instantiate entire struct instead
+			std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
+			auto const& instantiated_generic = type_pool_.at(instantiate_type(struct_generic, generic_map));
 			assert(!instantiated_generic.is_bottom());
 
 			auto satisfies = satisfies_trait_constraint(
@@ -2225,7 +2227,10 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 	else return register_type(TypeInfo::make_same_as(std::move(type_ids)), span, file_id);
 }
 
-Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
+Resolver::TypeInfo::ID
+Resolver::instantiate_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::ID>& generic_map) {
+	if (generic_map.contains(id)) return generic_map.at(id);
+
 	auto const& type    = type_pool_.at(id);
 	auto        span    = get_type_span(id);
 	auto        file_id = get_type_file_id(id);
@@ -2251,24 +2256,30 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 	}
 
 	if (type.is_function()) {
-		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_arguments {};
-		new_arguments.reserve(type.get_function().arguments.size());
-		std::transform(
-			type.get_function().arguments.cbegin(),
-			type.get_function().arguments.cend(),
-			std::back_inserter(new_arguments),
-			[this](auto const& argument) {
-				return std::tuple {std::get<0>(argument), instantiate_type(std::get<1>(argument))};
-			}
-		);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_generics {};
 		new_generics.reserve(type.get_function().generics.size());
 		std::transform(
 			type.get_function().generics.cbegin(),
 			type.get_function().generics.cend(),
 			std::back_inserter(new_generics),
-			[this](auto const& generic) {
-				return std::tuple {std::get<0>(generic), instantiate_type(std::get<1>(generic))};
+			[this, &generic_map](auto const& generic) {
+				return std::tuple {
+					std::get<0>(generic),
+					instantiate_type(std::get<1>(generic), generic_map)
+				};
+			}
+		);
+		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_arguments {};
+		new_arguments.reserve(type.get_function().arguments.size());
+		std::transform(
+			type.get_function().arguments.cbegin(),
+			type.get_function().arguments.cend(),
+			std::back_inserter(new_arguments),
+			[this, &generic_map](auto const& argument) {
+				return std::tuple {
+					std::get<0>(argument),
+					instantiate_type(std::get<1>(argument), generic_map)
+				};
 			}
 		);
 		return register_type(
@@ -2276,7 +2287,7 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 				TypeInfo::Function {
 					std::move(new_arguments),
 					std::move(new_generics),
-					instantiate_type(type.get_function().return_)
+					instantiate_type(type.get_function().return_, generic_map)
 				}
 			),
 			span,
@@ -2285,42 +2296,42 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 		);
 	} else if (type.is_same_as()) {
 		return register_type(
-			TypeInfo::make_same_as(instantiate_types(type.get_same_as().ids)),
+			TypeInfo::make_same_as(instantiate_types(type.get_same_as().ids, generic_map)),
 			span,
 			file_id,
 			symbol
 		);
 	} else if (type.is_generic()) {
-		// TODO: ensure that trait constraints point back to the correct generics in generic declaration
+		// we create the generic before its constraints so its constraints can use it!
+		TypeInfo::ID generic_id = register_type(
+			TypeInfo::make_generic(TypeInfo::Generic {type.get_generic().name, {}, {}}),
+			span,
+			file_id,
+			symbol
+		);
+
+		// we insert it into the generic map
+		assert(std::get<1>(generic_map.insert_or_assign(id, generic_id)) && "somehow re-added a generic");
+
+		// now we instantiate the declared constraints
 		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
 		declared_constraints.reserve(type.get_generic().declared_constraints.size());
 		std::transform(
 			type.get_generic().declared_constraints.cbegin(),
 			type.get_generic().declared_constraints.cend(),
 			std::back_inserter(declared_constraints),
-			[this](TypeInfo::Generic::TraitConstraint const& constraint) {
+			[this, &generic_map](TypeInfo::Generic::TraitConstraint const& constraint) {
 				return TypeInfo::Generic::TraitConstraint {
 					constraint.name,
-					instantiate_types(constraint.arguments)
+					instantiate_types(constraint.arguments, generic_map)
 				};
 			}
 		);
-		if (!type.get_generic().imposed_constraints.empty()) {
-			std::cout << "warning: tried to instantiate generic type with imposed constraints: ";
-			debug_print_type(id);
-			std::cout << std::endl;
-		}
-		TypeInfo::ID generic_id = register_type(
-			TypeInfo::make_generic(
-				TypeInfo::Generic {type.get_generic().name, std::move(declared_constraints), {}}
-			),
-			span,
-			file_id,
-			symbol
-		);
-		// TODO: do we need this?
-		// we probably don't, since we don't care about the contaminated generic.
-		// undecided_generics.push_back(generic_id);
+
+		// we add the declared constraints to the generic type
+		type_pool_.at(generic_id).get_generic().declared_constraints = std::move(declared_constraints);
+
+		// and finally we return the type
 		return generic_id;
 	} else if (type.is_member_access()) {
 		assert(false && "tried to instantiate member access");
@@ -2332,9 +2343,12 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 			type.get_named().candidates().cbegin(),
 			type.get_named().candidates().cend(),
 			std::back_inserter(new_candidates),
-			[this](
-				TypeInfo::Named::Candidate const& candidate
-			) { return TypeInfo::Named::Candidate {candidate.name, instantiate_types(candidate.generics)}; }
+			[this, &generic_map](TypeInfo::Named::Candidate const& candidate) {
+				return TypeInfo::Named::Candidate {
+					candidate.name,
+					instantiate_types(candidate.generics, generic_map)
+				};
+			}
 		);
 		// we don't want to link it back to the same identifier, since this is just a copy!
 		return register_type(TypeInfo::make_named(nullptr, std::move(new_candidates)), span, file_id, symbol);
@@ -2342,7 +2356,7 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 		return register_type(
 			TypeInfo::make_pointer(
 				TypeInfo::Pointer {
-					instantiate_type(type.get_pointer().pointee),
+					instantiate_type(type.get_pointer().pointee, generic_map),
 					type.get_pointer().mutable_
 				}
 			),
@@ -2359,12 +2373,18 @@ Resolver::TypeInfo::ID Resolver::instantiate_type(TypeInfo::ID id) {
 	return id;
 }
 
-std::vector<Resolver::TypeInfo::ID> Resolver::instantiate_types(std::vector<TypeInfo::ID> const& types) {
+std::vector<Resolver::TypeInfo::ID> Resolver::instantiate_types(
+	std::vector<TypeInfo::ID> const&                types,
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID>& generic_map
+) {
 	std::vector<TypeInfo::ID> new_types {};
 	new_types.reserve(types.size());
-	std::transform(types.cbegin(), types.cend(), std::back_inserter(new_types), [this](TypeInfo::ID id) {
-		return instantiate_type(id);
-	});
+	std::transform(
+		types.cbegin(),
+		types.cend(),
+		std::back_inserter(new_types),
+		[this, &generic_map](TypeInfo::ID id) { return instantiate_type(id, generic_map); }
+	);
 	return new_types;
 }
 
@@ -2636,7 +2656,8 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		}
 
 		// we store the expression type as the return type so it automatically gets inferred!
-		TypeInfo::ID callable_type = instantiate_type(callable_id);
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
+		TypeInfo::ID callable_type = instantiate_type(callable_id, generic_map);
 		// let's replace the type spans so the diagnostics are a bit nicer :-)
 		// TODO: this is a bit of a silly solution isn't it
 		// TODO: don't instantiate to avoid throwing extra diagnostics
@@ -3006,9 +3027,10 @@ Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint& cons
 	// add trait constraints from the trait generics
 	assert(arguments.size() == trait_generics.size());
 	for (size_t i = 0; i < arguments.size(); ++i) {
-		// TODO: don't instantiate to avoid throwing extra diagnostics
 		ensure_has_constraints(trait_generics.at(i), get_single_symbol(constraint.name.value).file_id);
-		auto generic = instantiate_type(get_single_symbol(trait_generics.at(i).name.value).type);
+		// FIXME: instantiate entire trait
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
+		auto generic = instantiate_type(get_single_symbol(trait_generics.at(i).name.value).type, generic_map);
 		unify(arguments.at(i), generic, file_id);
 	}
 
@@ -3028,7 +3050,11 @@ void Resolver::constrain_candidate(AST::Identifier* identifier, TypeInfo::Named:
 	assert(generics.size() == declared_generics.size());
 	for (size_t i = 0; i < generics.size(); ++i) {
 		ensure_has_constraints(declared_generics.at(i), get_single_symbol(candidate.name).file_id);
-		auto generic    = instantiate_type(get_single_symbol(declared_generics.at(i).name.value).type);
+		// FIXME: instantiate entire struct instead
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
+
+		auto generic
+			= instantiate_type(get_single_symbol(declared_generics.at(i).name.value).type, generic_map);
 		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value()[0]);
 		unify(generified, generic, get_type_file_id(generified));
 		generics.at(i) = generified;
@@ -3227,7 +3253,9 @@ bool Resolver::specialize_overload_named_type(TypeInfo::ID id) {
 		for (size_t i = 0; i < struct_generics.size(); ++i) {
 			auto const& struct_generic = get_single_symbol(struct_generics.at(i).name.value).type;
 			// FIXME: instantiating every single time is insane
-			auto const& instantiated_generic = type_pool_.at(instantiate_type(struct_generic));
+			// FIXME: instantiate entire struct instead
+			std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
+			auto const& instantiated_generic = type_pool_.at(instantiate_type(struct_generic, generic_map));
 			assert(!instantiated_generic.is_bottom());
 
 			auto satisfies = satisfies_trait_constraint(
