@@ -2876,6 +2876,9 @@ void Resolver::infer(AST::Function& function, FileContext::ID file_id) {
 
 void Resolver::infer(AST::Struct& struct_, FileContext::ID file_id) {
 	if (struct_.generic_declaration.has_value()) infer(struct_.generic_declaration.value(), file_id);
+	for (auto& field : struct_.fields) {
+		field.type_id = register_type(from_type(field.type.value, file_id, false), field.type.span, file_id);
+	}
 }
 
 void Resolver::infer(AST::Trait& trait, FileContext::ID file_id) {

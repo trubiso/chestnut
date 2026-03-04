@@ -1186,9 +1186,10 @@ IR::Struct Resolver::lower(AST::Struct& struct_, FileContext::ID file_id) {
 		struct_.fields.end(),
 		std::back_inserter(fields),
 		[&](AST::Struct::Field& field) {
+			assert(field.type_id.has_value() && "we missed a struct during type inference");
 			return IR::Struct::Field {
-				Spanned {field.name.span, field.name.value},
-				lower_type(std::move(field.type), file_id)
+				Spanned {field.name.span,                        field.name.value},
+				{field.type.span, reconstruct_type(field.type_id.value())}
 			};
 		}
 	);

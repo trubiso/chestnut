@@ -13,6 +13,8 @@ struct Struct {
 		// TODO: public/private
 		Spanned<std::string> name;
 		Spanned<Type>        type;
+
+		std::optional<uint32_t> type_id;
 	};
 
 	std::vector<Field> fields;
