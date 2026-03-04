@@ -3432,7 +3432,24 @@ void Resolver::decide_remaining_types() {
 		}
 	}
 
-	// TODO: diagnostic for impossible named types
+	if (has_undecided_named_types()) {
+		for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
+			TypeInfo const& type = type_pool_.at(id);
+			if (!type.is_named()) continue;
+			int decided = type.is_decided(type_pool_);
+			if (decided != 0) continue;
+			parsed_files.at(get_type_file_id(id)).diagnostics.push_back(
+				Diagnostic::error(
+					"could not decide named type",
+					"the type cannot be decided between its candidates",
+					{get_type_sample(id, OutFmt::Color::Red)}
+				)
+			);
+			type_pool_.at(id) = TypeInfo::make_bottom();
+		}
+	}
+
+	// TODO: diagnostic for undecided/unchecked generics
 }
 
 void Resolver::infer_types() {
