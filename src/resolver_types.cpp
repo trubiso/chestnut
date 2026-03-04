@@ -1913,20 +1913,15 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	// TODO: rejections
 	std::vector<TypeInfo::Named::Candidate> new_candidates {};
 	for (TypeInfo::Named::Candidate& candidate : candidates) {
-		// check trait bounds
 		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate.name).item);
-		if (!struct_.generic_declaration.has_value() || struct_.generic_declaration.value().generics.empty())
-			continue;
-		auto const& struct_generics = struct_.generic_declaration.value().generics;
-		auto const& our_generics    = candidate.generics;
-		assert(struct_generics.size() == our_generics.size());
+		// FIXME: instantiating every single time is insane
+		auto instantiated_struct = instantiate_struct(&struct_);
+		if (instantiated_struct.generic_declaration.empty()) continue;
+		auto const& our_generics = candidate.generics;
+		assert(instantiated_struct.generic_declaration.size() == our_generics.size());
 		bool satisfies_bounds = true;
-		for (size_t i = 0; i < struct_generics.size(); ++i) {
-			auto const& struct_generic = get_single_symbol(struct_generics.at(i).name.value).type;
-			// FIXME: instantiating every single time is insane
-			// FIXME: instantiate entire struct instead
-			std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
-			auto const& instantiated_generic = type_pool_.at(instantiate_type(struct_generic, generic_map));
+		for (size_t i = 0; i < instantiated_struct.generic_declaration.size(); ++i) {
+			auto const& instantiated_generic = type_pool_.at(instantiated_struct.generic_declaration.at(i));
 			assert(!instantiated_generic.is_bottom());
 
 			auto satisfies = satisfies_trait_constraint(
@@ -2225,6 +2220,29 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 	});
 	if (type_ids.size() == 1) return register_type(TypeInfo::make_same_as(type_ids[0]), span, file_id);
 	else return register_type(TypeInfo::make_same_as(std::move(type_ids)), span, file_id);
+}
+
+Resolver::TypeInfo::Struct Resolver::instantiate_struct(AST::Struct const* struct_) {
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+
+	std::vector<TypeInfo::ID> generic_declaration {};
+
+	if (struct_->generic_declaration.has_value()) {
+		std::vector<TypeInfo::ID> original_generic_declaration {};
+		original_generic_declaration.reserve(struct_->generic_declaration.value().generics.size());
+		std::transform(
+			struct_->generic_declaration.value().generics.cbegin(),
+			struct_->generic_declaration.value().generics.cend(),
+			std::back_inserter(original_generic_declaration),
+			[this](AST::GenericDeclaration::Generic const& generic) {
+				return get_single_symbol(generic.name.value).type;
+			}
+		);
+		generic_declaration = instantiate_types(original_generic_declaration, generic_map);
+		assert(generic_declaration.size() == struct_->generic_declaration.value().generics.size());
+	}
+
+	return Resolver::TypeInfo::Struct {struct_->name.value.id.value().at(0), std::move(generic_declaration)};
 }
 
 Resolver::TypeInfo::ID
@@ -3041,20 +3059,18 @@ void Resolver::constrain_candidate(AST::Identifier* identifier, TypeInfo::Named:
 	// constrain the identifier for lowering later
 	if (identifier) identifier->id = {candidate.name};
 
-	AST::Struct* struct_ = std::get<AST::Struct*>(get_single_symbol(candidate.name).item);
-	if (!struct_->generic_declaration.has_value()) return;
+	AST::Struct* struct_             = std::get<AST::Struct*>(get_single_symbol(candidate.name).item);
+	auto         instantiated_struct = instantiate_struct(struct_);
+	if (instantiated_struct.generic_declaration.empty()) return;
 	auto& generics          = candidate.generics;
 	auto& declared_generics = struct_->generic_declaration.value().generics;
 
 	// add trait constraints from the struct generics
-	assert(generics.size() == declared_generics.size());
+	assert(generics.size() == declared_generics.size()
+	       && declared_generics.size() == instantiated_struct.generic_declaration.size());
 	for (size_t i = 0; i < generics.size(); ++i) {
 		ensure_has_constraints(declared_generics.at(i), get_single_symbol(candidate.name).file_id);
-		// FIXME: instantiate entire struct instead
-		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
-
-		auto generic
-			= instantiate_type(get_single_symbol(declared_generics.at(i).name.value).type, generic_map);
+		auto generic    = instantiated_struct.generic_declaration.at(i);
 		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value()[0]);
 		unify(generified, generic, get_type_file_id(generified));
 		generics.at(i) = generified;
@@ -3245,17 +3261,13 @@ bool Resolver::specialize_overload_named_type(TypeInfo::ID id) {
 		trait_counts.push_back({});
 
 		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate.name).item);
-		if (!struct_.generic_declaration.has_value() || struct_.generic_declaration.value().generics.empty())
-			continue;
-		auto const& struct_generics = struct_.generic_declaration.value().generics;
-		auto const& our_generics    = candidate.generics;
-		assert(struct_generics.size() == our_generics.size());
-		for (size_t i = 0; i < struct_generics.size(); ++i) {
-			auto const& struct_generic = get_single_symbol(struct_generics.at(i).name.value).type;
-			// FIXME: instantiating every single time is insane
-			// FIXME: instantiate entire struct instead
-			std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
-			auto const& instantiated_generic = type_pool_.at(instantiate_type(struct_generic, generic_map));
+		// FIXME: instantiating every single time is insane
+		auto instantiated_struct = instantiate_struct(&struct_);
+		if (instantiated_struct.generic_declaration.empty()) continue;
+		auto const& our_generics = candidate.generics;
+		assert(instantiated_struct.generic_declaration.size() == our_generics.size());
+		for (size_t i = 0; i < instantiated_struct.generic_declaration.size(); ++i) {
+			auto const& instantiated_generic = type_pool_.at(instantiated_struct.generic_declaration.at(i));
 			assert(!instantiated_generic.is_bottom());
 
 			auto satisfies = satisfies_trait_constraint(

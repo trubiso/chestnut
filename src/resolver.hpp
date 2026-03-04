@@ -350,6 +350,11 @@ private:
 		/// Returns 1 if this named type is decided (1 for all other kinds of types), -1 if it is impossible and
 		/// 0 if it is still to be determined. Assumes all AST::Identifier* have been pruned.
 		int is_decided(std::vector<TypeInfo> const&) const;
+
+		struct Struct {
+			AST::SymbolID   name;
+			std::vector<ID> generic_declaration;
+		};
 	};
 
 	struct Generic {};
@@ -632,6 +637,7 @@ private:
 	/// Registers a type in the type pool and returns its ID.
 	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
 
+	TypeInfo::Struct instantiate_struct(AST::Struct const*);
 	/// Instantiates a type, that is, clones all of the generics within it.
 	TypeInfo::ID instantiate_type(TypeInfo::ID, std::unordered_map<TypeInfo::ID, TypeInfo::ID>& generic_map);
 	/// Instantiates a vector of types, that is, clones all of the generics within them.
