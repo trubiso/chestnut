@@ -1023,6 +1023,9 @@ void Resolver::unify(
 	TypeInfo::ID    b_origin,
 	FileContext::ID file_id
 ) {
+	// safeguard
+	if (a_id == b_id) return;
+
 	TypeInfo &a = type_pool_.at(a_id), &b = type_pool_.at(b_id);
 
 	// follow references
