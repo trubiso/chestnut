@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -Iinclude `llvm-config --system-libs --cppflags --ldflags --libs core` -std=c++23 -lboost_program_options -Wall -Wextra -Wpedantic -g
 
-OBJS = analyzer.o codegen.o diagnostic.o ir.o levenshtein.o lexer.o main.o out_fmt.o parser.o resolver.o resolver_desugar.o resolver_identify.o resolver_lower.o resolver_symbols.o resolver_types.o resolver_types_bound_equality.o resolver_types_can_unify.o resolver_types_constrain.o resolver_types_decide_remaining.o resolver_types_decision.o resolver_types_infer.o resolver_types_instantiate.o resolver_types_specialization.o resolver_types_traits.o resolver_types_type_info.o resolver_types_type_name.o resolver_types_unify.o test.o token.o ast/expression.o ast/function.o ast/identifier.o ast/module.o ast/statement.o ast/struct.o ast/tag.o ast/trait.o ast/type.o
+OBJS = analyzer.o codegen.o diagnostic.o ir.o levenshtein.o lexer.o main.o out_fmt.o parser.o resolver.o resolver/desugar.o resolver/identify.o resolver/lower.o resolver/symbols.o resolver/types.o resolver/types/bound_equality.o resolver/types/can_unify.o resolver/types/constrain.o resolver/types/decide_remaining.o resolver/types/decision.o resolver/types/infer.o resolver/types/instantiate.o resolver/types/specialization.o resolver/types/traits.o resolver/types/type_info.o resolver/types/type_name.o resolver/types/unify.o test.o token.o ast/expression.o ast/function.o ast/identifier.o ast/module.o ast/statement.o ast/struct.o ast/tag.o ast/trait.o ast/type.o
 
 BUILD_DIR := build
 SRC_DIR   := src
