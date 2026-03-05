@@ -3209,13 +3209,12 @@ void Resolver::constrain_candidate(AST::Identifier* identifier, TypeInfo::Named:
 	}
 }
 
-void Resolver::constrain_known_named_type_generics() {
+void Resolver::decide_supposedly_known_named_types() {
 	for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
 		TypeInfo& type = type_pool_.at(id);
 		if (!type.is_named()) continue;
 		if (type.get_named().candidates().size() != 1) continue;
-		auto& candidate = type.get_named().candidates().at(0);
-		constrain_candidate(type.get_named().name, candidate);
+		try_decide_named_type(id);
 	}
 }
 
@@ -3639,7 +3638,6 @@ void Resolver::decide_remaining_types() {
 
 void Resolver::infer_types() {
 	for (ParsedFile& file : parsed_files) { infer(file.module, file.file_id); }
-	// FIXME: we don't know whether this candidate is suitable, we should filter first!
-	constrain_known_named_type_generics();
+	decide_supposedly_known_named_types();
 	decide_remaining_types();
 }

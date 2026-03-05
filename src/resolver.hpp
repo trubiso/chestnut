@@ -803,9 +803,9 @@ private:
 	void constrain_candidate(UndecidedOverload&);
 	/// Adds the correct trait constraints to a named type's generics according to the provided candidate.
 	void constrain_candidate(AST::Identifier*, TypeInfo::Named::Candidate&);
-	/// Adds generic constraints to all single-candidate named types' generics. It's necessary to do this,
+	/// Tries to decide all single-candidate named types. It's necessary to do this,
 	/// since these types will get overlooked by the main type decision loop, because they are already decided.
-	void constrain_known_named_type_generics();
+	void decide_supposedly_known_named_types();
 
 	/// Returns whether there are any undecided named types left.
 	bool has_undecided_named_types() const;
