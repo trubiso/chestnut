@@ -1478,6 +1478,13 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
 		auto const& call_generics     = candidate.call_type.get_function().generics;
 		assert(function_generics.size() == call_generics.size());
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+		for (size_t i = 0; i < call_generics.size(); ++i) {
+			generic_map.insert_or_assign(
+				std::get<1>(function_generics.at(i)),
+				std::get<1>(call_generics.at(i))
+			);
+		}
 		bool satisfies_bounds = true;
 		for (size_t i = 0; i < function_generics.size(); ++i) {
 			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
@@ -1485,7 +1492,8 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 
 			auto satisfies = satisfies_trait_constraint(
 				std::get<1>(call_generics.at(i)),
-				function_generic.get_generic().declared_constraints
+				function_generic.get_generic().declared_constraints,
+				generic_map
 			);
 			if (!satisfies.has_value()) {
 				// we must delay this once more
@@ -1836,12 +1844,14 @@ std::vector<Resolver::TypeInfo::Generic::TraitConstraint> Resolver::get_implemen
 
 std::optional<bool> Resolver::satisfies_trait_constraint(
 	TypeInfo::ID                                           type_id,
-	std::vector<TypeInfo::Generic::TraitConstraint> const& constraints
+	std::vector<TypeInfo::Generic::TraitConstraint> const& constraints,
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> const&  generic_map
 ) const {
 	if (type_pool_.at(type_id).is_generic()) {
 		return satisfies_trait_constraint(
 			type_pool_.at(type_id).get_generic().declared_constraints,
-			constraints
+			constraints,
+			generic_map
 		);
 	} else if (type_pool_.at(type_id).is_member_access() || type_pool_.at(type_id).is_unknown()) {
 		// we delay generic resolution if we don't yet know the type
@@ -1851,9 +1861,17 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 		return true;
 	} else if (type_pool_.at(type_id).is_same_as()) {
 		if (type_pool_.at(type_id).get_same_as().ids.size() != 1) return false;
-		return satisfies_trait_constraint(type_pool_.at(type_id).get_same_as().ids.at(0), constraints);
+		return satisfies_trait_constraint(
+			type_pool_.at(type_id).get_same_as().ids.at(0),
+			constraints,
+			generic_map
+		);
 	} else {
-		return satisfies_trait_constraint(get_implemented_traits(type_pool_.at(type_id)), constraints);
+		return satisfies_trait_constraint(
+			get_implemented_traits(type_pool_.at(type_id)),
+			constraints,
+			generic_map
+		);
 	}
 }
 
@@ -1917,7 +1935,8 @@ Resolver::reduce_to_unique(std::vector<TypeInfo::Generic::TraitConstraint>&& tra
 
 std::optional<bool> Resolver::satisfies_trait_constraint(
 	std::vector<TypeInfo::Generic::TraitConstraint> const& checked,
-	std::vector<TypeInfo::Generic::TraitConstraint> const& other
+	std::vector<TypeInfo::Generic::TraitConstraint> const& other,
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> const&  generic_map
 ) const {
 	std::vector<TypeInfo::Generic::TraitConstraint> expanded_traits {};
 
@@ -1931,10 +1950,12 @@ std::optional<bool> Resolver::satisfies_trait_constraint(
 	expanded_traits = std::move(maybe_expanded.value());
 
 	for (auto const& trait_constraint : other) {
+		auto instantiated_constraint = instantiate_constraint(trait_constraint, generic_map);
 		// we need to check that this trait constraint exists in the expanded traits list
 		bool any_matched = false;
 		for (auto const& trait : expanded_traits) {
-			auto equality = check_bound_equality(trait, trait_constraint, BoundEqualityMode::AStricter);
+			auto equality
+				= check_bound_equality(trait, instantiated_constraint, BoundEqualityMode::AStricter);
 			if (!equality.has_value()) return std::nullopt;
 			if (!equality.value()) continue;
 			any_matched = true;
@@ -1962,6 +1983,10 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 		if (instantiated_struct.generic_declaration.empty()) continue;
 		auto const& our_generics = candidate.generics;
 		assert(instantiated_struct.generic_declaration.size() == our_generics.size());
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+		for (size_t i = 0; i < our_generics.size(); ++i) {
+			generic_map.insert_or_assign(instantiated_struct.generic_declaration.at(i), our_generics.at(i));
+		}
 		bool satisfies_bounds = true;
 		for (size_t i = 0; i < instantiated_struct.generic_declaration.size(); ++i) {
 			auto const& instantiated_generic = type_pool_.at(instantiated_struct.generic_declaration.at(i));
@@ -1969,7 +1994,8 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 
 			auto satisfies = satisfies_trait_constraint(
 				our_generics.at(i),
-				instantiated_generic.get_generic().declared_constraints
+				instantiated_generic.get_generic().declared_constraints,
+				generic_map
 			);
 			if (!satisfies.has_value()) {
 				// we must delay this once more
@@ -3246,13 +3272,21 @@ bool Resolver::specialize_overload(UndecidedOverload& undecided_overload) {
 		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
 		auto const& call_generics     = candidate.call_type.get_function().generics;
 		assert(function_generics.size() == call_generics.size());
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+		for (size_t i = 0; i < call_generics.size(); ++i) {
+			generic_map.insert_or_assign(
+				std::get<1>(function_generics.at(i)),
+				std::get<1>(call_generics.at(i))
+			);
+		}
 		for (size_t i = 0; i < function_generics.size(); ++i) {
 			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
 			assert(!function_generic.is_bottom());
 
 			auto satisfies = satisfies_trait_constraint(
 				std::get<1>(call_generics.at(i)),
-				function_generic.get_generic().declared_constraints
+				function_generic.get_generic().declared_constraints,
+				generic_map
 			);
 			if (!satisfies.has_value()) {
 				// we must delay this once more
@@ -3309,13 +3343,18 @@ bool Resolver::specialize_overload_named_type(TypeInfo::ID id) {
 		if (instantiated_struct.generic_declaration.empty()) continue;
 		auto const& our_generics = candidate.generics;
 		assert(instantiated_struct.generic_declaration.size() == our_generics.size());
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+		for (size_t i = 0; i < our_generics.size(); ++i) {
+			generic_map.insert_or_assign(instantiated_struct.generic_declaration.at(i), our_generics.at(i));
+		}
 		for (size_t i = 0; i < instantiated_struct.generic_declaration.size(); ++i) {
 			auto const& instantiated_generic = type_pool_.at(instantiated_struct.generic_declaration.at(i));
 			assert(!instantiated_generic.is_bottom());
 
 			auto satisfies = satisfies_trait_constraint(
 				our_generics.at(i),
-				instantiated_generic.get_generic().declared_constraints
+				instantiated_generic.get_generic().declared_constraints,
+				generic_map
 			);
 			if (!satisfies.has_value()) {
 				// we must delay this once more

@@ -757,7 +757,7 @@ private:
 	/// Returns the implemented traits for a type.
 	std::vector<TypeInfo::Generic::TraitConstraint> get_implemented_traits(TypeInfo const&) const;
 	/// Returns whether a concrete type satisfies a set of trait constraints.
-	std::optional<bool> satisfies_trait_constraint(TypeInfo::ID, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
+	std::optional<bool> satisfies_trait_constraint(TypeInfo::ID, std::vector<TypeInfo::Generic::TraitConstraint> const&, std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& generic_map = {}) const;
 	/// Replaces all generics within a trait constraint, thereby "instantiating" it.
 	TypeInfo::Generic::TraitConstraint instantiate_constraint(TypeInfo::Generic::TraitConstraint const&, std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& generic_map) const;
 	/// Expands a trait into itself plus its required traits, recursively. Does not ensure that the traits within are unique!
@@ -766,7 +766,7 @@ private:
 	/// Reduces a list of traits into only the unique ones. Returns null if any are not yet resolved.
 	std::optional<std::vector<TypeInfo::Generic::TraitConstraint>> reduce_to_unique(std::vector<TypeInfo::Generic::TraitConstraint>&&) const;
 	/// Returns whether the checked list of trait constraints is stricter than the other list.
-	std::optional<bool> satisfies_trait_constraint(std::vector<TypeInfo::Generic::TraitConstraint> const& checked, std::vector<TypeInfo::Generic::TraitConstraint> const&) const;
+	std::optional<bool> satisfies_trait_constraint(std::vector<TypeInfo::Generic::TraitConstraint> const& checked, std::vector<TypeInfo::Generic::TraitConstraint> const&, std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& generic_map = {}) const;
 
 	/// Checks whether a generic type's imposed constraints are at least as strict as its declared
 	/// constraints. If possible, turns it into a concrete type.
