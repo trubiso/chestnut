@@ -1,0 +1,18 @@
+func use_with_int<X: uint>(x: X) X {
+	return x;
+}
+
+struct WhichIntAreYou<X: int> { x: X }
+struct WhichIntAreYou<X: uint> { x: X }
+struct WhichIntAreYou<X: sint> { x: X }
+
+@extern
+func main() {
+	const a: WhichIntAreYou<uint8> = undefined;
+	const a: WhichIntAreYou<int8> = undefined;
+
+	const a = WhichIntAreYou<float64> { x: 3 };
+
+	const x: uint8 = 3;
+	use_with_int<uint8>(x);
+}

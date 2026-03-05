@@ -3084,7 +3084,13 @@ Resolver::TypeInfo::ID Resolver::generify_type(TypeInfo::ID id, AST::SymbolID na
 		return generify_type(type_pool_.at(id).get_same_as().ids.at(0), name);
 	}
 	TypeInfo::ID generified = register_type(
-		TypeInfo::make_generic(TypeInfo::Generic {name, {}, {TypeInfo::Generic::TypeConstraint {id}}}),
+		TypeInfo::make_generic(
+			TypeInfo::Generic {
+				name,
+				get_implemented_traits(type_pool_.at(id)),
+				{TypeInfo::Generic::TypeConstraint {id}}
+			}
+		),
 		get_type_span(id),
 		get_type_file_id(id)
 	);
