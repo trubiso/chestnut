@@ -1456,6 +1456,28 @@ bool Resolver::can_unify(TypeInfo const& a, TypeInfo const& b) const {
 	}
 }
 
+std::vector<Resolver::TypeInfo::Generic::TraitConstraint>
+Resolver::get_all_constraints(TypeInfo::Generic const& generic) const {
+	std::vector<TypeInfo::Generic::TraitConstraint> generic_constraints {};
+	std::copy(
+		generic.declared_constraints.cbegin(),
+		generic.declared_constraints.cend(),
+		std::back_inserter(generic_constraints)
+	);
+	for (auto const& constraint : generic.imposed_constraints) {
+		if (std::holds_alternative<TypeInfo::Generic::TraitConstraint>(constraint))
+			generic_constraints.push_back(std::get<TypeInfo::Generic::TraitConstraint>(constraint));
+		else {
+			auto constraints = get_implemented_traits(
+				type_pool_.at(std::get<TypeInfo::Generic::TypeConstraint>(constraint).type)
+			);
+			std::move(constraints.begin(), constraints.end(), std::back_inserter(generic_constraints));
+		}
+	}
+
+	return generic_constraints;
+}
+
 bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 	// filter the candidates
 	std::vector<UndecidedOverload::Candidate> new_candidates {};
@@ -1499,8 +1521,10 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
 			assert(!function_generic.is_bottom());
 
+			auto const& call_generic = type_pool_.at(std::get<1>(call_generics.at(i))).get_generic();
+
 			auto satisfies = satisfies_trait_constraint(
-				std::get<1>(call_generics.at(i)),
+				get_all_constraints(call_generic),
 				function_generic.get_generic().declared_constraints,
 				generic_map
 			);
@@ -3383,8 +3407,10 @@ bool Resolver::specialize_overload(UndecidedOverload& undecided_overload) {
 			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
 			assert(!function_generic.is_bottom());
 
+			auto const& call_generic = type_pool_.at(std::get<1>(call_generics.at(i))).get_generic();
+
 			auto satisfies = satisfies_trait_constraint(
-				std::get<1>(call_generics.at(i)),
+				get_all_constraints(call_generic),
 				function_generic.get_generic().declared_constraints,
 				generic_map
 			);
