@@ -1,4 +1,4 @@
-#include "type.hpp"
+#include "ast/type.hpp"
 
 namespace AST {
 

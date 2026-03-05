@@ -183,6 +183,13 @@ llvm::Type* CodeGenerator::get_struct_type(IR::Type::Atom::Named const& named, G
 }
 
 llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom, GenericCtx const& generic_ctx) {
+	std::cout << "[codegen] generating type atom " << atom << "\n";
+	std::cout << "\tgeneric ctx:\n";
+	for (auto const& [a, b] : generic_ctx) {
+		std::cout << "\t\t@" << a << " -> " << b << "\n";
+	}
+	std::cout.flush();
+
 	switch (atom.kind()) {
 	case IR::Type::Atom::Kind::Void:  return builder_.getVoidTy();
 	case IR::Type::Atom::Kind::Char:  return builder_.getInt8Ty();

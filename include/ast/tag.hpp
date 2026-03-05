@@ -9,4 +9,4 @@ struct Tag {
 
 std::ostream& operator<<(std::ostream&, Tag const&);
 
-};
+};  // namespace AST

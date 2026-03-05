@@ -1,7 +1,7 @@
 #pragma once
-#include "../token.hpp"
-#include "identifier.hpp"
-#include "type.hpp"
+#include "ast/identifier.hpp"
+#include "ast/type.hpp"
+#include "token.hpp"
 
 #include <memory>
 #include <optional>

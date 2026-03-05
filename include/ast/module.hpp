@@ -1,10 +1,10 @@
 #pragma once
-#include "../span.hpp"
-#include "function.hpp"
-#include "identifier.hpp"
-#include "struct.hpp"
-#include "tag.hpp"
-#include "trait.hpp"
+#include "ast/function.hpp"
+#include "ast/identifier.hpp"
+#include "ast/struct.hpp"
+#include "ast/tag.hpp"
+#include "ast/trait.hpp"
+#include "span.hpp"
 
 #include <variant>
 #include <vector>

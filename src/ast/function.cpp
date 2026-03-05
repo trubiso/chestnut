@@ -1,4 +1,4 @@
-#include "function.hpp"
+#include "ast/function.hpp"
 
 namespace AST {
 

@@ -1,8 +1,8 @@
 #pragma once
-#include "../span.hpp"
-#include "identifier.hpp"
-#include "statement.hpp"
-#include "type.hpp"
+#include "ast/identifier.hpp"
+#include "ast/statement.hpp"
+#include "ast/type.hpp"
+#include "span.hpp"
 
 #include <vector>
 

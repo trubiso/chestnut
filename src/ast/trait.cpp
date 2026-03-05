@@ -1,4 +1,4 @@
-#include "trait.hpp"
+#include "ast/trait.hpp"
 
 namespace AST {
 

@@ -1,4 +1,4 @@
-#include "analyzer.hpp"
+#include <analyzer.hpp>
 
 #include <sstream>
 #include <variant>

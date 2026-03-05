@@ -1,5 +1,5 @@
 #pragma once
-#include "../span.hpp"
+#include "span.hpp"
 
 #include <iostream>
 #include <vector>

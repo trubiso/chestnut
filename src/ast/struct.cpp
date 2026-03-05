@@ -1,4 +1,4 @@
-#include "struct.hpp"
+#include "ast/struct.hpp"
 
 namespace AST {
 

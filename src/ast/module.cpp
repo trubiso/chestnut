@@ -1,4 +1,4 @@
-#include "module.hpp"
+#include "ast/module.hpp"
 
 namespace AST {
 

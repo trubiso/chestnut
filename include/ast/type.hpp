@@ -1,6 +1,6 @@
 #pragma once
-#include "../span.hpp"
-#include "identifier.hpp"
+#include "ast/identifier.hpp"
+#include "span.hpp"
 
 #include <cstdint>
 #include <iostream>

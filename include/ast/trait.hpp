@@ -1,6 +1,6 @@
 #pragma once
-#include "identifier.hpp"
-#include "type.hpp"
+#include "ast/identifier.hpp"
+#include "ast/type.hpp"
 
 namespace AST {
 
