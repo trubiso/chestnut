@@ -292,8 +292,15 @@ std::ostream& Resolver::debug_print_type(std::ostream& os, TypeInfo const& type)
 
 	if (type.is_function()) {
 		TypeInfo::Function const& function = type.get_function();
-		os << "(function with args (";
+		os << "(function with generics <";
 		size_t count = 0;
+		for (auto const& [name, generic] : function.generics) {
+			os << (name.has_value() ? name.value() : "(anonymous)") << ": ";
+			debug_print_type(os, generic);
+			if (++count < function.arguments.size()) os << ", ";
+		}
+		os << ">, args (";
+		count = 0;
 		for (auto const& [name, arg_type] : function.arguments) {
 			os << (name.has_value() ? name.value() : "(anonymous)") << ": ";
 			debug_print_type(os, arg_type);
@@ -478,6 +485,7 @@ std::ostream& Resolver::get_type_name(std::ostream& os, TypeInfo const& type) co
 
 	if (type.is_function()) {
 		TypeInfo::Function const& function = type.get_function();
+		// TODO: print generics
 		os << "func(";
 		size_t count = 0;
 		for (auto const& [name, arg_type] : function.arguments) {
