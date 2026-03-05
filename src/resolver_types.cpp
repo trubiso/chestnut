@@ -1521,10 +1521,11 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
 			assert(!function_generic.is_bottom());
 
-			auto const& call_generic = type_pool_.at(std::get<1>(call_generics.at(i))).get_generic();
+			auto const& call_generic_type = type_pool_.at(std::get<1>(call_generics.at(i)));
 
 			auto satisfies = satisfies_trait_constraint(
-				get_all_constraints(call_generic),
+				call_generic_type.is_generic() ? get_all_constraints(call_generic_type.get_generic())
+							       : get_implemented_traits(call_generic_type),
 				function_generic.get_generic().declared_constraints,
 				generic_map
 			);
@@ -1617,6 +1618,7 @@ void Resolver::constrain_candidate(UndecidedOverload& undecided_overload) {
 	}
 
 	for (size_t i = 0; i < call.generics.size(); ++i) {
+		if (!type_pool_.at(std::get<1>(call.generics.at(i))).is_generic()) continue;
 		auto& call_generic      = type_pool_.at(std::get<1>(call.generics.at(i))).get_generic();
 		auto& prototype_generic = type_pool_.at(std::get<1>(prototype.generics.at(i))).get_generic();
 
@@ -3406,10 +3408,11 @@ bool Resolver::specialize_overload(UndecidedOverload& undecided_overload) {
 			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
 			assert(!function_generic.is_bottom());
 
-			auto const& call_generic = type_pool_.at(std::get<1>(call_generics.at(i))).get_generic();
+			auto const& call_generic_type = type_pool_.at(std::get<1>(call_generics.at(i)));
 
 			auto satisfies = satisfies_trait_constraint(
-				get_all_constraints(call_generic),
+				call_generic_type.is_generic() ? get_all_constraints(call_generic_type.get_generic())
+							       : get_implemented_traits(call_generic_type),
 				function_generic.get_generic().declared_constraints,
 				generic_map
 			);
