@@ -3134,14 +3134,26 @@ void Resolver::constrain_candidate(AST::Identifier* identifier, TypeInfo::Named:
 	auto& generics          = candidate.generics;
 	auto& declared_generics = struct_->generic_declaration.value().generics;
 
-	// add trait constraints from the struct generics
 	assert(generics.size() == declared_generics.size()
 	       && declared_generics.size() == instantiated_struct.generic_declaration.size());
+
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+	for (size_t i = 0; i < generics.size(); ++i) {
+		generic_map.insert_or_assign(instantiated_struct.generic_declaration.at(i), generics.at(i));
+	}
+
+	// add trait constraints from the struct generics
 	for (size_t i = 0; i < generics.size(); ++i) {
 		ensure_has_constraints(declared_generics.at(i), get_single_symbol(candidate.name).file_id);
 		auto generic    = instantiated_struct.generic_declaration.at(i);
 		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value()[0]);
-		unify(generified, generic, get_type_file_id(generified));
+
+		for (auto const& constraint : type_pool_.at(generic).get_generic().declared_constraints) {
+			type_pool_.at(generified)
+				.get_generic()
+				.imposed_constraints.push_back(instantiate_constraint(constraint, generic_map));
+		}
+
 		generics.at(i) = generified;
 	}
 }
