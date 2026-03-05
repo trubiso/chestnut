@@ -2214,8 +2214,8 @@ bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
 	}
 
 	// if we do satisfy those constraints, we can now unify the imposed type constraints with each other
-	type_pool_.at(id) = TypeInfo::make_same_as(type_constraints.at(0).type);
-	for (size_t i = 1; i < type_constraints.size(); ++i) {
+	type_pool_.at(id) = TypeInfo::make_unknown();
+	for (size_t i = 0; i < type_constraints.size(); ++i) {
 		unify(id, type_constraints[i].type, get_type_file_id(id));
 	}
 	return true;
