@@ -1557,29 +1557,36 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 
 	// if only one is unifiable, we've finally found the one and only function
 	assert(undecided_overload.candidates.size() == 1);
-	TypeInfo::ID call_id = register_type(
-		std::move(undecided_overload.candidates.at(0).call_type),
-		undecided_overload.span,
-		undecided_overload.file_id
-	);
-	unify(call_id, undecided_overload.candidates.at(0).function, undecided_overload.file_id);
+
+	constrain_candidate(undecided_overload);
+
+	return true;
+}
+
+void Resolver::constrain_candidate(UndecidedOverload& undecided_overload) {
+	assert(undecided_overload.candidates.size() == 1);
+	auto& candidate = undecided_overload.candidates.at(0);
+
+	TypeInfo::ID call_id
+		= register_type(std::move(candidate.call_type), undecided_overload.span, undecided_overload.file_id);
+
+	// now we must constrain the candidate
+	unify(call_id, candidate.function, undecided_overload.file_id);
 
 	// if we're calling an identifier, let's finish resolving it
 	if (undecided_overload.identifier.has_value()) {
-		if (!type_symbol_mapping_.at(undecided_overload.candidates.at(0).function).has_value()) {
+		if (!type_symbol_mapping_.at(candidate.function).has_value()) {
 			// TODO: think about when this would ever happen
 			std::cout << "error: there is no value for this call ID: ";
-			debug_print_type(undecided_overload.candidates.at(0).function);
+			debug_print_type(candidate.function);
 			std::cout << std::endl;
 		} else {
 			undecided_overload.identifier.value()->id
-				= {type_symbol_mapping_.at(undecided_overload.candidates.at(0).function).value()};
+				= {type_symbol_mapping_.at(candidate.function).value()};
 		}
 	}
 
 	undecided_overload.function_call->call_type = {call_id};
-
-	return true;
 }
 
 bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {

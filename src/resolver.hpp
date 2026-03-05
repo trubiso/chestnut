@@ -799,6 +799,8 @@ private:
 	/// Turns a generic declaration constraint into a type inference engine trait constraint. Returns null if an error happens.
 	std::optional<TypeInfo::Generic::TraitConstraint> generate_constraint(AST::GenericDeclaration::Generic::Constraint&, FileContext::ID);
 
+	/// Constrains a single function overload candidate (the undecided overload must have only 1 candidate!).
+	void constrain_candidate(UndecidedOverload&);
 	/// Adds the correct trait constraints to a named type's generics according to the provided candidate.
 	void constrain_candidate(AST::Identifier*, TypeInfo::Named::Candidate&);
 	/// Adds generic constraints to all single-candidate named types' generics. It's necessary to do this,
