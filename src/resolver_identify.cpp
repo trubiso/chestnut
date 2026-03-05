@@ -462,20 +462,27 @@ Spanned<AST::Identifier> Resolver::make_built_in_identifier(std::string name) {
 }
 
 void Resolver::identify_built_in_traits() {
+	// we have to use this vector because the brace initializer loves copying
+	std::vector<AST::Trait::Constraint> constraints {};
+
 	auto int_id = make_built_in_identifier("int");
 	built_in_traits_.insert_or_assign("int", AST::Trait {int_id, {}, {}});
 	push_built_in_trait(int_id.value);
 
 	auto uint_id = make_built_in_identifier("uint");
-	built_in_traits_.insert_or_assign("uint", AST::Trait {uint_id, {}, {}});
+	constraints  = std::vector<AST::Trait::Constraint> {};
+	constraints.push_back(AST::Trait::Constraint {int_id, {}});
+	built_in_traits_.insert_or_assign("uint", AST::Trait {uint_id, {}, std::move(constraints)});
 	push_built_in_trait(uint_id.value, {int_id.value.id.value()[0]});
 
 	auto sint_id = make_built_in_identifier("sint");
-	built_in_traits_.insert_or_assign("sint", AST::Trait {sint_id, {}, {}});
+	constraints  = std::vector<AST::Trait::Constraint> {};
+	constraints.push_back(AST::Trait::Constraint {int_id, {}});
+	built_in_traits_.insert_or_assign("sint", AST::Trait {sint_id, {}, std::move(constraints)});
 	push_built_in_trait(sint_id.value, {int_id.value.id.value()[0]});
 
 	auto float_id = make_built_in_identifier("float");
-	built_in_traits_.insert_or_assign("float", AST::Trait {int_id, {}, {}});
+	built_in_traits_.insert_or_assign("float", AST::Trait {float_id, {}, {}});
 	push_built_in_trait(float_id.value);
 }
 
