@@ -1882,7 +1882,7 @@ std::optional<bool> Resolver::check_bound_equality(
 
 Resolver::TypeInfo::Generic::TraitConstraint Resolver::get_built_in_trait(std::string&& name) const {
 	assert(built_in_traits_.contains(name));
-	return {built_in_traits_.at("float").name.value.id.value().at(0), {}};
+	return {built_in_traits_.at(name).name.value.id.value().at(0), {}};
 }
 
 std::vector<Resolver::TypeInfo::Generic::TraitConstraint> Resolver::get_implemented_traits(TypeInfo const& type) const {
