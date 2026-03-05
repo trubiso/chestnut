@@ -416,6 +416,8 @@ private:
 	void populate_module_table();
 
 	// === IDENTIFICATION ===
+	
+	std::unordered_map<std::string, AST::Trait> built_in_traits_ {};
 
 	/// Produces a single ID for the identifier and sets it; the caller must register this ID in the symbol pool.
 	void identify(AST::Identifier&);
@@ -443,6 +445,12 @@ private:
 	void identify_built_in_binary_comparison_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
 	/// Identifies all built-in operators.
 	void identify_built_in_operators();
+	/// Pushes a particular built-in trait to the symbol pool.
+	void push_built_in_trait(AST::Identifier const&, std::vector<AST::SymbolID>&& constraints = {});
+	/// Makes a built-in identifier with a stub span and the provided name.
+	Spanned<AST::Identifier> make_built_in_identifier(std::string name);
+	/// Identifies all built-in traits.
+	void identify_built_in_traits();
 	/// Populates the label map given a statement.
 	void identify_populate_labels(
 		Spanned<AST::Statement>&,

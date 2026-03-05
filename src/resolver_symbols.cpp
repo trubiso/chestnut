@@ -75,6 +75,12 @@ void Resolver::resolve(
 
 	// unqualified identifiers get resolved differently
 	if (identifier.is_unqualified()) {
+		// happy path for built-in traits
+		if (built_in_traits_.contains(identifier.name())) {
+			identifier.id = built_in_traits_.at(identifier.name()).name.value.id;
+			return;
+		}
+
 		Scope const* traversing_scope = &scope;
 		while (traversing_scope != nullptr) {
 			if (traversing_scope->symbols.contains(identifier.name())) {

@@ -428,6 +428,57 @@ void Resolver::identify_built_in_operators() {
 	);
 }
 
+void Resolver::push_built_in_trait(AST::Identifier const& identifier, std::vector<AST::SymbolID>&& constraints) {
+	std::vector<TypeInfo::Generic::TraitConstraint> trait_constraints {};
+	trait_constraints.reserve(constraints.size());
+	std::transform(
+		constraints.cbegin(),
+		constraints.cend(),
+		std::back_inserter(trait_constraints),
+		[](AST::SymbolID id) { return TypeInfo::Generic::TraitConstraint {id, {}}; }
+	);
+
+	Span            span    = Span::zero();
+	FileContext::ID file_id = FileContext::BUILT_IN_ID;
+	symbol_pool_.push_back(
+		Symbol {identifier.id.value().at(0),
+	                file_id,
+	                span,
+	                identifier.name(),
+	                &built_in_traits_.at(identifier.name()),
+	                0,
+	                false,
+	                true,
+	                {},
+	                std::move(trait_constraints)}
+	);
+}
+
+Spanned<AST::Identifier> Resolver::make_built_in_identifier(std::string name) {
+	AST::SymbolID   id = symbol_next();
+	AST::Identifier identifier({Span::zero(), std::move(name)});
+	identifier.id = {id};
+	return {Span::zero(), identifier};
+}
+
+void Resolver::identify_built_in_traits() {
+	auto int_id = make_built_in_identifier("int");
+	built_in_traits_.insert_or_assign("int", AST::Trait {int_id, {}, {}});
+	push_built_in_trait(int_id.value);
+
+	auto uint_id = make_built_in_identifier("uint");
+	built_in_traits_.insert_or_assign("uint", AST::Trait {uint_id, {}, {}});
+	push_built_in_trait(uint_id.value, {int_id.value.id.value()[0]});
+
+	auto sint_id = make_built_in_identifier("sint");
+	built_in_traits_.insert_or_assign("sint", AST::Trait {sint_id, {}, {}});
+	push_built_in_trait(sint_id.value, {int_id.value.id.value()[0]});
+
+	auto float_id = make_built_in_identifier("float");
+	built_in_traits_.insert_or_assign("float", AST::Trait {int_id, {}, {}});
+	push_built_in_trait(float_id.value);
+}
+
 void Resolver::identify_populate_labels(
 	Spanned<AST::Statement>&                                             statement,
 	std::unordered_map<std::string, Spanned<AST::Statement::Label::ID>>& labels,

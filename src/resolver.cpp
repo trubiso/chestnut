@@ -4,6 +4,7 @@
 
 std::vector<IR::Module> Resolver::resolve(bool print_ir) {
 	// identification
+	identify_built_in_traits();
 	identify_built_in_operators();
 	desugar_control_flow();  // desugar
 	identify_labels();
