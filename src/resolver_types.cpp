@@ -1460,14 +1460,15 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 	// filter the candidates
 	std::vector<UndecidedOverload::Candidate> new_candidates {};
 	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
-		if (!can_unify(candidate.call_type, candidate.function)) {
+		auto const& call_type = type_pool_.at(candidate.call_id);
+		if (!can_unify(call_type, candidate.function)) {
 			// TODO: specify how it is incompatible?
 			std::stringstream text {};
 			text
 				<< "function signature ("
 				<< get_type_name(candidate.function)
 				<< ") is incompatible with the function call signature ("
-				<< get_type_name(candidate.call_type)
+				<< get_type_name(call_type)
 				<< ")";
 			undecided_overload.rejections.push_back(
 				Diagnostic::Sample(
@@ -1484,7 +1485,7 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 
 		// also check trait bounds
 		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
-		auto const& call_generics     = candidate.call_type.get_function().generics;
+		auto const& call_generics     = call_type.get_function().generics;
 		assert(function_generics.size() == call_generics.size());
 		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
 		for (size_t i = 0; i < call_generics.size(); ++i) {
@@ -1575,15 +1576,12 @@ void Resolver::constrain_candidate(UndecidedOverload& undecided_overload) {
 	assert(undecided_overload.candidates.size() == 1);
 	auto& candidate = undecided_overload.candidates.at(0);
 
-	TypeInfo::ID call_id
-		= register_type(std::move(candidate.call_type), undecided_overload.span, undecided_overload.file_id);
-
 	// now we must constrain the candidate
-	FileContext::ID file_id = get_type_file_id(call_id);
+	FileContext::ID file_id = get_type_file_id(candidate.call_id);
 
-	assert(type_pool_.at(call_id).is_function() && type_pool_.at(candidate.function).is_function());
+	assert(type_pool_.at(candidate.call_id).is_function() && type_pool_.at(candidate.function).is_function());
 
-	TypeInfo::Function &call      = type_pool_.at(call_id).get_function(),
+	TypeInfo::Function &call      = type_pool_.at(candidate.call_id).get_function(),
 			   &prototype = type_pool_.at(candidate.function).get_function();
 
 	assert(call.arguments.size() == prototype.arguments.size());
@@ -1630,7 +1628,7 @@ void Resolver::constrain_candidate(UndecidedOverload& undecided_overload) {
 		}
 	}
 
-	undecided_overload.function_call->call_type = {call_id};
+	undecided_overload.function_call->call_type = {candidate.call_id};
 }
 
 bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
@@ -2814,6 +2812,13 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			}
 		}
 
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> temp_map {};
+		for (size_t i = 0; i < provided_generics; ++i) {
+			temp_map.insert_or_assign(std::get<1>(function_generics.at(i)), std::get<1>(generics.at(i)));
+		}
+
+		TypeInfo::ID temp_type = instantiate_type(callable_id, temp_map);
+
 		// we store the expression type as the return type so it automatically gets inferred!
 		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
 		TypeInfo::ID callable_type = instantiate_type(callable_id, generic_map);
@@ -2826,7 +2831,9 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		TypeInfo function_call_type = TypeInfo::make_function(
 			TypeInfo::Function {std::move(arguments), std::move(generics), expr_type}
 		);
-		UndecidedOverload::Candidate candidate {callable_type, function_call_type};
+		TypeInfo::ID call_id = register_type(std::move(function_call_type), span, file_id);
+		unify(call_id, temp_type, file_id);
+		UndecidedOverload::Candidate candidate {callable_type, call_id};
 		candidates.push_back(std::move(candidate));
 	}
 
@@ -3363,7 +3370,7 @@ bool Resolver::specialize_overload(UndecidedOverload& undecided_overload) {
 	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
 		trait_counts.push_back({});
 		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
-		auto const& call_generics     = candidate.call_type.get_function().generics;
+		auto const& call_generics     = type_pool_.at(candidate.call_id).get_function().generics;
 		assert(function_generics.size() == call_generics.size());
 		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
 		for (size_t i = 0; i < call_generics.size(); ++i) {
@@ -3524,7 +3531,7 @@ void Resolver::decide_remaining_types() {
 	bool changes_made = false;
 	for (UndecidedOverload& undecided_overload : undecided_overloads) {
 		for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
-			for (auto& [_, id] : candidate.call_type.get_function().arguments) {
+			for (auto& [_, id] : type_pool_.at(candidate.call_id).get_function().arguments) {
 				auto& type = type_pool_.at(id);
 				if (type.is_partial_integer()) {
 					auto& partial_integer = type.get_partial_integer();

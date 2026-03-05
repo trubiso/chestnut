@@ -586,7 +586,7 @@ private:
 
 		struct Candidate {
 			TypeInfo::ID function;
-			TypeInfo call_type;
+			TypeInfo::ID call_id;
 		};
 
 		std::vector<Candidate>          candidates;
