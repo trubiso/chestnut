@@ -3124,11 +3124,10 @@ Resolver::TypeInfo::ID Resolver::generify_type(TypeInfo::ID id, AST::SymbolID na
 	}
 	TypeInfo::ID generified = register_type(
 		TypeInfo::make_generic(
-			TypeInfo::Generic {
-				name,
-				get_implemented_traits(type_pool_.at(id)),
-				{TypeInfo::Generic::TypeConstraint {id}}
-			}
+			(type_pool_.at(id).is_unknown())
+				? TypeInfo::Generic {name, {}, {}}
+				: TypeInfo::
+					  Generic {name, get_implemented_traits(type_pool_.at(id)), {TypeInfo::Generic::TypeConstraint {id}}}
 		),
 		get_type_span(id),
 		get_type_file_id(id)
