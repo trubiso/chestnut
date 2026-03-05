@@ -1,0 +1,19 @@
+trait A;
+
+trait U<X: A>: A;
+
+struct Obj<X: A, Y: A, Z: U<X>> {}
+struct Obj<X: A, Y: A, Z: U<Y>> {}
+
+func do<X: A, Y: A, Z: U<X>>() {}
+func do<X: A, Y: A, Z: U<Y>>() {}
+
+func test<P: A, Q: U<P>, R: A>() {
+	const good1: Obj<P, R, Q> = undefined;
+	const good2: Obj<R, P, Q> = undefined;
+	const bad: Obj<R, R, Q> = undefined;
+
+	do<P, R, Q>();
+	do<R, P, Q>();
+	do<R, R, Q>();
+}
