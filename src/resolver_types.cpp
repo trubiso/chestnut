@@ -1737,7 +1737,6 @@ Resolver::check_bound_equality_generic(TypeInfo const& generic, TypeInfo const& 
 
 	// the second set of traits comes from the declared traits of the other generic or the implemented traits
 	// otherwise
-	// TODO: maybe consolidate both cases into one and deal with the distinction in get_implemented_traits?
 	if (other.is_generic()) {
 		// we need the names to be equal for the generics to be equal
 		if (generic.get_generic().name != other.get_generic().name) return false;
@@ -1751,6 +1750,7 @@ Resolver::check_bound_equality_generic(TypeInfo const& generic, TypeInfo const& 
 		if (!maybe_b.has_value()) return std::nullopt;
 		b = std::move(maybe_b.value());
 	} else {
+		// FIXME: this should expand before reducing to unique!
 		auto maybe_b = reduce_to_unique(get_implemented_traits(other));
 		if (!maybe_b.has_value()) return std::nullopt;
 		b = std::move(maybe_b.value());
@@ -1880,8 +1880,25 @@ std::optional<bool> Resolver::check_bound_equality(
 	return true;
 }
 
-std::vector<Resolver::TypeInfo::Generic::TraitConstraint> Resolver::get_implemented_traits(TypeInfo const&) const {
-	// TODO: obtain implemented traits for type
+Resolver::TypeInfo::Generic::TraitConstraint Resolver::get_built_in_trait(std::string&& name) const {
+	assert(built_in_traits_.contains(name));
+	return {built_in_traits_.at("float").name.value.id.value().at(0), {}};
+}
+
+std::vector<Resolver::TypeInfo::Generic::TraitConstraint> Resolver::get_implemented_traits(TypeInfo const& type) const {
+	if (type.is_same_as()) {
+		if (type.get_same_as().ids.size() != 1) return {};
+		return get_implemented_traits(type_pool_.at(type.get_same_as().ids.at(0)));
+	}
+	if (type.is_partial_float() || type.is_known_float()) return {get_built_in_trait("float")};
+	if (type.is_partial_integer()) {
+		auto const& partial = type.get_partial_integer();
+		if (partial.signed_is_known) return {get_built_in_trait(partial.integer.is_signed() ? "sint" : "uint")};
+		return {get_built_in_trait("int")};
+	}
+	if (type.is_known_integer())
+		return {get_built_in_trait(type.get_known_integer().integer.is_signed() ? "sint" : "uint")};
+
 	return {};
 }
 

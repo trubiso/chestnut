@@ -762,6 +762,8 @@ private:
 	/// Returns whether two trait constraints are equal if they are fully known.
 	std::optional<bool> check_bound_equality(TypeInfo::Generic::TraitConstraint const&, TypeInfo::Generic::TraitConstraint const&, BoundEqualityMode) const;
 
+	/// Returns a built-in trait as a constraint.
+	TypeInfo::Generic::TraitConstraint get_built_in_trait(std::string&&) const;
 	/// Returns the implemented traits for a type.
 	std::vector<TypeInfo::Generic::TraitConstraint> get_implemented_traits(TypeInfo const&) const;
 	/// Returns whether a concrete type satisfies a set of trait constraints.
