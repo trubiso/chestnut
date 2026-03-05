@@ -2729,17 +2729,20 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		assert(function_generics.size() == provided_generics);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
 		generics.reserve(provided_generics);
-		std::transform(
-			ordered_generics.cbegin(),
-			ordered_generics.cend(),
-			std::back_inserter(generics),
-			[](TypeInfo::ID generic) { return std::tuple {std::nullopt, generic}; }
-		);
-		for (size_t i = generics.size(); i < function_generics.size(); ++i) {
-			std::optional<std::string> name = std::get<0>(function_generics.at(i));
-			// if it didn't have a name, it couldn't be a labeled generic
-			assert(name.has_value());
-			generics.push_back({name, labeled_generics.at(name.value())});
+		auto const& original_function
+			= *std::get<AST::Function*>(symbol_pool_.at(type_symbol_mapping_.at(callable_id).value()).item);
+		for (size_t i = 0; i < provided_generics; ++i) {
+			auto id = original_function.generic_declaration.value().generics.at(i).name.value.id.value().at(
+				0
+			);
+			if (i < ordered_generics.size()) {
+				generics.emplace_back(std::nullopt, generify_type(ordered_generics.at(i), id));
+			} else {
+				std::optional<std::string> name = std::get<0>(function_generics.at(i));
+				// if it didn't have a name, it couldn't be a labeled generic
+				assert(name.has_value());
+				generics.emplace_back(name, generify_type(labeled_generics.at(name.value()), id));
+			}
 		}
 
 		// we store the expression type as the return type so it automatically gets inferred!
@@ -2747,7 +2750,6 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		TypeInfo::ID callable_type = instantiate_type(callable_id, generic_map);
 		// let's replace the type spans so the diagnostics are a bit nicer :-)
 		// TODO: this is a bit of a silly solution isn't it
-		// TODO: don't instantiate to avoid throwing extra diagnostics
 		for (size_t i = 0; i < generics.size(); ++i) {
 			type_span_pool_.at(std::get<1>(type_pool_.at(callable_type).get_function().generics.at(i)))
 				= type_span_pool_.at(std::get<1>(generics.at(i)));
@@ -3015,6 +3017,11 @@ void Resolver::infer(AST::Module& module, FileContext::ID file_id) {
 
 Resolver::TypeInfo::ID Resolver::generify_type(TypeInfo::ID id, AST::SymbolID name) {
 	if (type_pool_.at(id).is_generic()) return id;
+	if (type_pool_.at(id).is_same_as()) {
+		if (type_pool_.at(id).get_same_as().ids.size() != 1)
+			return register_type(TypeInfo::make_bottom(), get_type_span(id), get_type_file_id(id));
+		return generify_type(type_pool_.at(id).get_same_as().ids.at(0), name);
+	}
 	TypeInfo::ID generified = register_type(
 		TypeInfo::make_generic(TypeInfo::Generic {name, {}, {TypeInfo::Generic::TypeConstraint {id}}}),
 		get_type_span(id),
