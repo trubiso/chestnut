@@ -389,13 +389,8 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		assert(function_generics.size() == provided_generics);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
 		generics.reserve(provided_generics);
-		// FIXME: this breaks with built-in functions!
-		auto const& original_function
-			= *std::get<AST::Function*>(symbol_pool_.at(type_symbol_mapping_.at(callable_id).value()).item);
 		for (size_t i = 0; i < provided_generics; ++i) {
-			auto id = original_function.generic_declaration.value().generics.at(i).name.value.id.value().at(
-				0
-			);
+			auto id = type_pool_.at(std::get<1>(function_generics.at(i))).get_generic().name;
 			if (i < ordered_generics.size()) {
 				generics.emplace_back(std::nullopt, generify_type(ordered_generics.at(i), id));
 			} else {
@@ -426,6 +421,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			TypeInfo::Function {std::move(arguments), std::move(generics), expr_type}
 		);
 		TypeInfo::ID call_id = register_type(std::move(function_call_type), span, file_id);
+		// FIXME: unifying this early breaks if the candidate isn't unifiable. we should filter before doing this!
 		unify(call_id, temp_type, file_id);
 		UndecidedOverload::Candidate candidate {callable_type, call_id};
 		candidates.push_back(std::move(candidate));
