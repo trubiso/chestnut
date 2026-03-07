@@ -40,21 +40,23 @@ Resolver::copy_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::
 	}
 
 	if (type.is_function()) {
+		auto const& function = type.get_function();
+
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_generics {};
-		new_generics.reserve(type.get_function().generics.size());
+		new_generics.reserve(function.generics.size());
 		std::transform(
-			type.get_function().generics.cbegin(),
-			type.get_function().generics.cend(),
+			function.generics.cbegin(),
+			function.generics.cend(),
 			std::back_inserter(new_generics),
 			[this, &generic_map](auto const& generic) {
 				return std::tuple {std::get<0>(generic), copy_type(std::get<1>(generic), generic_map)};
 			}
 		);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_arguments {};
-		new_arguments.reserve(type.get_function().arguments.size());
+		new_arguments.reserve(function.arguments.size());
 		std::transform(
-			type.get_function().arguments.cbegin(),
-			type.get_function().arguments.cend(),
+			function.arguments.cbegin(),
+			function.arguments.cend(),
 			std::back_inserter(new_arguments),
 			[this, &generic_map](
 				auto const& argument
@@ -65,7 +67,7 @@ Resolver::copy_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::
 				TypeInfo::Function {
 					std::move(new_arguments),
 					std::move(new_generics),
-					copy_type(type.get_function().return_, generic_map)
+					copy_type(function.return_, generic_map)
 				}
 			),
 			span,
