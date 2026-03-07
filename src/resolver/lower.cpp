@@ -927,6 +927,8 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	if (type_pool_.at(statement.value.get_expression().type.value()).is_bottom()) return {};
 	auto expression = lower_value(statement.value.get_expression(), statement.span, basic_blocks, file_id);
 	if (!expression.value.is_function_call()) {
+		if (expression.value.is_atom() && expression.value.get_atom().is_error()) return {};
+
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::warning(
 				"expression statement is not a function call",
