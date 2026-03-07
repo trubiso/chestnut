@@ -176,7 +176,6 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		)
 	);
 	// TODO: collapse these 2 for loops into one
-	// TODO: generic count, generic labels
 	for (TypeInfo::ID callable_id : callable) {
 		assert(type_pool_.at(callable_id).is_function());
 		auto const& function_arguments     = type_pool_.at(callable_id).get_function().arguments;
@@ -401,13 +400,6 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			}
 		}
 
-		std::unordered_map<TypeInfo::ID, TypeInfo::ID> temp_map {};
-		for (size_t i = 0; i < provided_generics; ++i) {
-			temp_map.insert_or_assign(std::get<1>(function_generics.at(i)), std::get<1>(generics.at(i)));
-		}
-
-		TypeInfo::ID temp_type = instantiate_type(callable_id, temp_map);
-
 		// we store the expression type as the return type so it automatically gets inferred!
 		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
 		TypeInfo::ID callable_type = instantiate_type(callable_id, generic_map);
@@ -421,8 +413,6 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			TypeInfo::Function {std::move(arguments), std::move(generics), expr_type}
 		);
 		TypeInfo::ID call_id = register_type(std::move(function_call_type), span, file_id);
-		// FIXME: unifying this early breaks if the candidate isn't unifiable. we should filter before doing this!
-		unify(call_id, temp_type, file_id);
 		UndecidedOverload::Candidate candidate {callable_type, call_id};
 		candidates.push_back(std::move(candidate));
 	}
