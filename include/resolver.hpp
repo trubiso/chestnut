@@ -645,6 +645,13 @@ private:
 	/// Registers a type in the type pool and returns its ID.
 	TypeInfo::ID register_type(TypeInfo&&, Span, FileContext::ID, std::optional<AST::SymbolID> = {});
 
+	/// Copies a type, walking it recursively.
+	TypeInfo::ID copy_type(TypeInfo::ID);
+	/// Copies a type, walking it recursively.
+	TypeInfo::ID copy_type(TypeInfo::ID, std::unordered_map<TypeInfo::ID, TypeInfo::ID>& generic_map);
+	/// Copies a vector of types, walking them recursively.
+	std::vector<TypeInfo::ID> copy_types(std::vector<TypeInfo::ID> const&, std::unordered_map<TypeInfo::ID, TypeInfo::ID>& generic_map);
+
 	TypeInfo::Struct instantiate_struct(AST::Struct const*);
 	/// Instantiates a type, that is, clones all of the generics within it.
 	TypeInfo::ID instantiate_type(TypeInfo::ID, std::unordered_map<TypeInfo::ID, TypeInfo::ID>& generic_map);

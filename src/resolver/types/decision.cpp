@@ -10,15 +10,14 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 	// filter the candidates
 	std::vector<UndecidedOverload::Candidate> new_candidates {};
 	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
-		auto const& call_type = type_pool_.at(candidate.call_id);
-		if (!can_unify(call_type, candidate.function)) {
+		if (!can_unify(candidate.call_id, candidate.function)) {
 			// TODO: specify how it is incompatible?
 			std::stringstream text {};
 			text
 				<< "function signature ("
 				<< get_type_name(candidate.function)
 				<< ") is incompatible with the function call signature ("
-				<< get_type_name(call_type)
+				<< get_type_name(candidate.call_id)
 				<< ")";
 			undecided_overload.rejections.push_back(
 				Diagnostic::Sample(
@@ -32,6 +31,12 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 			);
 			continue;
 		}
+
+		// copy and unify the call type before proceeding
+		// TODO: we need some cleanup after lol
+		TypeInfo::ID copied_call_id = copy_type(candidate.call_id);
+		unify(copied_call_id, candidate.function, get_type_file_id(copied_call_id));
+		auto const& call_type = type_pool_.at(copied_call_id);
 
 		// also check trait bounds
 		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
