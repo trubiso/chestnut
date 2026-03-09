@@ -202,83 +202,115 @@ void Resolver::identify_module_items() {
 	for (ParsedFile& file : parsed_files) { identify(file.module, true, file.file_id); }
 }
 
-void Resolver::identify_built_in_operator(IR::BuiltInFunction function, Token::Symbol operator_, TypeInfo&& type) {
+void Resolver::identify_built_in_operator(IR::BuiltInFunction function, Token::Symbol operator_, TypeInfo::ID type) {
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
 	AST::SymbolID id = symbol_next();
 
 	symbol_pool_.push_back(
-		Symbol {id,
-	                file_id,
-	                span,
-	                get_variant_name(operator_),
-	                function,
-	                register_type(std::move(type), span, file_id, id),
-	                false,
-	                true,
-	                {}}
+		Symbol {id, file_id, span, get_variant_name(operator_), function, type, false, true, {}}
 	);
 }
 
 void Resolver::identify_built_in_unary_operator(
 	IR::BuiltInFunction function,
 	Token::Symbol       operator_,
-	TypeInfo&&          type
+	TypeInfo::ID        type,
+	bool                generic
 ) {
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
-	TypeInfo::ID type_id   = register_type(std::move(type), span, file_id);
-	TypeInfo function_type = TypeInfo::make_function(TypeInfo::Function {{{std::nullopt, type_id}}, {}, type_id});
-	identify_built_in_operator(function, operator_, std::move(function_type));
+	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	if (generic) generics.emplace_back(std::nullopt, type);
+
+	TypeInfo function_type
+		= TypeInfo::make_function(TypeInfo::Function {{{std::nullopt, type}}, std::move(generics), type});
+	identify_built_in_operator(function, operator_, register_type(std::move(function_type), span, file_id));
 }
 
 void Resolver::identify_built_in_binary_operator(
 	IR::BuiltInFunction function,
 	Token::Symbol       operator_,
-	TypeInfo&&          type
+	TypeInfo::ID        type,
+	bool                generic
 ) {
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
-	TypeInfo::ID type_id       = register_type(std::move(type), span, file_id);
-	TypeInfo     function_type = TypeInfo::make_function(
-                TypeInfo::Function {
-			    {{std::nullopt, type_id}, {std::nullopt, type_id}},
-			    {},
-                        type_id
+	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	if (generic) generics.emplace_back(std::nullopt, type);
+
+	TypeInfo function_type = TypeInfo::make_function(
+		TypeInfo::Function {
+			{{std::nullopt, type}, {std::nullopt, type}},
+			std::move(generics),
+			type
         }
-        );
-	identify_built_in_operator(function, operator_, std::move(function_type));
+	);
+	identify_built_in_operator(function, operator_, register_type(std::move(function_type), span, file_id));
 }
 
 void Resolver::identify_built_in_binary_comparison_operator(
 	IR::BuiltInFunction function,
 	Token::Symbol       operator_,
-	TypeInfo&&          type
+	TypeInfo::ID        type,
+	bool                generic
 ) {
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
-	TypeInfo::ID type_id       = register_type(std::move(type), span, file_id);
+	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	if (generic) generics.emplace_back(std::nullopt, type);
+
 	TypeInfo::ID return_id     = register_type(TypeInfo::make_known_bool(), span, file_id);
 	TypeInfo     function_type = TypeInfo::make_function(
                 TypeInfo::Function {
-			    {{std::nullopt, type_id}, {std::nullopt, type_id}},
-			    {},
+			    {{std::nullopt, type}, {std::nullopt, type}},
+                        std::move(generics),
                         return_id
         }
         );
-	identify_built_in_operator(function, operator_, std::move(function_type));
+	identify_built_in_operator(function, operator_, register_type(std::move(function_type), span, file_id));
+}
+
+Resolver::TypeInfo::ID Resolver::create_built_in_generic(std::string&& name, std::string&& trait_bound) {
+	Span            span    = Span::zero();
+	FileContext::ID file_id = FileContext::BUILT_IN_ID;
+
+	AST::SymbolID trait_symbol = built_in_traits_.at(trait_bound).name.value.id.value().at(0);
+	AST::SymbolID symbol_id    = symbol_next();
+
+	TypeInfo::ID type_id = register_type(
+		TypeInfo::make_generic(
+			TypeInfo::Generic {symbol_id, {TypeInfo::Generic::TraitConstraint {trait_symbol, {}}}, {}}
+		),
+		span,
+		file_id
+	);
+
+	symbol_pool_.push_back(
+		Symbol {symbol_id,
+	                file_id,
+	                span,
+	                std::move(name),
+	                Generic {},
+	                type_id,
+	                false,
+	                false,
+	                {},
+	                symbol_pool_.at(trait_symbol).trait_constraints}
+	);
+
+	return type_id;
 }
 
 void Resolver::identify_built_in_operators() {
-	// TODO: implement the integer operators for all kinds of integers through generics, once those are a thing. for
-	// now, we will only implement them for 8, 16, 32, 64.
+	Span            span    = Span::zero();
+	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
 	// identify plus, minus, star, div for integers
-	std::vector<uint32_t> integer_sizes {8, 16, 32, 64};
 	// FIXME: clang-format goes crazy over this array
 	std::vector<std::tuple<Token::Symbol, std::tuple<IR::BuiltInFunction, IR::BuiltInFunction>>>
 		binary_integer_operators {
@@ -292,26 +324,9 @@ void Resolver::identify_built_in_operators() {
         };
 	for (auto [operator_, functions] : binary_integer_operators) {
 		auto [signed_, unsigned_] = functions;
-		for (uint32_t size : integer_sizes) {
-			identify_built_in_binary_operator(
-				unsigned_,
-				operator_,
-				TypeInfo::make_known_integer(
-					TypeInfo::KnownInteger {
-						AST::Type::Atom::Integer::with_width(size, false).value()
-					}
-				)
-			);
-			identify_built_in_binary_operator(
-				signed_,
-				operator_,
-				TypeInfo::make_known_integer(
-					TypeInfo::KnownInteger {
-						AST::Type::Atom::Integer::with_width(size, true).value()
-					}
-				)
-			);
-		}
+
+		identify_built_in_binary_operator(unsigned_, operator_, create_built_in_generic("I", "uint"), true);
+		identify_built_in_binary_operator(signed_, operator_, create_built_in_generic("I", "sint"), true);
 	}
 	// identify comparison for integers
 	std::vector<std::tuple<Token::Symbol, std::tuple<IR::BuiltInFunction, IR::BuiltInFunction>>>
@@ -325,36 +340,26 @@ void Resolver::identify_built_in_operators() {
         };
 	for (auto [operator_, functions] : binary_comparison_integer_operators) {
 		auto [signed_, unsigned_] = functions;
-		for (uint32_t size : integer_sizes) {
-			identify_built_in_binary_comparison_operator(
-				unsigned_,
-				operator_,
-				TypeInfo::make_known_integer(
-					TypeInfo::KnownInteger {
-						AST::Type::Atom::Integer::with_width(size, false).value()
-					}
-				)
-			);
-			identify_built_in_binary_comparison_operator(
-				signed_,
-				operator_,
-				TypeInfo::make_known_integer(
-					TypeInfo::KnownInteger {
-						AST::Type::Atom::Integer::with_width(size, true).value()
-					}
-				)
-			);
-		}
+		identify_built_in_binary_comparison_operator(
+			unsigned_,
+			operator_,
+			create_built_in_generic("I", "uint"),
+			true
+		);
+		identify_built_in_binary_comparison_operator(
+			signed_,
+			operator_,
+			create_built_in_generic("I", "sint"),
+			true
+		);
 	}
 	// identify unary negation for integers
-	for (uint32_t size : integer_sizes)
-		identify_built_in_unary_operator(
-			IR::BuiltInFunction::NegateSInteger,
-			Token::Symbol::Minus,
-			TypeInfo::make_known_integer(
-				TypeInfo::KnownInteger {AST::Type::Atom::Integer::with_width(size, true).value()}
-			)
-		);
+	identify_built_in_unary_operator(
+		IR::BuiltInFunction::NegateSInteger,
+		Token::Symbol::Minus,
+		create_built_in_generic("I", "sint"),
+		true
+	);
 
 	// identify plus, minus, star, div for floats
 	std::vector<std::tuple<Token::Symbol, IR::BuiltInFunction>> binary_float_operators {
@@ -363,19 +368,8 @@ void Resolver::identify_built_in_operators() {
 		{ Token::Symbol::Star, IR::BuiltInFunction::MultiplyFloats},
 		{  Token::Symbol::Div,   IR::BuiltInFunction::DivideFloats}
 	};
-	std::vector<AST::Type::Atom::Float::Width> widths {
-		AST::Type::Atom::Float::Width::F16,
-		AST::Type::Atom::Float::Width::F32,
-		AST::Type::Atom::Float::Width::F64,
-		AST::Type::Atom::Float::Width::F128
-	};
 	for (auto [operator_, function] : binary_float_operators)
-		for (auto width : widths)
-			identify_built_in_binary_operator(
-				function,
-				operator_,
-				TypeInfo::make_known_float(TypeInfo::KnownFloat {width})
-			);
+		identify_built_in_binary_operator(function, operator_, create_built_in_generic("F", "float"), true);
 	// identify comparison for floats
 	std::vector<std::tuple<Token::Symbol, IR::BuiltInFunction>> binary_comparison_float_operators {
 		{Token::Symbol::EqEq, IR::BuiltInFunction::EqFloats},
@@ -386,45 +380,45 @@ void Resolver::identify_built_in_operators() {
 		{  Token::Symbol::Le, IR::BuiltInFunction::LeFloats},
 	};
 	for (auto [operator_, function] : binary_comparison_float_operators)
-		for (auto width : widths)
-			identify_built_in_binary_comparison_operator(
-				function,
-				operator_,
-				TypeInfo::make_known_float(TypeInfo::KnownFloat {width})
-			);
-	// identify unary negation for floats
-	for (auto width : widths)
-		identify_built_in_unary_operator(
-			IR::BuiltInFunction::NegateFloat,
-			Token::Symbol::Minus,
-			TypeInfo::make_known_float(TypeInfo::KnownFloat {width})
+		identify_built_in_binary_comparison_operator(
+			function,
+			operator_,
+			create_built_in_generic("F", "float"),
+			true
 		);
+	// identify unary negation for floats
+	identify_built_in_unary_operator(
+		IR::BuiltInFunction::NegateFloat,
+		Token::Symbol::Minus,
+		create_built_in_generic("F", "float"),
+		true
+	);
 	// identify equality and inequality operator for char and bool
 	identify_built_in_binary_comparison_operator(
 		IR::BuiltInFunction::EqChars,
 		Token::Symbol::EqEq,
-		TypeInfo::make_known_char()
+		register_type(TypeInfo::make_known_char(), span, file_id)
 	);
 	identify_built_in_binary_comparison_operator(
 		IR::BuiltInFunction::EqBools,
 		Token::Symbol::EqEq,
-		TypeInfo::make_known_bool()
+		register_type(TypeInfo::make_known_bool(), span, file_id)
 	);
 	identify_built_in_binary_comparison_operator(
 		IR::BuiltInFunction::NeChars,
 		Token::Symbol::Ne,
-		TypeInfo::make_known_char()
+		register_type(TypeInfo::make_known_char(), span, file_id)
 	);
 	identify_built_in_binary_comparison_operator(
 		IR::BuiltInFunction::NeBools,
 		Token::Symbol::Ne,
-		TypeInfo::make_known_bool()
+		register_type(TypeInfo::make_known_bool(), span, file_id)
 	);
 	// identify unary boolean negation
 	identify_built_in_unary_operator(
 		IR::BuiltInFunction::NegateBool,
 		Token::Symbol::Bang,
-		TypeInfo::make_known_bool()
+		register_type(TypeInfo::make_known_bool(), span, file_id)
 	);
 }
 

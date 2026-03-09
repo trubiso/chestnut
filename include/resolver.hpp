@@ -431,18 +431,16 @@ private:
 	void identify(AST::Function&, bool exported, FileContext::ID);
 	/// Identifies all module items with an ID, but does not resolve aliases.
 	void identify_module_items();
+	/// Creates a generic type for a built-in operator.
+	TypeInfo::ID create_built_in_generic(std::string&& name, std::string&& trait_bound);
 	/// Identifies a built-in operator.
-	void identify_built_in_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	void identify_built_in_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo::ID);
 	/// Identifies a built-in unary operator which returns the same type as it takes in.
-	void identify_built_in_unary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
-	/// Identifies a built-in deref operator which takes a pointer to the provided type and returns the provided type.
-	void identify_built_in_unary_deref_operator(IR::BuiltInFunction, TypeInfo&&);
-	/// Identifies a built-in address operator which takes the provided type and returns a pointer to the provided type.
-	void identify_built_in_unary_address_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	void identify_built_in_unary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo::ID, bool generic = false);
 	/// Identifies a built-in binary operator which returns the same type as it takes in.
-	void identify_built_in_binary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	void identify_built_in_binary_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo::ID, bool generic = false);
 	/// Identifies a built-in binary comparison operator (returning a boolean value).
-	void identify_built_in_binary_comparison_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo&&);
+	void identify_built_in_binary_comparison_operator(IR::BuiltInFunction, Token::Symbol, TypeInfo::ID, bool generic = false);
 	/// Identifies all built-in operators.
 	void identify_built_in_operators();
 	/// Pushes a particular built-in trait to the symbol pool.
