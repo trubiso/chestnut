@@ -18,6 +18,13 @@ Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candid
 
 	// let's bind the explicit generics
 	assert(call_function.generics.size() == function.generics.size());
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+	for (size_t i = 0; i < call_function.generics.size(); ++i) {
+		TypeInfo::ID generic_id          = std::get<1>(call_function.generics.at(i));
+		TypeInfo::ID function_generic_id = std::get<1>(function.generics.at(i));
+
+		generic_map.insert_or_assign(generic_id, function_generic_id);
+	}
 	for (size_t i = 0; i < call_function.generics.size(); ++i) {
 		TypeInfo::ID generic_id = std::get<1>(call_function.generics.at(i));
 		while (type_pool_.at(generic_id).is_same_as()) {
@@ -41,12 +48,11 @@ Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candid
 		if (type_pool_.at(generic_id).is_generic()) {
 			// if it's a generic, we can add its declared constraints here
 			auto const& declared_constraints = type_pool_.at(generic_id).get_generic().declared_constraints;
-			// TODO: instantiate them instead
-			std::copy(
-				declared_constraints.cbegin(),
-				declared_constraints.cend(),
-				std::back_inserter(function_generic.imposed_constraints)
-			);
+			for (auto const& constraint : declared_constraints) {
+				function_generic.imposed_constraints.push_back(
+					instantiate_constraint(constraint, generic_map)
+				);
+			}
 		} else {
 			// if it's just a type, we can add a type constraint
 			function_generic.imposed_constraints.push_back(TypeInfo::Generic::TypeConstraint {generic_id});
@@ -60,6 +66,7 @@ Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candid
 		TypeInfo::ID function_argument_id = std::get<1>(function.arguments.at(i));
 		assert(can_unify(call_argument_id, function_argument_id)
 		       && "somehow the functions became un-unifiable");
+		// FIXME: this pushes the wrong generic constraints, because they are not instantiated
 		unify(call_argument_id, function_argument_id, get_type_file_id(call_argument_id));
 	}
 
