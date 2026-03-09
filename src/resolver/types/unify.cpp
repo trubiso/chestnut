@@ -27,14 +27,15 @@ Resolver::TypeInfo Resolver::unify_follow_references(
 	TypeInfo::ID    other,
 	TypeInfo::ID    same_as_origin,
 	TypeInfo::ID    other_origin,
-	FileContext::ID file_id
+	FileContext::ID file_id,
+	UnifyCtx&       ctx
 ) {
 	assert(type_pool_.at(same_as).is_same_as());
 	std::vector<TypeInfo::ID> const& ids = type_pool_.at(same_as).get_same_as().ids;
 
 	// if we have a single id, unify it as normal
 	if (ids.size() == 1) {
-		unify(ids[0], other, same_as_origin, other_origin, file_id);
+		unify(ids[0], other, same_as_origin, other_origin, file_id, ctx);
 		return TypeInfo::make_same_as(ids[0]);
 	}
 
@@ -64,7 +65,7 @@ Resolver::TypeInfo Resolver::unify_follow_references(
 	}
 
 	// unify all remaining ids and create a new SameAs
-	for (TypeInfo::ID new_id : new_ids) unify(new_id, other, same_as_origin, other_origin, file_id);
+	for (TypeInfo::ID new_id : new_ids) unify(new_id, other, same_as_origin, other_origin, file_id, ctx);
 	return TypeInfo::make_same_as(std::move(new_ids));
 }
 
@@ -107,7 +108,8 @@ void Resolver::unify_generics(
 	TypeInfo::ID    other,
 	TypeInfo::ID    generic_origin,
 	TypeInfo::ID    other_origin,
-	FileContext::ID file_id
+	FileContext::ID file_id,
+	UnifyCtx&       ctx
 ) {
 	// this is an infallible operation
 	assert(type_pool_.at(generic).is_generic());
@@ -123,10 +125,23 @@ void Resolver::unify_generics(
 	// generic
 	auto& b = type_pool_.at(other).get_generic();
 
-	// TODO: dedup
-	for (auto const& constraint : a.declared_constraints) { b.imposed_constraints.push_back(constraint); }
+	// we know that these two generics are the same now
+	if (ctx.leftward) {
+		ctx.generic_map.insert_or_assign(other, generic);
+	} else {
+		ctx.generic_map.insert_or_assign(generic, other);
+	}
 
-	for (auto const& constraint : b.declared_constraints) { a.imposed_constraints.push_back(constraint); }
+	// TODO: dedup
+	auto generic_map = ctx.generic_map;
+	for (auto const& constraint : a.declared_constraints) {
+		b.imposed_constraints.push_back(instantiate_constraint(constraint, generic_map));
+	}
+
+	generic_map = ctx.generic_map;
+	for (auto const& constraint : b.declared_constraints) {
+		a.imposed_constraints.push_back(instantiate_constraint(constraint, generic_map));
+	}
 }
 
 void Resolver::unify_member_access(
@@ -175,7 +190,8 @@ void Resolver::unify_functions(
 	TypeInfo::ID    other,
 	TypeInfo::ID    function_origin,
 	TypeInfo::ID    other_origin,
-	FileContext::ID file_id
+	FileContext::ID file_id,
+	UnifyCtx&       ctx
 ) {
 	// ensure they're both functions
 	assert(type_pool_.at(function).is_function());
@@ -216,7 +232,7 @@ void Resolver::unify_functions(
 
 		// unify the type first for diagnostics' sake
 		bool can_unify_type = can_unify(a_type, b_type);
-		unify(a_type, b_type, file_id);
+		unify(a_type, b_type, file_id, ctx);
 
 		bool a_has_name = a_name.has_value(), b_has_name = b_name.has_value();
 		if (a_has_name && b_has_name && (a_name.value() != b_name.value())) {
@@ -244,7 +260,7 @@ void Resolver::unify_functions(
 
 		// unify the type first for diagnostics' sake
 		bool can_unify_type = can_unify(a_type, b_type);
-		unify(a_type, b_type, file_id);
+		unify(a_type, b_type, file_id, ctx);
 
 		bool a_has_name = a_name.has_value(), b_has_name = b_name.has_value();
 		if (a_has_name && b_has_name && (a_name.value() != b_name.value())) {
@@ -266,7 +282,7 @@ void Resolver::unify_functions(
 	}
 
 	// unify the return types
-	unify(a_function.return_, b_function.return_, file_id);
+	unify(a_function.return_, b_function.return_, file_id, ctx);
 	return;
 }
 
@@ -275,7 +291,8 @@ void Resolver::unify_pointers(
 	TypeInfo::ID    other,
 	TypeInfo::ID    pointer_origin,
 	TypeInfo::ID    other_origin,
-	FileContext::ID file_id
+	FileContext::ID file_id,
+	UnifyCtx&       ctx
 ) {
 	assert(type_pool_.at(pointer).is_pointer());
 	if (!type_pool_.at(other).is_pointer()) {
@@ -296,7 +313,7 @@ void Resolver::unify_pointers(
 				&b_pointer = type_pool_.at(other).get_pointer();
 
 	// ensure they point to the same type
-	unify(a_pointer.pointee, b_pointer.pointee, pointer_origin, other_origin, file_id);
+	unify(a_pointer.pointee, b_pointer.pointee, pointer_origin, other_origin, file_id, ctx);
 
 	// ensure they are of the same mutability
 	if (a_pointer.mutable_ != b_pointer.mutable_) {
@@ -317,7 +334,8 @@ void Resolver::unify_named(
 	TypeInfo::ID    other,
 	TypeInfo::ID    named_origin,
 	TypeInfo::ID    other_origin,
-	FileContext::ID file_id
+	FileContext::ID file_id,
+	UnifyCtx&       ctx
 ) {
 	assert(type_pool_.at(named).is_named());
 	if (!type_pool_.at(other).is_named()) {
@@ -358,7 +376,7 @@ void Resolver::unify_named(
 		);
 		if (corresponding_candidate == b.candidates().cend()) continue;
 		for (size_t i = 0; i < candidate.generics.size(); ++i) {
-			unify(candidate.generics.at(i), corresponding_candidate->generics.at(i), file_id);
+			unify(candidate.generics.at(i), corresponding_candidate->generics.at(i), file_id, ctx);
 		}
 		common_candidates.push_back(std::move(candidate));
 	}
@@ -395,7 +413,8 @@ void Resolver::unify(
 	TypeInfo::ID    b_id,
 	TypeInfo::ID    a_origin,
 	TypeInfo::ID    b_origin,
-	FileContext::ID file_id
+	FileContext::ID file_id,
+	UnifyCtx&       ctx
 ) {
 	// safeguard
 	if (a_id == b_id) return;
@@ -404,11 +423,11 @@ void Resolver::unify(
 
 	// follow references
 	if (a.is_same_as()) {
-		a = unify_follow_references(a_id, b_id, a_origin, b_origin, file_id);
+		a = unify_follow_references(a_id, b_id, a_origin, b_origin, file_id, ctx);
 		return;
 	}
 	if (b.is_same_as()) {
-		b = unify_follow_references(b_id, a_id, b_origin, a_origin, file_id);
+		b = unify_follow_references(b_id, a_id, b_origin, a_origin, file_id, !ctx);
 		return;
 	}
 
@@ -426,16 +445,16 @@ void Resolver::unify(
 	}
 
 	// generics
-	if (a.is_generic()) return unify_generics(a_id, b_id, a_origin, b_origin, file_id);
-	if (b.is_generic()) return unify_generics(b_id, a_id, b_origin, a_origin, file_id);
+	if (a.is_generic()) return unify_generics(a_id, b_id, a_origin, b_origin, file_id, ctx);
+	if (b.is_generic()) return unify_generics(b_id, a_id, b_origin, a_origin, file_id, !ctx);
 
 	// member access types
 	if (a.is_member_access()) return unify_member_access(a_id, b_id, a_origin, b_origin, file_id);
 	if (b.is_member_access()) return unify_member_access(b_id, a_id, b_origin, a_origin, file_id);
 
 	// named types
-	if (a.is_named()) return unify_named(a_id, b_id, a_origin, b_origin, file_id);
-	if (b.is_named()) return unify_named(b_id, a_id, b_origin, a_origin, file_id);
+	if (a.is_named()) return unify_named(a_id, b_id, a_origin, b_origin, file_id, ctx);
+	if (b.is_named()) return unify_named(b_id, a_id, b_origin, a_origin, file_id, !ctx);
 
 	// if any of them is a basic Known type, the other must be exactly the same
 	if (unify_basic_known(TypeInfo::Kind::KnownVoid, a_id, b_id, a_origin, b_origin, file_id)) return;
@@ -447,12 +466,12 @@ void Resolver::unify(
 	if (unify_basic_known(TypeInfo::Kind::Module, a_id, b_id, a_origin, b_origin, file_id)) return;
 
 	// functions
-	if (a.is_function()) return unify_functions(a_id, b_id, a_origin, b_origin, file_id);
-	if (b.is_function()) return unify_functions(b_id, a_id, b_origin, a_origin, file_id);
+	if (a.is_function()) return unify_functions(a_id, b_id, a_origin, b_origin, file_id, ctx);
+	if (b.is_function()) return unify_functions(b_id, a_id, b_origin, a_origin, file_id, !ctx);
 
 	// pointers
-	if (a.is_pointer()) return unify_pointers(a_id, b_id, a_origin, b_origin, file_id);
-	if (b.is_pointer()) return unify_pointers(b_id, a_id, b_origin, a_origin, file_id);
+	if (a.is_pointer()) return unify_pointers(a_id, b_id, a_origin, b_origin, file_id, ctx);
+	if (b.is_pointer()) return unify_pointers(b_id, a_id, b_origin, a_origin, file_id, !ctx);
 
 	// now only numeric types are left ([Known/Partial][Integer/Float])
 	bool a_known = a.is_known_integer() || a.is_known_float(), b_known = b.is_known_integer() || b.is_known_float();
@@ -622,6 +641,11 @@ void Resolver::unify(
 		);
 }
 
+void Resolver::unify(TypeInfo::ID a_id, TypeInfo::ID b_id, FileContext::ID file_id, UnifyCtx& ctx) {
+	return unify(a_id, b_id, a_id, b_id, file_id, ctx);
+}
+
 void Resolver::unify(TypeInfo::ID a_id, TypeInfo::ID b_id, FileContext::ID file_id) {
-	return unify(a_id, b_id, a_id, b_id, file_id);
+	UnifyCtx ctx {};
+	return unify(a_id, b_id, file_id, ctx);
 }

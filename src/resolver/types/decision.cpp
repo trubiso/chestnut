@@ -66,8 +66,9 @@ Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candid
 		TypeInfo::ID function_argument_id = std::get<1>(function.arguments.at(i));
 		assert(can_unify(call_argument_id, function_argument_id)
 		       && "somehow the functions became un-unifiable");
-		// FIXME: this pushes the wrong generic constraints, because they are not instantiated
-		unify(call_argument_id, function_argument_id, get_type_file_id(call_argument_id));
+		UnifyCtx ctx { .generic_map = std::move(generic_map), .leftward = false };
+		unify(function_argument_id, call_argument_id, get_type_file_id(call_argument_id), ctx);
+		generic_map = std::move(ctx.generic_map);
 	}
 
 	// finally, we have collected every trait bound in the cloned function's generics, so we can check them now.
@@ -95,7 +96,7 @@ Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candid
 			}
 		}
 
-		auto satisfies = satisfies_trait_constraint(imposed_constraints, generic.declared_constraints);
+		auto satisfies = satisfies_trait_constraint(imposed_constraints, generic.declared_constraints, generic_map);
 		if (!satisfies.has_value()) return std::nullopt;
 		if (!satisfies.value()) return false;
 	}

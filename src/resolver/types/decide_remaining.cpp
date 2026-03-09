@@ -167,6 +167,11 @@ void Resolver::decide_remaining_types() {
 	// if no type was filled in, there is no hope left
 	if (changes_made) {
 		// if any type was filled in, though, let's try again!
+		// FIXME: this breaks overloads that were determined to be impossible and overloads that were determined
+		// to be a single one (e.g. sint vs uint). it also has the potential to prune overloads that would
+		// actually be valid after replacing int types by concrete int types! a potential fix is to delay
+		// candidate constraining until we know whether everything is solved, and if everything is not solved,
+		// we rollback and redo it with partial int types replaced.
 		do {
 			if (try_decide_remaining_types()) return;
 		} while (specialize_overloads());

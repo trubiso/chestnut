@@ -661,69 +661,36 @@ private:
 	/// Gets all candidate functions for an operator.
 	std::vector<AST::SymbolID> get_operator_candidates(Token::Symbol operator_, bool binary) const;
 
+	struct UnifyCtx {
+		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+
+		bool leftward = true;
+
+		inline UnifyCtx& operator!() { leftward = !leftward; return *this; }
+	};
+
 	/// Sets two types to be the same, avoiding any SameAs cycles. Never fails!
 	void set_same_as(TypeInfo::ID to, TypeInfo::ID from);
 	/// Follows references and returns TypeInfo::SameAs with the new roster or TypeInfo::Bottom if none can be
 	/// unified (throws a diagnostic in that case).
-	TypeInfo unify_follow_references(
-		TypeInfo::ID same_as,
-		TypeInfo::ID other,
-		TypeInfo::ID same_as_origin,
-		TypeInfo::ID other_origin,
-		FileContext::ID
-	);
+	TypeInfo unify_follow_references(TypeInfo::ID same_as, TypeInfo::ID other, TypeInfo::ID same_as_origin, TypeInfo::ID other_origin, FileContext::ID, UnifyCtx&);
 	/// Handles the case of basic known types which have no extra information, returns whether any of the provided
 	/// types matched the type kind.
-	bool unify_basic_known(
-		TypeInfo::Kind,
-		TypeInfo::ID a,
-		TypeInfo::ID b,
-		TypeInfo::ID a_origin,
-		TypeInfo::ID b_origin,
-		FileContext::ID
-	);
+	bool unify_basic_known(TypeInfo::Kind, TypeInfo::ID a, TypeInfo::ID b, TypeInfo::ID a_origin, TypeInfo::ID b_origin, FileContext::ID);
 	/// Unifies a generic and another type.
-	void unify_generics(
-		TypeInfo::ID generic,
-		TypeInfo::ID other,
-		TypeInfo::ID generic_origin,
-		TypeInfo::ID other_origin,
-		FileContext::ID
-	);
+	void unify_generics(TypeInfo::ID generic, TypeInfo::ID other, TypeInfo::ID generic_origin, TypeInfo::ID other_origin, FileContext::ID, UnifyCtx&);
 	/// Unifies a member access and another type.
-	void unify_member_access(
-		TypeInfo::ID member_access,
-		TypeInfo::ID other,
-		TypeInfo::ID member_access_origin,
-		TypeInfo::ID other_origin,
-		FileContext::ID
-	);
+	void unify_member_access(TypeInfo::ID member_access, TypeInfo::ID other, TypeInfo::ID member_access_origin, TypeInfo::ID other_origin, FileContext::ID);
 	/// Unifies a function and another type.
-	void unify_functions(
-		TypeInfo::ID function,
-		TypeInfo::ID other,
-		TypeInfo::ID function_origin,
-		TypeInfo::ID other_origin,
-		FileContext::ID
-	);
+	void unify_functions(TypeInfo::ID function, TypeInfo::ID other, TypeInfo::ID function_origin, TypeInfo::ID other_origin, FileContext::ID, UnifyCtx&);
 	/// Unifies a pointer and another type.
-	void unify_pointers(
-		TypeInfo::ID pointer,
-		TypeInfo::ID other,
-		TypeInfo::ID pointer_origin,
-		TypeInfo::ID other_origin,
-		FileContext::ID
-	);
+	void unify_pointers(TypeInfo::ID pointer, TypeInfo::ID other, TypeInfo::ID pointer_origin, TypeInfo::ID other_origin, FileContext::ID, UnifyCtx&);
 	/// Unifies a named type and another type.
-	void unify_named(
-		TypeInfo::ID named,
-		TypeInfo::ID other,
-		TypeInfo::ID named_origin,
-		TypeInfo::ID other_origin,
-		FileContext::ID
-	);
+	void unify_named(TypeInfo::ID named, TypeInfo::ID other, TypeInfo::ID named_origin, TypeInfo::ID other_origin, FileContext::ID, UnifyCtx&);
 	/// Equates two types and adds a diagnostic if it fails, specifying the original type IDs for diagnostics.
-	void unify(TypeInfo::ID a, TypeInfo::ID b, TypeInfo::ID a_origin, TypeInfo::ID b_origin, FileContext::ID);
+	void unify(TypeInfo::ID a, TypeInfo::ID b, TypeInfo::ID a_origin, TypeInfo::ID b_origin, FileContext::ID, UnifyCtx&);
+	/// Equates two types and adds a diagnostic if it fails.
+	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID, UnifyCtx&);
 	/// Equates two types and adds a diagnostic if it fails.
 	void unify(TypeInfo::ID, TypeInfo::ID, FileContext::ID);
 
