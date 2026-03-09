@@ -131,8 +131,7 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 		}
 
 		auto satisfies = does_overload_candidate_satisfy_trait_bounds(candidate);
-		if (!satisfies.has_value()) continue;
-		if (!satisfies.value()) {
+		if (satisfies.has_value() && !satisfies.value()) {
 			// TODO: specify exactly which generic does not satisfy trait bounds
 			std::stringstream text {};
 			text << "does not satisfy trait bounds";

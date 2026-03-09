@@ -20,6 +20,7 @@ bool Resolver::specialize_overloads() {
 
 	return any_succeeded;
 }
+
 void Resolver::decide_supposedly_known_named_types() {
 	for (TypeInfo::ID id = 0; id < type_pool_.size(); ++id) {
 		TypeInfo& type = type_pool_.at(id);
@@ -199,6 +200,10 @@ void Resolver::decide_remaining_types() {
 					);
 				}
 			);
+
+			for (auto const& candidate : undecided_overload.candidates) {
+				debug_print_type(std::cout, candidate.function) << std::endl;
+			}
 
 			parsed_files.at(undecided_overload.file_id)
 				.diagnostics.push_back(

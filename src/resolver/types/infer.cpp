@@ -241,16 +241,14 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			if (!all_arguments_exist) continue;
 		}
 		auto const& function_generics     = type_pool_.at(callable_id).get_function().generics;
-		bool        generic_count_matches = function_generics.size() == provided_generics;
+		bool        generic_count_matches = function_generics.size() >= provided_generics;
 		if (!generic_count_matches) {
 			rejections.push_back(
 				Diagnostic::Sample(
 					get_context(get_type_file_id(callable_id)),
 					{Diagnostic::Sample::Label(
 						get_type_span(callable_id),
-						function_generics.size() < provided_generics
-							? "incompatible generic count (too many were provided)"
-							: "incompatible generic count (too few were provided)",
+						"too many generics provided",
 						OutFmt::Color::BrightBlue
 					)}
 				)
@@ -385,9 +383,9 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		}
 
 		auto const& function_generics = type_pool_.at(callable_id).get_function().generics;
-		assert(function_generics.size() == provided_generics);
+		assert(function_generics.size() >= provided_generics);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
-		generics.reserve(provided_generics);
+		generics.reserve(function_generics.size());
 		for (size_t i = 0; i < provided_generics; ++i) {
 			auto id = type_pool_.at(std::get<1>(function_generics.at(i))).get_generic().name;
 			if (i < ordered_generics.size()) {
@@ -398,6 +396,13 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 				assert(name.has_value());
 				generics.emplace_back(name, generify_type(labeled_generics.at(name.value()), id));
 			}
+		}
+		for (size_t i = provided_generics; i < function_generics.size(); ++i) {
+			auto id = type_pool_.at(std::get<1>(function_generics.at(i))).get_generic().name;
+			generics.emplace_back(
+				std::nullopt,
+				generify_type(register_type(TypeInfo::make_unknown(), span, file_id), id)
+			);
 		}
 
 		// we store the expression type as the return type so it automatically gets inferred!
@@ -412,7 +417,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		TypeInfo function_call_type = TypeInfo::make_function(
 			TypeInfo::Function {std::move(arguments), std::move(generics), expr_type}
 		);
-		TypeInfo::ID call_id = register_type(std::move(function_call_type), span, file_id);
+		TypeInfo::ID                 call_id = register_type(std::move(function_call_type), span, file_id);
 		UndecidedOverload::Candidate candidate {callable_type, call_id};
 		candidates.push_back(std::move(candidate));
 	}
