@@ -211,6 +211,8 @@ void Resolver::identify_built_in_operator(IR::BuiltInFunction function, Token::S
 	symbol_pool_.push_back(
 		Symbol {id, file_id, span, get_variant_name(operator_), function, type, false, true, {}}
 	);
+
+	type_symbol_mapping_.at(type) = id;
 }
 
 void Resolver::identify_built_in_unary_operator(
