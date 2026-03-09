@@ -744,6 +744,8 @@ private:
 	bool can_unify(TypeInfo::ID, TypeInfo const&) const;
 	bool can_unify(TypeInfo const&, TypeInfo const&) const;
 
+	/// Returns whether an overload candidate satisfies trait bounds, or null if it cannot yet be decided.
+	std::optional<bool> does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candidate const&);
 	/// Tries to decide an undecided overload. Returns whether the overload was successfully decided (that
 	/// includes the case in which it is determined that no function meets the constraints!)
 	bool try_decide(UndecidedOverload&);

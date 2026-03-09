@@ -37,35 +37,20 @@ std::unordered_set<size_t> Resolver::specialize_overload(std::vector<std::vector
 
 bool Resolver::specialize_overload(UndecidedOverload& undecided_overload) {
 	// we can only specialize if all candidates are known to satisfy trait bounds
+	for (UndecidedOverload::Candidate const& candidate : undecided_overload.candidates) {
+		auto satisfies = does_overload_candidate_satisfy_trait_bounds(candidate);
+		if (!satisfies.has_value()) return false;
+		// we should satisfy if we made it to specialization
+		assert(satisfies.value());
+	}
+	// we decide based on trait counts
 	std::vector<std::vector<size_t>> trait_counts {};
 	for (UndecidedOverload::Candidate& candidate : undecided_overload.candidates) {
 		trait_counts.push_back({});
 		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
-		auto const& call_generics     = type_pool_.at(candidate.call_id).get_function().generics;
-		assert(function_generics.size() == call_generics.size());
-		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
-		for (size_t i = 0; i < call_generics.size(); ++i) {
-			generic_map.insert_or_assign(
-				std::get<1>(function_generics.at(i)),
-				std::get<1>(call_generics.at(i))
-			);
-		}
 		for (size_t i = 0; i < function_generics.size(); ++i) {
 			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
 			assert(!function_generic.is_bottom());
-
-			auto const& call_generic_type = type_pool_.at(std::get<1>(call_generics.at(i)));
-
-			auto satisfies = satisfies_trait_constraint(
-				call_generic_type.is_generic() ? get_all_constraints(call_generic_type.get_generic())
-							       : get_implemented_traits(call_generic_type),
-				function_generic.get_generic().declared_constraints,
-				generic_map
-			);
-			if (!satisfies.has_value()) {
-				// we must delay this once more
-				return false;
-			}
 
 			// PERF: we could create a function that counts instead of using actual expensive trait
 			// expansion

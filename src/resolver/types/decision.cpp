@@ -6,6 +6,96 @@
 #include <sstream>
 #include <variant>
 
+std::optional<bool>
+Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candidate const& candidate) {
+	// we first copy the functions
+	// TODO: delete everything afterwards
+	TypeInfo::ID function_id = copy_type(candidate.function);
+	TypeInfo::ID call_id     = copy_type(candidate.call_id);
+
+	auto const& function      = type_pool_.at(function_id).get_function();
+	auto const& call_function = type_pool_.at(call_id).get_function();
+
+	// let's bind the explicit generics
+	assert(call_function.generics.size() == function.generics.size());
+	for (size_t i = 0; i < call_function.generics.size(); ++i) {
+		TypeInfo::ID generic_id = std::get<1>(call_function.generics.at(i));
+		while (type_pool_.at(generic_id).is_same_as()) {
+			auto const& ids = type_pool_.at(generic_id).get_same_as().ids;
+			if (ids.size() != 1) break;
+			generic_id = ids.at(0);
+		}
+		// if it's still a SameAs, we don't know it!
+		if (type_pool_.at(generic_id).is_same_as()) continue;
+		// if it's unknown or a member access, we can't yet decide stuff for this overload
+		if (type_pool_.at(generic_id).is_unknown() || type_pool_.at(generic_id).is_member_access()) {
+			return std::nullopt;
+		}
+		// we just skip errors
+		if (type_pool_.at(generic_id).is_bottom()) continue;
+
+		// now that we have an actual type, we can constrain the function generic
+		TypeInfo::ID function_generic_id = std::get<1>(function.generics.at(i));
+		auto&        function_generic    = type_pool_.at(function_generic_id).get_generic();
+
+		if (type_pool_.at(generic_id).is_generic()) {
+			// if it's a generic, we can add its declared constraints here
+			auto const& declared_constraints = type_pool_.at(generic_id).get_generic().declared_constraints;
+			// TODO: instantiate them instead
+			std::copy(
+				declared_constraints.cbegin(),
+				declared_constraints.cend(),
+				std::back_inserter(function_generic.imposed_constraints)
+			);
+		} else {
+			// if it's just a type, we can add a type constraint
+			function_generic.imposed_constraints.push_back(TypeInfo::Generic::TypeConstraint {generic_id});
+		}
+	}
+
+	// now, let's unify the arguments
+	assert(call_function.arguments.size() == function.arguments.size());
+	for (size_t i = 0; i < call_function.arguments.size(); ++i) {
+		TypeInfo::ID call_argument_id     = std::get<1>(call_function.arguments.at(i));
+		TypeInfo::ID function_argument_id = std::get<1>(function.arguments.at(i));
+		assert(can_unify(call_argument_id, function_argument_id)
+		       && "somehow the functions became un-unifiable");
+		unify(call_argument_id, function_argument_id, get_type_file_id(call_argument_id));
+	}
+
+	// finally, we have collected every trait bound in the cloned function's generics, so we can check them now.
+	// we want, for each generic, that its imposed constraints are at least as strict as its declared constraints.
+	for (size_t i = 0; i < function.generics.size(); ++i) {
+		auto const& generic_type = type_pool_.at(std::get<1>(function.generics.at(i)));
+		auto const& generic      = generic_type.get_generic();
+
+		std::vector<TypeInfo::Generic::TraitConstraint> imposed_constraints {};
+		for (auto const& imposed_constraint : generic.imposed_constraints) {
+			if (std::holds_alternative<TypeInfo::Generic::TraitConstraint>(imposed_constraint))
+				imposed_constraints.push_back(
+					std::get<TypeInfo::Generic::TraitConstraint>(imposed_constraint)
+				);
+			else {
+				auto const& type = type_pool_.at(
+					std::get<TypeInfo::Generic::TypeConstraint>(imposed_constraint).type
+				);
+				auto type_constraints = get_implemented_traits(type);
+				std::move(
+					type_constraints.begin(),
+					type_constraints.end(),
+					std::back_inserter(imposed_constraints)
+				);
+			}
+		}
+
+		auto satisfies = satisfies_trait_constraint(imposed_constraints, generic.declared_constraints);
+		if (!satisfies.has_value()) return std::nullopt;
+		if (!satisfies.value()) return false;
+	}
+
+	return true;
+}
+
 bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 	// filter the candidates
 	std::vector<UndecidedOverload::Candidate> new_candidates {};
@@ -32,68 +122,25 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 			continue;
 		}
 
-		// copy and unify the call type before proceeding
-		// TODO: we need some cleanup after lol
-		TypeInfo::ID copied_call_id = copy_type(candidate.call_id);
-		unify(copied_call_id, candidate.function, get_type_file_id(copied_call_id));
-		auto const& call_type = type_pool_.at(copied_call_id);
-
-		// also check trait bounds
-		auto const& function_generics = type_pool_.at(candidate.function).get_function().generics;
-		auto const& call_generics     = call_type.get_function().generics;
-		assert(function_generics.size() == call_generics.size());
-		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
-		for (size_t i = 0; i < call_generics.size(); ++i) {
-			generic_map.insert_or_assign(
-				std::get<1>(function_generics.at(i)),
-				std::get<1>(call_generics.at(i))
+		auto satisfies = does_overload_candidate_satisfy_trait_bounds(candidate);
+		if (!satisfies.has_value()) continue;
+		if (!satisfies.value()) {
+			// TODO: specify exactly which generic does not satisfy trait bounds
+			std::stringstream text {};
+			text << "does not satisfy trait bounds";
+			undecided_overload.rejections.push_back(
+				Diagnostic::Sample(
+					get_context(get_type_file_id(candidate.function)),
+					{Diagnostic::Sample::Label(
+						get_type_span(candidate.function),
+						text.str(),
+						OutFmt::Color::Magenta
+					)}
+				)
 			);
+
+			continue;
 		}
-		bool satisfies_bounds = true;
-		for (size_t i = 0; i < function_generics.size(); ++i) {
-			auto const& function_generic = type_pool_.at(std::get<1>(function_generics.at(i)));
-			assert(!function_generic.is_bottom());
-
-			auto const& call_generic_type = type_pool_.at(std::get<1>(call_generics.at(i)));
-
-			auto satisfies = satisfies_trait_constraint(
-				call_generic_type.is_generic() ? get_all_constraints(call_generic_type.get_generic())
-							       : get_implemented_traits(call_generic_type),
-				function_generic.get_generic().declared_constraints,
-				generic_map
-			);
-			if (!satisfies.has_value()) {
-				// we must delay this once more
-				// TODO: ensure the function resolution is actually delayed
-				std::cout << "delayed function res!" << std::endl;
-				continue;
-			}
-
-			if (!satisfies.value()) {
-				std::stringstream text {};
-				text
-					<< "generic #"
-					<< i + 1
-					<< " ("
-					<< get_type_name(std::get<1>(call_generics.at(i)))
-					<< ") does not satisfy declared trait bounds ("
-					<< get_type_name(function_generic)
-					<< ")";
-				undecided_overload.rejections.push_back(
-					Diagnostic::Sample(
-						get_context(get_type_file_id(candidate.function)),
-						{Diagnostic::Sample::Label(
-							get_type_span(candidate.function),
-							text.str(),
-							OutFmt::Color::Magenta
-						)}
-					)
-				);
-				satisfies_bounds = false;
-				break;
-			}
-		}
-		if (!satisfies_bounds) continue;
 
 		new_candidates.push_back(std::move(candidate));
 	}
