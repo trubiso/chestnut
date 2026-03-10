@@ -393,14 +393,16 @@ bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
 		return true;
 	}
 
-	// imposed type constraints must satisfy imposed trait constraints
-	satisfies_trait_constraints = true;
-	for (auto const& type_constraint : type_constraints) {
-		auto satisfies = satisfies_trait_constraint(type_constraint.type, trait_constraints);
-		if (!satisfies.has_value()) return false;
-		if (!satisfies.value()) satisfies_trait_constraints = false;
+	// if we do have type constraints, we unify them together
+	type_pool_.at(id) = TypeInfo::make_unknown();
+	for (size_t i = 0; i < type_constraints.size(); ++i) {
+		unify(id, type_constraints[i].type, get_type_file_id(id));
 	}
-	if (!satisfies_trait_constraints) {
+
+	// finally, we check whether the resulting type satisfies the imposed trait constraints
+	auto satisfies = satisfies_trait_constraint(id, trait_constraints);
+	assert(satisfies.has_value() && "there is no way you cannot check whether trait constraints are satisfied by now");
+	if (!satisfies.value()) {
 		type_pool_.at(id) = TypeInfo::make_bottom();
 		// TODO: rejections list
 		parsed_files.at(get_type_file_id(id))
@@ -414,14 +416,8 @@ bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
 					)}
 				)
 			);
-		return true;
 	}
 
-	// if we do satisfy those constraints, we can now unify the imposed type constraints with each other
-	type_pool_.at(id) = TypeInfo::make_unknown();
-	for (size_t i = 0; i < type_constraints.size(); ++i) {
-		unify(id, type_constraints[i].type, get_type_file_id(id));
-	}
 	return true;
 }
 
