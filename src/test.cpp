@@ -151,7 +151,7 @@ std::optional<std::string> Test::run() const {
 	if (pass == Pass::Resolver) {
 		if (std::holds_alternative<std::vector<ExpectedDiagnostic>>(expected_output)) {
 			return compare_diagnostics(
-				diagnostics,
+				resolver.parsed_files.at(0).diagnostics,
 				std::get<std::vector<ExpectedDiagnostic>>(expected_output)
 			);
 		} else {
