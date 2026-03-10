@@ -1070,6 +1070,28 @@ std::optional<Statement> Parser::consume_statement_if() {
 	);
 }
 
+std::optional<Statement> Parser::consume_statement_while() {
+	// "while" "(" <expr> ")" <true_stmt>
+
+	// we start after the "while" keyword
+	// TODO: should we be this liberal with the parentheses?
+	expect_symbol("expected opening parenthesis after while keyword", Token::Symbol::LParen);
+	auto maybe_expression = SPANNED_REASON(expect_expression, "expected condition expression for while loop");
+	if (!maybe_expression.has_value()) return {};
+	expect_symbol("expected closing parenthesis after while condition expression", Token::Symbol::RParen);
+	// if these stmts are scopes, they are flattened into the scope that we store in AST::Statement::If
+	auto maybe_loop
+		= SPANNED_REASON(expect_statement, "expected scope or statement after while condition expression");
+	if (!maybe_loop.has_value()) return {};
+	Spanned<Scope> loop_scope {maybe_loop.value().span, {}};
+	// we have to do it this way because the brace initializer list constructor for vectors copies
+	if (maybe_loop.value().value.is_scope()) loop_scope.value = std::move(maybe_loop.value().value.get_scope());
+	else loop_scope.value.push_back(std::move(maybe_loop.value()));
+	return AST::Statement::make_while(
+		AST::Statement::While {std::move(maybe_expression.value()), std::move(loop_scope)}
+	);
+}
+
 std::optional<Statement> Parser::consume_statement() {
 	if (peek_symbol(Token::Symbol::LBrace)) return consume_statement_scope();
 
@@ -1082,6 +1104,7 @@ std::optional<Statement> Parser::consume_statement() {
 	if (consume_keyword(Keyword::Goto)) return consume_statement_goto();
 	if (consume_keyword(Keyword::Branch)) return consume_statement_branch();
 	if (consume_keyword(Keyword::If)) return consume_statement_if();
+	if (consume_keyword(Keyword::While)) return consume_statement_while();
 
 	return consume_statement_set();
 }
@@ -1269,6 +1292,7 @@ char const* Parser::get_variant_name(Keyword keyword) {
 	case Keyword::Else:   return "else";
 	case Keyword::Struct: return "struct";
 	case Keyword::Trait:  return "trait";
+	case Keyword::While:  return "while";
 	}
 }
 

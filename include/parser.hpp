@@ -66,6 +66,7 @@ private:
 		Else,
 		Struct,
 		Trait,
+		While,
 	};
 
 	FileContext   context_;
@@ -151,6 +152,7 @@ private:
 	std::optional<Statement> consume_statement_goto();
 	std::optional<Statement> consume_statement_branch();
 	std::optional<Statement> consume_statement_if();
+	std::optional<Statement> consume_statement_while();
 	std::optional<Statement> consume_statement();
 
 	std::optional<Scope> consume_scope();
