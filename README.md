@@ -75,5 +75,6 @@ func main() {
         putchar('l');
         putchar('d');
         putchar('!');
+        putchar('\n');
 }
 ```
