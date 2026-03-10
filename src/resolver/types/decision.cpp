@@ -316,13 +316,17 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 		AST::Struct const& struct_ = *std::get<AST::Struct*>(symbol_pool_.at(candidate.name).item);
 		// FIXME: instantiating every single time is insane
 		auto instantiated_struct = instantiate_struct(&struct_);
-		if (instantiated_struct.generic_declaration.empty()) continue;
+		if (instantiated_struct.generic_declaration.empty()) {
+			new_candidates.push_back(std::move(candidate));
+			continue;
+		}
 		auto const& our_generics = candidate.generics;
 		assert(instantiated_struct.generic_declaration.size() == our_generics.size());
 		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
 		for (size_t i = 0; i < our_generics.size(); ++i) {
 			generic_map.insert_or_assign(instantiated_struct.generic_declaration.at(i), our_generics.at(i));
 		}
+
 		bool satisfies_bounds = true;
 		for (size_t i = 0; i < instantiated_struct.generic_declaration.size(); ++i) {
 			auto const& instantiated_generic = type_pool_.at(instantiated_struct.generic_declaration.at(i));
@@ -349,10 +353,10 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 
 		new_candidates.push_back(std::move(candidate));
 	}
-	candidates = std::move(new_candidates);
+	type_pool_.at(id).get_named().candidates() = std::move(new_candidates);
 
 	// if no candidates are unifiable, it's unresolved.
-	if (candidates.empty()) {
+	if (type_pool_.at(id).get_named().candidates().empty()) {
 		// we need to set the type to bottom to avoid causing more issues
 		type_pool_.at(id) = TypeInfo::make_bottom();
 
@@ -370,11 +374,11 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	}
 
 	// if too many candidates are unifiable, we fail to decide.
-	if (candidates.size() > 1) { return false; }
+	if (type_pool_.at(id).get_named().candidates().size() > 1) { return false; }
 
 	// if only one is unifiable, we've finally found the one and only type
-	assert(candidates.size() == 1);
-	constrain_candidate(type_pool_.at(id).get_named().name, candidates.at(0));
+	assert(type_pool_.at(id).get_named().candidates().size() == 1);
+	constrain_candidate(type_pool_.at(id).get_named().name, type_pool_.at(id).get_named().candidates().at(0));
 	return true;
 }
 

@@ -1,4 +1,3 @@
-// FIXME: for some reason the resolver hates this struct now
 struct Info { direction: bool; rotation: uint32 }
 
 @extern func open_input() *mut void;
