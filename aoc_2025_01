@@ -1,3 +1,4 @@
+// FIXME: for some reason the resolver hates this struct now
 struct Info { direction: bool; rotation: uint32 }
 
 @extern func open_input() *mut void;
@@ -22,27 +23,22 @@ func get_info() Info {
 	const file = open_input();
 	mut output: uint64 = 0;
 	mut angle: uint32 = 50;
-'loop:
-	branch (!get_line(file)) 'end;
-	mut rotation = get_info().rotation;
-	// we first normalize the rotation to [0, 99]
-	goto 'normalize_cond;
-'normalize_loop: rotation = rotation - 100;
-'normalize_cond: branch (rotation > 99) 'normalize_loop 'normalize_cont;
-'normalize_cont:
-	// now we apply the rotation
-	if (get_info().direction) {
-		// right
-		if (angle + rotation > 99) angle = angle + rotation - 100;
-		else angle = angle + rotation;
-	} else {
-		// left
-		if (rotation > angle) angle = angle + 100 - rotation;
-		else angle = angle - rotation;
+	while (get_line(file)) {
+		mut rotation = get_info().rotation;
+		// we first normalize the rotation to [0, 99]
+		while (rotation > 99) rotation = rotation - 100;
+		// now we apply the rotation
+		if (get_info().direction) {
+			// right
+			if (angle + rotation > 99) angle = angle + rotation - 100;
+			else angle = angle + rotation;
+		} else {
+			// left
+			if (rotation > angle) angle = angle + 100 - rotation;
+			else angle = angle - rotation;
+		}
+		if (angle == 0) output = output + 1;
 	}
-	if (angle == 0) output = output + 1;
-	goto 'loop;
-'end:
 	print_output(output);
 	close_input(file);
 	return 0;

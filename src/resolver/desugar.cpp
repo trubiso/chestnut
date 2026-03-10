@@ -433,6 +433,63 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 }
 
 std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
+	AST::Statement::While&&    while_,
+	Span                       span,
+	AST::Statement::Label::ID& label_counter,
+	FileContext::ID            file_id
+) {
+	std::vector<Spanned<AST::Statement>> stmts {};
+	// FIXME: use the correct spans
+	Span stub_span = span;
+
+	// we require a loop, condition and continuation label
+	AST::Statement::Goto goto_cond {"cond", label_counter++};
+	AST::Statement::Goto goto_loop {"loop", label_counter++};
+	AST::Statement::Goto goto_cont {"cont", label_counter++};
+
+	// we first create the loop condition
+	stmts.emplace_back(
+		stub_span,
+		AST::Statement::make_label(AST::Statement::Label {"cond", goto_cond.destination_id})
+	);
+
+	Spanned<AST::Expression>             condition = std::move(while_.condition);
+	std::vector<Spanned<AST::Statement>> condition_stmts
+		= desugar_control_flow_expr(condition, label_counter, file_id);
+	std::move(condition_stmts.begin(), condition_stmts.end(), std::back_inserter(stmts));
+
+	// if we meet the condition, we go into the loop, otherwise, we go to the continuation (exit)
+	AST::Statement::Branch branch {
+		std::move(condition),
+		Spanned {stub_span, goto_loop},
+		Spanned {stub_span, goto_cont}
+	};
+
+	stmts.emplace_back(stub_span, AST::Statement::make_branch(std::move(branch)));
+
+	// now, we create the loop itself
+	stmts.emplace_back(
+		stub_span,
+		AST::Statement::make_label(AST::Statement::Label {"loop", goto_loop.destination_id})
+	);
+	stmts.emplace_back(
+		while_.loop.span,
+		AST::Statement::make_scope(desugar_control_flow(std::move(while_.loop.value), label_counter, file_id))
+	);
+
+	// the loop needs to always jump back to the condition
+	stmts.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_cond), true));
+
+	// finally, we add the exit label
+	stmts.emplace_back(
+		stub_span,
+		AST::Statement::make_label(AST::Statement::Label {"cont", goto_cont.destination_id})
+	);
+
+	return stmts;
+}
+
+std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 	AST::Statement&&           statement,
 	Span                       span,
 	AST::Statement::Label::ID& label_counter,
@@ -456,6 +513,8 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 		return desugar_control_flow(std::move(statement.get_branch()), span, label_counter, file_id);
 	case AST::Statement::Kind::If:
 		return desugar_control_flow(std::move(statement.get_if()), span, label_counter, file_id);
+	case AST::Statement::Kind::While:
+		return desugar_control_flow(std::move(statement.get_while()), span, label_counter, file_id);
 	}
 
 	// scope, label and goto are not evil, so we can package them into a little vector :D

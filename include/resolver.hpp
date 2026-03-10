@@ -492,6 +492,7 @@ private:
 	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Return&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Branch&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::If&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::While&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within a statement, returning its transformation into a set of statements.
 	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 
