@@ -40,23 +40,21 @@ Resolver::copy_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::
 	}
 
 	if (type.is_function()) {
-		auto const& function = type.get_function();
-
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_generics {};
-		new_generics.reserve(function.generics.size());
+		new_generics.reserve(type_pool_.at(id).get_function().generics.size());
 		std::transform(
-			function.generics.cbegin(),
-			function.generics.cend(),
+			type_pool_.at(id).get_function().generics.cbegin(),
+			type_pool_.at(id).get_function().generics.cend(),
 			std::back_inserter(new_generics),
 			[this, &generic_map](auto const& generic) {
 				return std::tuple {std::get<0>(generic), copy_type(std::get<1>(generic), generic_map)};
 			}
 		);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_arguments {};
-		new_arguments.reserve(function.arguments.size());
+		new_arguments.reserve(type_pool_.at(id).get_function().arguments.size());
 		std::transform(
-			function.arguments.cbegin(),
-			function.arguments.cend(),
+			type_pool_.at(id).get_function().arguments.cbegin(),
+			type_pool_.at(id).get_function().arguments.cend(),
 			std::back_inserter(new_arguments),
 			[this, &generic_map](
 				auto const& argument
@@ -67,7 +65,7 @@ Resolver::copy_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::
 				TypeInfo::Function {
 					std::move(new_arguments),
 					std::move(new_generics),
-					copy_type(function.return_, generic_map)
+					copy_type(type_pool_.at(id).get_function().return_, generic_map)
 				}
 			),
 			span,
@@ -95,10 +93,10 @@ Resolver::copy_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::
 
 		// now we instantiate the declared constraints
 		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
-		declared_constraints.reserve(type.get_generic().declared_constraints.size());
+		declared_constraints.reserve(type_pool_.at(id).get_generic().declared_constraints.size());
 		std::transform(
-			type.get_generic().declared_constraints.cbegin(),
-			type.get_generic().declared_constraints.cend(),
+			type_pool_.at(id).get_generic().declared_constraints.cbegin(),
+			type_pool_.at(id).get_generic().declared_constraints.cend(),
 			std::back_inserter(declared_constraints),
 			[this, &generic_map](TypeInfo::Generic::TraitConstraint const& constraint) {
 				return TypeInfo::Generic::TraitConstraint {
@@ -120,8 +118,8 @@ Resolver::copy_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::
 		std::vector<TypeInfo::Named::Candidate> new_candidates {};
 		new_candidates.reserve(type.get_named().candidates().size());
 		std::transform(
-			type.get_named().candidates().cbegin(),
-			type.get_named().candidates().cend(),
+			type_pool_.at(id).get_named().candidates().cbegin(),
+			type_pool_.at(id).get_named().candidates().cend(),
 			std::back_inserter(new_candidates),
 			[this, &generic_map](TypeInfo::Named::Candidate const& candidate) {
 				return TypeInfo::Named::Candidate {
@@ -136,8 +134,8 @@ Resolver::copy_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::
 		return register_type(
 			TypeInfo::make_pointer(
 				TypeInfo::Pointer {
-					copy_type(type.get_pointer().pointee, generic_map),
-					type.get_pointer().mutable_
+					copy_type(type_pool_.at(id).get_pointer().pointee, generic_map),
+					type_pool_.at(id).get_pointer().mutable_
 				}
 			),
 			span,
