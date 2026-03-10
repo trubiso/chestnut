@@ -56,9 +56,14 @@ struct Statement {
 		std::optional<Spanned<Scope>> false_;
 	};
 
-	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If };
+	struct While {
+		Spanned<Expression> condition;
+		Spanned<Scope>      loop;
+	};
 
-	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If> value_t;
+	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If, While };
+
+	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If, While> value_t;
 
 	value_t value;
 	bool    is_auto_generated = false;
@@ -104,6 +109,10 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::If>, std::move(if_)});
 	}
 
+	inline static Statement make_while(While&& while_) {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::While>, std::move(while_)});
+	}
+
 	inline bool is_declare() const { return kind() == Kind::Declare; }
 
 	inline bool is_set() const { return kind() == Kind::Set; }
@@ -121,6 +130,8 @@ struct Statement {
 	inline bool is_branch() const { return kind() == Kind::Branch; }
 
 	inline bool is_if() const { return kind() == Kind::If; }
+
+	inline bool is_while() const { return kind() == Kind::While; }
 
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 
@@ -157,6 +168,10 @@ struct Statement {
 	inline If const& get_if() const { return std::get<(size_t) Kind::If>(value); }
 
 	inline If& get_if() { return std::get<(size_t) Kind::If>(value); }
+
+	inline While const& get_while() const { return std::get<(size_t) Kind::While>(value); }
+
+	inline While& get_while() { return std::get<(size_t) Kind::While>(value); }
 };
 
 std::ostream& operator<<(std::ostream&, Statement::Declare const&);
@@ -166,6 +181,7 @@ std::ostream& operator<<(std::ostream&, Statement::Label const&);
 std::ostream& operator<<(std::ostream&, Statement::Goto const&);
 std::ostream& operator<<(std::ostream&, Statement::Branch const&);
 std::ostream& operator<<(std::ostream&, Statement::If const&);
+std::ostream& operator<<(std::ostream&, Statement::While const&);
 std::ostream& operator<<(std::ostream&, Statement const&);
 
 }  // namespace AST

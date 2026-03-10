@@ -65,6 +65,15 @@ std::ostream& operator<<(std::ostream& os, Statement::If const& if_) {
 	return os << ']';
 }
 
+std::ostream& operator<<(std::ostream& os, Statement::While const& while_) {
+	os << "[while (" << while_.condition.value << "):\n";
+	os.iword(0)++;
+	for (size_t i = 0; i < while_.loop.value.size(); ++i) { os << while_.loop.value[i].value << '\n'; }
+	os.iword(0)--;
+	for (long i = 0; i < os.iword(0); ++i) os << "    ";
+	return os << ']';
+}
+
 std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	for (long i = 0; i < os.iword(0); ++i) os << "    ";
 	switch (statement.kind()) {
@@ -77,6 +86,7 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	case Statement::Kind::Goto:       return os << statement.get_goto();
 	case Statement::Kind::Branch:     return os << statement.get_branch();
 	case Statement::Kind::If:         return os << statement.get_if();
+	case Statement::Kind::While:      return os << statement.get_while();
 	}
 
 	Scope const& scope = statement.get_scope();
