@@ -1,5 +1,4 @@
 #include <analyzer.hpp>
-
 #include <sstream>
 #include <variant>
 
@@ -202,7 +201,11 @@ void Analyzer::undo_move(IR::Place const& place, MovedMap& moved) {
 }
 
 void Analyzer::do_move(IR::Place const& place, Span span, FileContext::ID file_id, MovedMap& moved) {
-	// TODO: automatically copy bools, chars and integers smaller than a ptr
+	// TODO: use a trait bound to determine implicit copy
+	if (place.type.is_pointer()) return;
+	if (place.type.is_atom())
+		if (!place.type.get_atom().is_named()) return;
+
 	std::optional<MoveInfo> maybe_move = check_moved(place, moved);
 	if (maybe_move.has_value()) {
 		MoveInfo move_info = std::move(maybe_move.value());
