@@ -481,20 +481,26 @@ Spanned<IR::Value> Resolver::lower_value(
 	// then we need to reconstruct the generic order from the type
 	IR::GenericList generic_list {};
 	auto const&     function_generics = type_pool_.at(function_call.call_type.value()).get_function().generics;
-	if (function_call.generic_list.has_value()) {
-		size_t generic_count = function_call.generic_list.value().ordered.size()
-		                     + function_call.generic_list.value().labeled.size();
-		assert(function.generics.size() == generic_count && generic_count == function_generics.size());
-		generic_list.reserve(generic_count);
-		for (size_t i = 0; i < generic_count; ++i) {
+	if (!function_generics.empty()) {
+		assert(function.generics.size() == function_generics.size());
+		generic_list.reserve(function_generics.size());
+
+		size_t ordered_amt = function_call.generic_list.has_value()
+		                           ? function_call.generic_list.value().ordered.size()
+		                           : 0;
+		size_t total_amt   = function_call.generic_list.has_value()
+		                           ? (ordered_amt + function_call.generic_list.value().labeled.size())
+		                           : 0;
+
+		for (size_t i = 0; i < function_generics.size(); ++i) {
 			auto type = reconstruct_type(std::get<1>(function_generics.at(i)));
-			if (i < function_call.generic_list.value().ordered.size()) {
+			if (i < ordered_amt) {
 				// ordered generics are freebies
 				generic_list.emplace_back(
 					function_call.generic_list.value().ordered.at(i).span,
 					std::move(type)
 				);
-			} else {
+			} else if (i < total_amt) {
 				// we must find the labeled generic span
 				assert(std::get<0>(function.generics.at(i)).has_value());
 				std::string generic_name  = std::get<0>(function.generics.at(i)).value();
@@ -509,9 +515,11 @@ Spanned<IR::Value> Resolver::lower_value(
 				}
 				assert(generic_found);
 				generic_list.emplace_back(generic_span, std::move(type));
+			} else {
+				generic_list.emplace_back(span, std::move(type));
 			}
 		}
-		assert(generic_list.size() == generic_count);
+		assert(generic_list.size() == function.generics.size());
 	}
 
 	// finally, we have the callee and the arguments
