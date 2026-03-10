@@ -185,7 +185,7 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 }
 
 bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
-	TypeInfo::MemberAccess& member_access = type_pool_.at(undecided_member_access).get_member_access();
+	TypeInfo::MemberAccess member_access = type_pool_.at(undecided_member_access).get_member_access();
 
 	// we can only actually decide the member access if we know the type of the accessee
 	std::optional<TypeInfo*> maybe_underlying
@@ -213,8 +213,8 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 	// this member access will 100% be resolved now! :D
 
 	// let's ensure that we have the proper generic constraints
-	constrain_candidate(underlying.get_named().name, underlying.get_named().candidates().at(0));
 	AST::SymbolID type_name_id = underlying.get_named().candidates().at(0).name;
+	constrain_candidate(underlying.get_named().name, underlying.get_named().candidates().at(0));
 
 	// we don't have any other user type as of now :P
 	AST::Struct* struct_ = std::get<AST::Struct*>(symbol_pool_.at(type_name_id).item);
