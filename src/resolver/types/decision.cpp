@@ -6,6 +6,43 @@
 #include <sstream>
 #include <variant>
 
+bool Resolver::try_decide(UndecidedDeref& deref) {
+	TypeInfo::ID type_id = deref.inner_type;
+
+	auto decided = type_pool_.at(type_id).is_decided(type_pool_);
+	if (decided == -1) goto bottom;
+	if (decided == 0) return false;
+	while (type_pool_.at(type_id).is_same_as()) {
+		auto& ids = type_pool_.at(type_id).get_same_as().ids;
+		if (ids.size() != 1) return false;
+		type_id = ids.at(0);
+	}
+	if (type_pool_.at(type_id).is_bottom()) goto bottom;
+	if (type_pool_.at(type_id).is_unknown()) return false;
+	if (!type_pool_.at(type_id).is_pointer()) {
+		parsed_files.at(get_type_file_id(deref.inner_type))
+			.diagnostics.push_back(
+				Diagnostic::error(
+					"type mismatch",
+					"only pointers can be dereferenced",
+					{get_type_sample(deref.inner_type, OutFmt::Color::Red)}
+				)
+			);
+		goto bottom;
+	}
+
+	unify(deref.result_type, type_pool_.at(type_id).get_pointer().pointee, get_type_file_id(deref.result_type));
+	return true;
+bottom:
+	auto btm = register_type(
+		TypeInfo::make_bottom(),
+		get_type_span(deref.inner_type),
+		get_type_file_id(deref.inner_type)
+	);
+	unify(deref.result_type, btm, get_type_file_id(deref.result_type));
+	return true;
+}
+
 std::optional<bool>
 Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candidate const& candidate) {
 	// we first copy the functions
@@ -66,7 +103,7 @@ Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candid
 		TypeInfo::ID function_argument_id = std::get<1>(function.arguments.at(i));
 		assert(can_unify(call_argument_id, function_argument_id)
 		       && "somehow the functions became un-unifiable");
-		UnifyCtx ctx { .generic_map = std::move(generic_map), .leftward = false };
+		UnifyCtx ctx {.generic_map = std::move(generic_map), .leftward = false};
 		unify(function_argument_id, call_argument_id, get_type_file_id(call_argument_id), ctx);
 		generic_map = std::move(ctx.generic_map);
 	}

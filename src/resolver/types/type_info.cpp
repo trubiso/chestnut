@@ -263,6 +263,8 @@ int Resolver::TypeInfo::is_decided(std::vector<TypeInfo> const& pool) const {
 		return pool.at(ids.at(0)).is_decided(pool);
 	}
 
+	if (is_unknown() || is_member_access()) return false;
+
 	// any other type is decided
 	return 1;
 }

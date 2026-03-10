@@ -602,6 +602,13 @@ private:
 	std::vector<TypeInfo::ID> undecided_generics {};
 	std::vector<TypeInfo::ID> unchecked_generics {};
 
+	struct UndecidedDeref {
+		TypeInfo::ID inner_type;
+		TypeInfo::ID result_type;
+	};
+
+	std::vector<UndecidedDeref> undecided_derefs {};
+
 	/// Turns a partial named type into a full named type with candidates. May return a bottom if the
 	/// identifier is not resolved, or if no candidates match (in which case it throws a diagnostic).
 	TypeInfo from_partial(TypeInfo::Named&&, Span, FileContext::ID);
@@ -709,6 +716,7 @@ private:
 	bool can_unify(TypeInfo::ID, TypeInfo const&) const;
 	bool can_unify(TypeInfo const&, TypeInfo const&) const;
 
+	bool try_decide(UndecidedDeref&);
 	/// Returns whether an overload candidate satisfies trait bounds, or null if it cannot yet be decided.
 	std::optional<bool> does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candidate const&);
 	/// Tries to decide an undecided overload. Returns whether the overload was successfully decided (that

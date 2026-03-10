@@ -46,6 +46,7 @@ bool Resolver::try_decide_remaining_types() {
 	       || !undecided_member_accesses.empty()
 	       || !undecided_generics.empty()
 	       || !unchecked_generics.empty()
+	       || !undecided_derefs.empty()
 	       || has_undecided_named_types()) {
 		bool any_succeeded = false;
 
@@ -94,6 +95,15 @@ bool Resolver::try_decide_remaining_types() {
 		unchecked_generics = std::move(remaining_unchecked_generics);
 		if (old_size != unchecked_generics.size()) any_succeeded = true;
 
+		// then we try to decide derefs
+		std::vector<UndecidedDeref> remaining_undecided_derefs {};
+		for (UndecidedDeref& undecided_deref : undecided_derefs)
+			if (!try_decide(undecided_deref))
+				remaining_undecided_derefs.push_back(std::move(undecided_deref));
+		old_size         = undecided_derefs.size();
+		undecided_derefs = std::move(remaining_undecided_derefs);
+		if (old_size != undecided_derefs.size()) any_succeeded = true;
+
 		// finally, we quit if we made no progress
 		if (!any_succeeded) break;
 	}
@@ -103,6 +113,7 @@ bool Resolver::try_decide_remaining_types() {
 	    && undecided_member_accesses.empty()
 	    && undecided_generics.empty()
 	    && unchecked_generics.empty()
+	    && undecided_derefs.empty()
 	    && !has_undecided_named_types();
 }
 

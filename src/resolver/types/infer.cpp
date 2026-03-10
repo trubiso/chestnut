@@ -482,20 +482,12 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, F
 				= infer(expression.get_unary_operation().operand->value,
 			                expression.get_unary_operation().operand->span,
 			                file_id);
-			if (!type_pool_.at(argument).is_pointer(type_pool_)) {
-				parsed_files.at(file_id).diagnostics.push_back(
-					Diagnostic::error(
-						"type mismatch",
-						"only pointers can be dereferenced",
-						{get_type_sample(argument, OutFmt::Color::Red)}
-					)
-				);
-				expression.type = register_type(TypeInfo::make_bottom(), span, file_id);
 
-				return expression.type.value();
-			}
-
-			expression.type = type_pool_.at(argument).get_pointee(type_pool_);
+			UndecidedDeref deref { argument, register_type(TypeInfo::make_unknown(), span, file_id) };
+			expression.type = deref.result_type;
+			if (!try_decide(deref)) undecided_derefs.push_back(std::move(deref));
+			
+			return expression.type.value();
 		} else {
 			// TODO: get the operator span
 			Span operator_span = span;
