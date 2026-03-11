@@ -361,10 +361,11 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 }
 
 std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
-	AST::Statement::If&&       if_,
-	Span                       span,
-	AST::Statement::Label::ID& label_counter,
-	FileContext::ID            file_id
+	AST::Statement::If&&          if_,
+	Span                          span,
+	AST::Statement::Label::ID&    label_counter,
+	FileContext::ID               file_id,
+	std::optional<LoopCtx> const& loop_ctx
 ) {
 	Spanned<AST::Expression>             condition = std::move(if_.condition);
 	std::vector<Spanned<AST::Statement>> stmts     = desugar_control_flow_expr(condition, label_counter, file_id);
@@ -399,7 +400,9 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 	);
 	stmts.emplace_back(
 		if_.true_.span,
-		AST::Statement::make_scope(desugar_control_flow(std::move(if_.true_.value), label_counter, file_id))
+		AST::Statement::make_scope(
+			desugar_control_flow(std::move(if_.true_.value), label_counter, file_id, loop_ctx)
+		)
 	);
 	auto goto_1 = goto_cont;
 	stmts.emplace_back(stub_span, AST::Statement::make_goto(std::move(goto_1), true));
@@ -414,9 +417,12 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 		);
 		stmts.emplace_back(
 			if_.false_.value().span,
-			AST::Statement::make_scope(
-				desugar_control_flow(std::move(if_.false_.value().value), label_counter, file_id)
-			)
+			AST::Statement::make_scope(desugar_control_flow(
+				std::move(if_.false_.value().value),
+				label_counter,
+				file_id,
+				loop_ctx
+			))
 		);
 		// TODO: don't add these post-gotos if the scope ends on a branch/goto
 		auto goto_2 = goto_cont;
@@ -447,6 +453,13 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 	AST::Statement::Goto goto_loop {"loop", label_counter++};
 	AST::Statement::Goto goto_cont {"cont", label_counter++};
 
+	LoopCtx loop_ctx {
+		// we jump to the condition when we continue
+		.where_to_continue = goto_cond.destination_id.value(),
+		// we jump to the continuation when we break
+		.where_to_break = goto_cont.destination_id.value()
+	};
+
 	// we first create the loop condition
 	stmts.emplace_back(
 		stub_span,
@@ -474,7 +487,9 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 	);
 	stmts.emplace_back(
 		while_.loop.span,
-		AST::Statement::make_scope(desugar_control_flow(std::move(while_.loop.value), label_counter, file_id))
+		AST::Statement::make_scope(
+			desugar_control_flow(std::move(while_.loop.value), label_counter, file_id, loop_ctx)
+		)
 	);
 
 	// the loop needs to always jump back to the condition
@@ -490,10 +505,11 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 }
 
 std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
-	AST::Statement&&           statement,
-	Span                       span,
-	AST::Statement::Label::ID& label_counter,
-	FileContext::ID            file_id
+	AST::Statement&&              statement,
+	Span                          span,
+	AST::Statement::Label::ID&    label_counter,
+	FileContext::ID               file_id,
+	std::optional<LoopCtx> const& loop_ctx
 ) {
 	switch (statement.kind()) {
 	case AST::Statement::Kind::Declare:
@@ -505,16 +521,48 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 	case AST::Statement::Kind::Return:
 		return desugar_control_flow(std::move(statement.get_return()), span, label_counter, file_id);
 	case AST::Statement::Kind::Scope:
-		statement.get_scope() = desugar_control_flow(std::move(statement.get_scope()), label_counter, file_id);
+		statement.get_scope()
+			= desugar_control_flow(std::move(statement.get_scope()), label_counter, file_id, loop_ctx);
 		break;
 	case AST::Statement::Kind::Label:
 	case AST::Statement::Kind::Goto:  break;
 	case AST::Statement::Kind::Branch:
 		return desugar_control_flow(std::move(statement.get_branch()), span, label_counter, file_id);
 	case AST::Statement::Kind::If:
-		return desugar_control_flow(std::move(statement.get_if()), span, label_counter, file_id);
+		return desugar_control_flow(std::move(statement.get_if()), span, label_counter, file_id, loop_ctx);
 	case AST::Statement::Kind::While:
 		return desugar_control_flow(std::move(statement.get_while()), span, label_counter, file_id);
+	case AST::Statement::Kind::Break:
+	case AST::Statement::Kind::Continue: {
+		if (!loop_ctx.has_value()) {
+			parsed_files.at(file_id).diagnostics.push_back(
+				Diagnostic::error(
+					std::format(
+						"tried to use {} outside of loop",
+						statement.is_break() ? "break" : "continue"
+					),
+					"`break` and `continue` are only available within loops",
+					{
+						Diagnostic::Sample {get_context(file_id), span, OutFmt::Color::Red}
+                        }
+				)
+			);
+			return {};
+		}
+
+		std::vector<Spanned<AST::Statement>> output {};
+		output.emplace_back(
+			span,
+			AST::Statement::make_goto(
+				AST::Statement::Goto {
+					statement.is_break() ? "break" : "continue",
+					statement.is_break() ? loop_ctx.value().where_to_break
+							     : loop_ctx.value().where_to_continue
+				}
+			)
+		);
+		return output;
+	}
 	}
 
 	// scope, label and goto are not evil, so we can package them into a little vector :D
@@ -523,13 +571,22 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow(
 	return output;
 }
 
-AST::Scope
-Resolver::desugar_control_flow(AST::Scope&& scope, AST::Statement::Label::ID& label_counter, FileContext::ID file_id) {
+AST::Scope Resolver::desugar_control_flow(
+	AST::Scope&&                  scope,
+	AST::Statement::Label::ID&    label_counter,
+	FileContext::ID               file_id,
+	std::optional<LoopCtx> const& loop_ctx
+) {
 	std::vector<Spanned<AST::Statement>> new_scope {};
 	new_scope.reserve(scope.size());
 	for (Spanned<AST::Statement>& statement : scope) {
-		std::vector<Spanned<AST::Statement>> new_stmts
-			= desugar_control_flow(std::move(statement.value), statement.span, label_counter, file_id);
+		std::vector<Spanned<AST::Statement>> new_stmts = desugar_control_flow(
+			std::move(statement.value),
+			statement.span,
+			label_counter,
+			file_id,
+			loop_ctx
+		);
 		std::move(new_stmts.begin(), new_stmts.end(), std::back_inserter(new_scope));
 	}
 	return new_scope;
@@ -539,7 +596,8 @@ void Resolver::desugar_control_flow(AST::Function& function, FileContext::ID fil
 	if (!function.body.has_value()) return;
 	// we initialize the label counter for everyone else. we reserve 0 for the entry block
 	function.label_counter = 1;
-	function.body = desugar_control_flow(std::move(function.body.value()), function.label_counter, file_id);
+	function.body
+		= desugar_control_flow(std::move(function.body.value()), function.label_counter, file_id, std::nullopt);
 }
 
 void Resolver::desugar_control_flow(AST::Module& module, FileContext::ID file_id) {

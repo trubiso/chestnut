@@ -473,6 +473,11 @@ private:
 
 	// === DESUGAR ===
 
+	struct LoopCtx {
+		AST::Statement::Label::ID where_to_continue;
+		AST::Statement::Label::ID where_to_break;
+	};
+
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr_binop(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow_expr_if(AST::Expression&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 
@@ -491,13 +496,13 @@ private:
 	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Expression&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Return&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::Branch&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::If&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::If&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID, std::optional<LoopCtx> const&);
 	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement::While&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within a statement, returning its transformation into a set of statements.
-	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	std::vector<Spanned<AST::Statement>> desugar_control_flow(AST::Statement&&, Span, AST::Statement::Label::ID& label_counter, FileContext::ID, std::optional<LoopCtx> const&);
 
 	/// Desugars all higher-level control-flow structures within a scope.
-	AST::Scope desugar_control_flow(AST::Scope&&, AST::Statement::Label::ID& label_counter, FileContext::ID);
+	AST::Scope desugar_control_flow(AST::Scope&&, AST::Statement::Label::ID& label_counter, FileContext::ID, std::optional<LoopCtx> const&);
 	/// Desugars all higher-level control-flow structures within a function.
 	void desugar_control_flow(AST::Function&, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within a module.
