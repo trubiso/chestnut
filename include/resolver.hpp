@@ -762,6 +762,9 @@ private:
 	/// Returns whether the checked list of trait constraints is stricter than the other list.
 	std::optional<bool> satisfies_trait_constraint(std::vector<TypeInfo::Generic::TraitConstraint> const& checked, std::vector<TypeInfo::Generic::TraitConstraint> const&, std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& generic_map = {}) const;
 
+	/// Checks whether a generic type can be decided. It may create new type variables and
+	/// destructively modify the generic.
+	std::optional<bool> can_decide_generic_type(TypeInfo::ID, std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& generic_map);
 	/// Checks whether a generic type's imposed constraints are at least as strict as its declared
 	/// constraints. If possible, turns it into a concrete type.
 	bool try_decide_generic_type(TypeInfo::ID);

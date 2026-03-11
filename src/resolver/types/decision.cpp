@@ -111,29 +111,7 @@ Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candid
 	// finally, we have collected every trait bound in the cloned function's generics, so we can check them now.
 	// we want, for each generic, that its imposed constraints are at least as strict as its declared constraints.
 	for (size_t i = 0; i < function.generics.size(); ++i) {
-		auto const& generic_type = type_pool_.at(std::get<1>(function.generics.at(i)));
-		auto const& generic      = generic_type.get_generic();
-
-		std::vector<TypeInfo::Generic::TraitConstraint> imposed_constraints {};
-		for (auto const& imposed_constraint : generic.imposed_constraints) {
-			if (std::holds_alternative<TypeInfo::Generic::TraitConstraint>(imposed_constraint))
-				imposed_constraints.push_back(
-					std::get<TypeInfo::Generic::TraitConstraint>(imposed_constraint)
-				);
-			else {
-				auto const& type = type_pool_.at(
-					std::get<TypeInfo::Generic::TypeConstraint>(imposed_constraint).type
-				);
-				auto type_constraints = get_implemented_traits(type);
-				std::move(
-					type_constraints.begin(),
-					type_constraints.end(),
-					std::back_inserter(imposed_constraints)
-				);
-			}
-		}
-
-		auto satisfies = satisfies_trait_constraint(imposed_constraints, generic.declared_constraints, generic_map);
+		auto satisfies = can_decide_generic_type(std::get<1>(function.generics.at(i)), generic_map);
 		if (!satisfies.has_value()) return std::nullopt;
 		if (!satisfies.value()) return false;
 	}
@@ -382,6 +360,65 @@ bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	return true;
 }
 
+std::optional<bool>
+Resolver::can_decide_generic_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& generic_map) {
+	assert(type_pool_.at(id).is_generic());
+	auto& generic = type_pool_.at(id).get_generic();
+
+	// all imposed constraints must satisfy the declared constraints
+	std::vector<TypeInfo::Generic::TraitConstraint> trait_constraints {};
+	std::vector<TypeInfo::Generic::TraitConstraint> trait_and_type_constraints {};
+	std::vector<TypeInfo::Generic::TypeConstraint>  type_constraints {};
+	// type constraints must satisfy declared trait constraints
+	for (auto const& constraint : generic.imposed_constraints) {
+		if (std::holds_alternative<TypeInfo::Generic::TypeConstraint>(constraint)) {
+			auto const& type_constraint = std::get<TypeInfo::Generic::TypeConstraint>(constraint);
+
+			std::optional<bool> satisfies = satisfies_trait_constraint(
+				type_constraint.type,
+				generic.declared_constraints,
+				generic_map
+			);
+
+			if (!satisfies.has_value()) return std::nullopt;
+			if (!satisfies.value()) return false;
+			type_constraints.push_back(type_constraint);
+			auto implemented_traits = get_implemented_traits(type_pool_.at(type_constraint.type));
+			std::move(
+				implemented_traits.begin(),
+				implemented_traits.end(),
+				std::back_inserter(trait_and_type_constraints)
+			);
+		} else {
+			trait_constraints.push_back(std::get<TypeInfo::Generic::TraitConstraint>(constraint));
+			trait_and_type_constraints.push_back(std::get<TypeInfo::Generic::TraitConstraint>(constraint));
+		}
+	}
+	// trait constraints must satisfy declared trait constraints
+	auto satisfies_declared
+		= satisfies_trait_constraint(trait_and_type_constraints, generic.declared_constraints, generic_map);
+	if (!satisfies_declared.has_value()) return std::nullopt;
+	if (!satisfies_declared.value()) return false;
+
+	// if there are no imposed type constraints then there is no concrete type!
+	if (type_constraints.empty()) return true;
+
+	// if we do have type constraints, we unify them together
+	type_pool_.at(id) = TypeInfo::make_unknown();
+	for (size_t i = 0; i < type_constraints.size(); ++i) {
+		debug_print_type(std::cout, id) << " unified with ";
+		debug_print_type(std::cout, type_constraints[i].type) << std::endl;
+		if (!can_unify(id, type_constraints[i].type)) return false;
+		unify(id, type_constraints[i].type, get_type_file_id(id));
+	}
+
+	// finally, we check whether the resulting type satisfies the imposed trait constraints
+	auto satisfies = satisfies_trait_constraint(id, trait_constraints, generic_map);
+	assert(satisfies.has_value()
+	       && "there is no way you cannot check whether trait constraints are satisfied by now");
+	return satisfies.value();
+}
+
 bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
 	assert(type_pool_.at(id).is_generic());
 	auto& generic = type_pool_.at(id).get_generic();
@@ -442,7 +479,8 @@ bool Resolver::try_decide_generic_type(TypeInfo::ID id) {
 
 	// finally, we check whether the resulting type satisfies the imposed trait constraints
 	auto satisfies = satisfies_trait_constraint(id, trait_constraints);
-	assert(satisfies.has_value() && "there is no way you cannot check whether trait constraints are satisfied by now");
+	assert(satisfies.has_value()
+	       && "there is no way you cannot check whether trait constraints are satisfied by now");
 	if (!satisfies.value()) {
 		type_pool_.at(id) = TypeInfo::make_bottom();
 		// TODO: rejections list
