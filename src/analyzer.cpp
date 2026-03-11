@@ -101,7 +101,26 @@ void Analyzer::optimize_blocks(IR::Function& function) {
 		}
 	}
 
-	// TODO: remove basic blocks with no predecessors
+	// we will store, for each basic block, whether it has any predecessors
+	std::unordered_set<IR::BasicBlock::ID> has_predecessors {};
+	has_predecessors.insert(0);  // the 0th basic block is the entry, which always has a predecessor
+	for (IR::BasicBlock const& basic_block : function.body) {
+		if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
+			auto const& goto_ = std::get<IR::BasicBlock::Goto>(basic_block.jump);
+			has_predecessors.insert(goto_.id);
+		} else if (std::holds_alternative<IR::BasicBlock::Branch>(basic_block.jump)) {
+			auto const& branch = std::get<IR::BasicBlock::Branch>(basic_block.jump);
+			has_predecessors.insert(branch.true_);
+			has_predecessors.insert(branch.false_);
+		}
+	}
+
+	// TODO: check if those basic blocks had any statements to warn for dead code
+
+	// then, we will erase those that have no predecessors
+	std::erase_if(function.body, [&has_predecessors](IR::BasicBlock const& basic_block) {
+		return !has_predecessors.contains(basic_block.id);
+	});
 }
 
 void Analyzer::optimize_blocks(IR::Module& module) {
@@ -664,7 +683,7 @@ void Analyzer::check_assigned(IR::Function& function, FileContext::ID file_id) {
 	MovedMap    moved {};
 
 	std::unordered_map<IR::BasicBlock::ID, std::unordered_set<IR::BasicBlock::ID>> preds {};
-	for (IR::BasicBlock::ID id = 0; id < function.body.size(); ++id) preds.insert({id, {}});
+	for (IR::BasicBlock const& basic_block : function.body) preds.insert({basic_block.id, {}});
 	check_assigned(function.body.at(0), function, file_id, assigned, moved, preds);
 }
 
