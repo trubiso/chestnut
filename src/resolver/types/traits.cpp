@@ -17,7 +17,9 @@ std::vector<Resolver::TypeInfo::Generic::TraitConstraint> Resolver::get_implemen
 	if (type.is_partial_integer()) {
 		auto const& partial = type.get_partial_integer();
 		if (partial.signed_is_known) return {get_built_in_trait(partial.integer.is_signed() ? "sint" : "uint")};
-		return {get_built_in_trait("int")};
+		// FIXME: this implies partial integers implement sint + uint, which is not true, they implement either
+		// sint or uint. we have no mechanism to fix this as of right now, though
+		return {get_built_in_trait("sint"), get_built_in_trait("uint")};
 	}
 	if (type.is_known_integer())
 		return {get_built_in_trait(type.get_known_integer().integer.is_signed() ? "sint" : "uint")};
