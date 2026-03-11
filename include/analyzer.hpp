@@ -30,6 +30,10 @@ private:
 	/// Returns the file context for the requested file ID.
 	FileContext get_context(FileContext::ID) const;
 
+	void optimize_forwarding_blocks(IR::Function&);
+	void optimize_unconditional_jumps_to_empty_blocks(IR::Function&);
+	bool remove_blocks_with_no_predecessors(IR::Function&);
+
 	void optimize_blocks(IR::Function&);
 	void optimize_blocks(IR::Module&);
 	/// Optimizes away blocks which are unconditional jumps, and optimizes away unconditional jumps to blocks which

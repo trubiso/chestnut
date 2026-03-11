@@ -39,21 +39,22 @@ FileContext Analyzer::get_context(FileContext::ID file_id) const {
 	};
 }
 
-void Analyzer::optimize_blocks(IR::Function& function) {
-	if (function.body.empty()) return;
-
-	// optimize forwarding blocks
+void Analyzer::optimize_forwarding_blocks(IR::Function& function) {
 	std::unordered_map<IR::BasicBlock::ID, IR::BasicBlock::ID> forwarding {};
-	// first, we check for all forwarding blocks
+
+	// first, we check for all forwarding blocks, that is, all blocks which have no statements and unconditionally
+	// jump somewhere. that is, if a block jumps to this block, its jump gets 'forwarded' somewhere else.
 	for (IR::BasicBlock& basic_block : function.body) {
 		if (basic_block.statements.empty() && std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
 			forwarding.insert({basic_block.id, std::get<IR::BasicBlock::Goto>(basic_block.jump).id});
 		}
 	}
-	// then, we replace their usage
+
+	// then, we replace their usage in all other blocks.
 	for (IR::BasicBlock& basic_block : function.body) {
 		// we skip forwarding blocks themselves
 		if (forwarding.contains(basic_block.id)) continue;
+
 		if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
 			IR::BasicBlock::Goto& goto_ = std::get<IR::BasicBlock::Goto>(basic_block.jump);
 			// jump all references
@@ -65,8 +66,11 @@ void Analyzer::optimize_blocks(IR::Function& function) {
 			while (forwarding.contains(branch.false_)) branch.false_ = forwarding.at(branch.false_);
 		}
 	}
+}
 
-	// optimize unconditional jumps to empty blocks
+void Analyzer::optimize_unconditional_jumps_to_empty_blocks(IR::Function& function) {
+	// if we have an unconditional jump to an empty block, we can replace the unconditional jump with that empty
+	// block's jump.
 	for (IR::BasicBlock& basic_block : function.body) {
 		if (std::holds_alternative<IR::BasicBlock::Goto>(basic_block.jump)) {
 			IR::BasicBlock::Goto& goto_     = std::get<IR::BasicBlock::Goto>(basic_block.jump);
@@ -100,6 +104,10 @@ void Analyzer::optimize_blocks(IR::Function& function) {
 			}
 		}
 	}
+}
+
+bool Analyzer::remove_blocks_with_no_predecessors(IR::Function& function) {
+	size_t old_size = function.body.size();
 
 	// we will store, for each basic block, whether it has any predecessors
 	std::unordered_set<IR::BasicBlock::ID> has_predecessors {};
@@ -121,6 +129,18 @@ void Analyzer::optimize_blocks(IR::Function& function) {
 	std::erase_if(function.body, [&has_predecessors](IR::BasicBlock const& basic_block) {
 		return !has_predecessors.contains(basic_block.id);
 	});
+
+	assert(function.body.size() <= old_size && "we somehow added more basic blocks instead of removing them");
+	// we only removed basic blocks if we have less than what we used to have
+	return function.body.size() < old_size;
+}
+
+void Analyzer::optimize_blocks(IR::Function& function) {
+	if (function.body.empty()) return;
+
+	optimize_forwarding_blocks(function);
+	optimize_unconditional_jumps_to_empty_blocks(function);
+	while (remove_blocks_with_no_predecessors(function)) {}
 }
 
 void Analyzer::optimize_blocks(IR::Module& module) {
