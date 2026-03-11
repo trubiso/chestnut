@@ -47,6 +47,13 @@ void Resolver::constrain_candidate(UndecidedOverload& undecided_overload) {
 	// unify return type
 	unify(call.return_, new_prototype.return_, file_id);
 
+	// ensure generics are in the generic decision pool
+	for (auto const& [_, generic] : call.generics) {
+		if (std::find(undecided_generics.cbegin(), undecided_generics.cend(), generic)
+		    == undecided_generics.cend())
+			undecided_generics.push_back(generic);
+	}
+
 	// if we're calling an identifier, let's finish resolving it
 	if (undecided_overload.identifier.has_value()) {
 		if (!type_symbol_mapping_.at(candidate.function).has_value()) {
