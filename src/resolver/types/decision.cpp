@@ -304,7 +304,7 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 
 bool Resolver::try_decide_named_type(TypeInfo::ID id) {
 	assert(type_pool_.at(id).is_named());
-	auto& candidates = type_pool_.at(id).get_named().candidates();
+	auto candidates = std::move(type_pool_.at(id).get_named().candidates());
 
 	// there should be candidates
 	assert(!candidates.empty());

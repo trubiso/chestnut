@@ -382,7 +382,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			arguments.push_back({name, labeled_arguments.at(name.value())});
 		}
 
-		auto const& function_generics = type_pool_.at(callable_id).get_function().generics;
+		auto function_generics = type_pool_.at(callable_id).get_function().generics;
 		assert(function_generics.size() >= provided_generics);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
 		generics.reserve(function_generics.size());
