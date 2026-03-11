@@ -406,8 +406,6 @@ Resolver::can_decide_generic_type(TypeInfo::ID id, std::unordered_map<TypeInfo::
 	// if we do have type constraints, we unify them together
 	type_pool_.at(id) = TypeInfo::make_unknown();
 	for (size_t i = 0; i < type_constraints.size(); ++i) {
-		debug_print_type(std::cout, id) << " unified with ";
-		debug_print_type(std::cout, type_constraints[i].type) << std::endl;
 		if (!can_unify(id, type_constraints[i].type)) return false;
 		unify(id, type_constraints[i].type, get_type_file_id(id));
 	}

@@ -212,10 +212,6 @@ void Resolver::decide_remaining_types() {
 				}
 			);
 
-			for (auto const& candidate : undecided_overload.candidates) {
-				debug_print_type(std::cout, candidate.function) << std::endl;
-			}
-
 			parsed_files.at(undecided_overload.file_id)
 				.diagnostics.push_back(
 					Diagnostic::error(
