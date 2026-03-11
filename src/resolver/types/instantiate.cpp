@@ -54,13 +54,11 @@ Resolver::instantiate_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, Typ
 	}
 
 	if (type.is_function()) {
-		auto const& function = type.get_function();
-
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_generics {};
-		new_generics.reserve(function.generics.size());
+		new_generics.reserve(type_pool_.at(id).get_function().generics.size());
 		std::transform(
-			function.generics.cbegin(),
-			function.generics.cend(),
+			type_pool_.at(id).get_function().generics.cbegin(),
+			type_pool_.at(id).get_function().generics.cend(),
 			std::back_inserter(new_generics),
 			[this, &generic_map](auto const& generic) {
 				return std::tuple {
@@ -70,10 +68,10 @@ Resolver::instantiate_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, Typ
 			}
 		);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> new_arguments {};
-		new_arguments.reserve(function.arguments.size());
+		new_arguments.reserve(type_pool_.at(id).get_function().arguments.size());
 		std::transform(
-			function.arguments.cbegin(),
-			function.arguments.cend(),
+			type_pool_.at(id).get_function().arguments.cbegin(),
+			type_pool_.at(id).get_function().arguments.cend(),
 			std::back_inserter(new_arguments),
 			[this, &generic_map](auto const& argument) {
 				return std::tuple {
@@ -87,7 +85,7 @@ Resolver::instantiate_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, Typ
 				TypeInfo::Function {
 					std::move(new_arguments),
 					std::move(new_generics),
-					instantiate_type(function.return_, generic_map)
+					instantiate_type(type_pool_.at(id).get_function().return_, generic_map)
 				}
 			),
 			span,
@@ -102,10 +100,9 @@ Resolver::instantiate_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, Typ
 			symbol
 		);
 	} else if (type.is_generic()) {
-		auto const& generic = type.get_generic();
 		// we create the generic before its constraints so its constraints can use it!
 		TypeInfo::ID generic_id = register_type(
-			TypeInfo::make_generic(TypeInfo::Generic {generic.name, {}, {}}),
+			TypeInfo::make_generic(TypeInfo::Generic {type_pool_.at(id).get_generic().name, {}, {}}),
 			span,
 			file_id,
 			symbol
@@ -116,10 +113,10 @@ Resolver::instantiate_type(TypeInfo::ID id, std::unordered_map<TypeInfo::ID, Typ
 
 		// now we instantiate the declared constraints
 		std::vector<TypeInfo::Generic::TraitConstraint> declared_constraints {};
-		declared_constraints.reserve(generic.declared_constraints.size());
+		declared_constraints.reserve(type_pool_.at(id).get_generic().declared_constraints.size());
 		std::transform(
-			generic.declared_constraints.cbegin(),
-			generic.declared_constraints.cend(),
+			type_pool_.at(id).get_generic().declared_constraints.cbegin(),
+			type_pool_.at(id).get_generic().declared_constraints.cend(),
 			std::back_inserter(declared_constraints),
 			[this, &generic_map](TypeInfo::Generic::TraitConstraint const& constraint) {
 				return TypeInfo::Generic::TraitConstraint {
