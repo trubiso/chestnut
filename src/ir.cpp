@@ -1,6 +1,7 @@
 #include "ir.hpp"
 
 #include <iostream>
+#include <llvm/ADT/SmallVector.h>
 
 namespace IR {
 
@@ -68,7 +69,7 @@ Type::Atom::Named Type::Atom::Named::clone() const {
 
 Type::Atom Type::Atom::clone() const {
 	switch (kind()) {
-	case Kind::Integer: break;
+	case Kind::Integer: return make_integer(get_integer().bit_width(), get_integer().is_signed());
 	case Kind::Float:   return make_float(get_float().width);
 	case Kind::Void:    return make_void();
 	case Kind::Char:    return make_char();
@@ -76,9 +77,6 @@ Type::Atom Type::Atom::clone() const {
 	case Kind::Named:   return {get_named().clone()};
 	case Kind::Error:   return make_error();
 	}
-
-	auto integer = get_integer();
-	return make_integer(std::move(integer));
 }
 
 Type Type::clone() const {
@@ -111,14 +109,7 @@ std::ostream& operator<<(std::ostream& os, Type::Atom const& atom) {
 	// we know it's an integer now
 	Type::Atom::Integer int_ = atom.get_integer();
 	os << (int_.is_signed() ? "int" : "uint");
-	Type::Atom::Integer::WidthType width_type = int_.width_type();
-
-	switch (width_type) {
-	case Type::Atom::Integer::WidthType::Fixed: return os << int_.bit_width().value();
-	case Type::Atom::Integer::WidthType::Ptr:   return os << "ptr";
-	case Type::Atom::Integer::WidthType::Size:  return os << "size";
-	}
-	[[assume(false)]];
+	return os << int_.bit_width();
 }
 
 std::ostream& operator<<(std::ostream& os, Type::Pointer const& pointer) {
@@ -135,10 +126,7 @@ std::ostream& operator<<(std::ostream& os, Type const& type) {
 
 bool operator==(Type::Atom::Integer const& a, Type::Atom::Integer const& b) {
 	if (a.is_signed() != b.is_signed()) return false;
-	if (a.width_type() != b.width_type()) return false;
-	if (a.width_type() == Type::Atom::Integer::WidthType::Fixed && a.bit_width().value() != b.bit_width().value())
-		return false;
-	return true;
+	return a.bit_width() == b.bit_width();
 }
 
 bool operator==(Type::Atom::Named const& a, Type::Atom::Named const& b) {
@@ -282,7 +270,6 @@ Value::Atom Value::Atom::clone() const {
 	switch (kind()) {
 	case Kind::Identifier:    return make_identifier(get_identifier(), type.clone());
 	case Kind::Literal:       return {get_literal(), type.clone()};
-	case Kind::Bool:          return make_bool(get_bool(), type.clone());
 	case Kind::StructLiteral: break;
 	case Kind::Error:         return make_error();
 	}
@@ -303,11 +290,30 @@ Value::Atom Value::Atom::clone() const {
 
 std::ostream& operator<<(std::ostream& os, Value::Atom::Literal const& literal) {
 	switch (literal.kind) {
-	case Value::Atom::Literal::Kind::Number: os << "(number) "; break;
-	case Value::Atom::Literal::Kind::String: os << "(string) "; break;
-	case Value::Atom::Literal::Kind::Char:   os << "(char) "; break;
+	case Value::Atom::Literal::Kind::Int: {
+		// FIXME: this is extremely silly
+		llvm::SmallVector<char> value;
+		std::get<llvm::APSInt>(literal.literal).toString(value);
+		std::string actual_value;
+		actual_value.reserve(value.size());
+		for (size_t i = 0; i < value.size(); ++i) actual_value.push_back(value[i]);
+		return os << "(int) " << actual_value;
 	}
-	return os << literal.literal;
+	case Value::Atom::Literal::Kind::Float: {
+		// FIXME: this is extremely silly
+		llvm::SmallVector<char> value;
+		std::get<llvm::APFloat>(literal.literal).toString(value);
+		std::string actual_value;
+		actual_value.reserve(value.size());
+		for (size_t i = 0; i < value.size(); ++i) actual_value.push_back(value[i]);
+		return os << "(float) " << actual_value;
+	}
+	case Value::Atom::Literal::Kind::Char:
+		// FIXME: this breaks for escaped chars
+		return os << "(char) '" << std::get<char>(literal.literal) << "'";
+	case Value::Atom::Literal::Kind::Bool:
+		return os << "(bool) " << (std::get<bool>(literal.literal) ? "true" : "false");
+	}
 }
 
 std::ostream& operator<<(std::ostream& os, Value::Atom::StructLiteral const& struct_literal) {
@@ -326,7 +332,6 @@ std::ostream& operator<<(std::ostream& os, Value::Atom const& atom) {
 	switch (atom.kind()) {
 	case Value::Atom::Kind::Identifier:    return os << '@' << atom.get_identifier();
 	case Value::Atom::Kind::Literal:       return os << atom.get_literal();
-	case Value::Atom::Kind::Bool:          return os << "(bool) " << (atom.get_bool() ? "true" : "false");
 	case Value::Atom::Kind::StructLiteral: return os << atom.get_struct_literal();
 	case Value::Atom::Kind::Error:         return os << "(error)";
 	}

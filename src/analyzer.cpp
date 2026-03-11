@@ -365,7 +365,6 @@ void Analyzer::check_assigned(
 ) {
 	switch (atom.kind()) {
 	case IR::Value::Atom::Kind::Literal:
-	case IR::Value::Atom::Kind::Bool:
 	case IR::Value::Atom::Kind::Error:   return;
 	case IR::Value::Atom::Kind::Identifier:
 		return check_assigned(atom.get_identifier(), span, file_id, assigned, moved, true);

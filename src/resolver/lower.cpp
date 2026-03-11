@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <llvm/ADT/APSInt.h>
 #include <sstream>
 #include <variant>
 
@@ -115,21 +116,19 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 		switch (integer.width_type()) {
 		case AST::Type::Atom::Integer::WidthType::Fixed:
 			return IR::Type::make_atom(
-				IR::Type::Atom::make_integer(
-					IR::Type::Atom::Integer::with_width(
-						integer.bit_width().value(),
-						integer.is_signed()
-					)
-						.value()
-				)
+				IR::Type::Atom::make_integer(integer.bit_width().value(), integer.is_signed())
 			);
 		case AST::Type::Atom::Integer::WidthType::Ptr:
 			return IR::Type::make_atom(
-				IR::Type::Atom::make_integer(IR::Type::Atom::Integer::ptr(integer.is_signed()))
+				// FIXME: get size from target!!!
+			        // program_.getDataLayout().getAddressSizeInBits((unsigned) 0)
+				IR::Type::Atom::make_integer(64, integer.is_signed())
 			);
 		case AST::Type::Atom::Integer::WidthType::Size:
 			return IR::Type::make_atom(
-				IR::Type::Atom::make_integer(IR::Type::Atom::Integer::size(integer.is_signed()))
+				// FIXME: get size from target!!!
+			        // program_.getDataLayout().getPointerSizeInBits(0)
+				IR::Type::Atom::make_integer(64, integer.is_signed())
 			);
 		case AST::Type::Atom::Integer::WidthType::Any: [[assume(false)]]; break;
 		}
@@ -143,20 +142,23 @@ IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_orig
 		case AST::Type::Atom::Integer::WidthType::Fixed:
 			return IR::Type::make_atom(
 				IR::Type::Atom::make_integer(
-					IR::Type::Atom::Integer::with_width(
-						integer.width_type() == AST::Type::Atom::Integer::WidthType::Any
-							? IR::DEFAULT_INTEGER_WIDTH
-							: integer.bit_width().value(),
-						signed_
-					)
-						.value()
+					integer.width_type() == AST::Type::Atom::Integer::WidthType::Any
+						? IR::DEFAULT_INTEGER_WIDTH
+						: integer.bit_width().value(),
+					signed_
 				)
 			);
 		case AST::Type::Atom::Integer::WidthType::Ptr:
-			return IR::Type::make_atom(IR::Type::Atom::make_integer(IR::Type::Atom::Integer::ptr(signed_)));
+			return IR::Type::make_atom(
+				// FIXME: get size from target!!!
+			        // program_.getDataLayout().getAddressSizeInBits((unsigned) 0)
+				IR::Type::Atom::make_integer(64, signed_)
+			);
 		case AST::Type::Atom::Integer::WidthType::Size:
 			return IR::Type::make_atom(
-				IR::Type::Atom::make_integer(IR::Type::Atom::Integer::size(signed_))
+				// FIXME: get size from target!!!
+			        // program_.getDataLayout().getPointerSizeInBits(0)
+				IR::Type::Atom::make_integer(64, signed_)
 			);
 		}
 	}
@@ -175,13 +177,55 @@ Spanned<IR::Value> Resolver::lower_get_default_value(IR::Type const& type, Span 
 
 	switch (type.get_atom().kind()) {
 	case IR::Type::Atom::Kind::Integer:
-	case IR::Type::Atom::Kind::Float:
 		return {span,
 		        IR::Value::make_atom(
-				IR::Value::Atom::make_literal(IR::Value::Atom::Literal::Kind::Number, "0", type.clone())
+				IR::Value::Atom::make_int_literal(
+					llvm::APSInt(llvm::APInt(type.get_atom().get_integer().bit_width(), 0, false)),
+					type.clone()
+				)
 			)};
+	case IR::Type::Atom::Kind::Float: {
+		// TODO: clean this up somehow
+		switch (type.get_atom().get_float().width_value()) {
+		case 16:
+			return {span,
+			        IR::Value::make_atom(
+					IR::Value::Atom::make_float_literal(
+						llvm::APFloat(llvm::APFloat::IEEEhalf(), 0),
+						type.clone()
+					)
+				)};
+		case 32:
+			return {span,
+			        IR::Value::make_atom(
+					IR::Value::Atom::make_float_literal(
+						llvm::APFloat(llvm::APFloat::IEEEsingle(), 0),
+						type.clone()
+					)
+				)};
+
+		case 64:
+			return {span,
+			        IR::Value::make_atom(
+					IR::Value::Atom::make_float_literal(
+						llvm::APFloat(llvm::APFloat::IEEEdouble(), 0),
+						type.clone()
+					)
+				)};
+
+		case 128:
+			return {span,
+			        IR::Value::make_atom(
+					IR::Value::Atom::make_float_literal(
+						llvm::APFloat(llvm::APFloat::IEEEquad(), 0),
+						type.clone()
+					)
+				)};
+		}
+	}
+
 	case IR::Type::Atom::Kind::Bool:
-		return {span, IR::Value::make_atom(IR::Value::Atom::make_bool(false, type.clone()))};
+		return {span, IR::Value::make_atom(IR::Value::Atom::make_bool_literal(false, type.clone()))};
 	case IR::Type::Atom::Kind::Void:
 	case IR::Type::Atom::Kind::Error: return {span, IR::Value::make_atom(IR::Value::Atom::make_error())};
 	case IR::Type::Atom::Kind::Char:
@@ -384,32 +428,69 @@ IR::Value::Atom Resolver::lower_atom(
 ) {
 	// TODO: actually care about allow_functions more LOL
 	switch (atom.kind()) {
-	case AST::Expression::Atom::Kind::NumberLiteral:
-		return IR::Value::Atom::make_literal(
-			IR::Value::Atom::Literal::Kind::Number,
-			atom.get_number_literal().literal,
-			reconstruct_type(type_id)
-		);
-	case AST::Expression::Atom::Kind::StringLiteral:
-		return IR::Value::Atom::make_literal(
-			IR::Value::Atom::Literal::Kind::String,
-			atom.get_string_literal().literal,
-			reconstruct_type(type_id)
-		);
-	case AST::Expression::Atom::Kind::CharLiteral:
-		return IR::Value::Atom::make_literal(
-			IR::Value::Atom::Literal::Kind::Char,
-			atom.get_char_literal().literal,
-			reconstruct_type(type_id)
-		);
+	case AST::Expression::Atom::Kind::NumberLiteral: {
+		auto const& literal = atom.get_number_literal().literal;
+		auto        type    = reconstruct_type(type_id);
+		assert(type.is_atom());
+		if (type.get_atom().is_integer()) {
+			// TODO: parse with the correct radix
+			return IR::Value::Atom::make_int_literal(
+				// literals are always unsigned!
+				llvm::APSInt(llvm::APInt(type.get_atom().get_integer().bit_width(), literal, 10), true),
+				std::move(type)
+			);
+		}
+
+		if (type.get_atom().is_float()) {
+			switch (type.get_atom().get_float().width_value()) {
+			case 16:
+				return IR::Value::Atom::make_float_literal(
+					llvm::APFloat(llvm::APFloat::IEEEhalf(), literal),
+					std::move(type)
+				);
+				break;
+			case 32:
+				return IR::Value::Atom::make_float_literal(
+					llvm::APFloat(llvm::APFloat::IEEEsingle(), literal),
+					std::move(type)
+				);
+				break;
+			case 64:
+				return IR::Value::Atom::make_float_literal(
+					llvm::APFloat(llvm::APFloat::IEEEdouble(), literal),
+					std::move(type)
+				);
+				break;
+			case 128:
+				return IR::Value::Atom::make_float_literal(
+					llvm::APFloat(llvm::APFloat::IEEEquad(), literal),
+					std::move(type)
+				);
+				break;
+			}
+		}
+
+		assert(false && "wrong type for integer literal");
+	}
+	case AST::Expression::Atom::Kind::StringLiteral: assert(false && "unsupported string literal");
+	case AST::Expression::Atom::Kind::CharLiteral:   {
+		auto const& literal = atom.get_char_literal().literal;
+		// for chars, we need to look up the codepoint
+		// FIXME: this is very primitive
+		uint8_t codepoint = 0;
+		if (literal.size() == 3) codepoint = literal[1];
+		else if (literal.size() == 4) codepoint = Lexer::lookup_escaped(literal[2]).value();
+		return IR::Value::Atom::make_char_literal(codepoint, reconstruct_type(type_id));
+	}
 	case AST::Expression::Atom::Kind::BoolLiteral:
-		return IR::Value::Atom::make_bool(atom.get_bool_literal().value, reconstruct_type(type_id));
+		return IR::Value::Atom::make_bool_literal(atom.get_bool_literal().value, reconstruct_type(type_id));
 	case AST::Expression::Atom::Kind::StructLiteral:
 		return lower_atom(atom.get_struct_literal(), type_id, span, basic_blocks, file_id, allow_functions);
 	case AST::Expression::Atom::Kind::Expression:
 		return extract_value(*atom.get_expression(), span, basic_blocks, file_id).value;
 	case AST::Expression::Atom::Kind::Identifier: break;
 	}
+
 	// for identifiers, we need to extract the type as well.
 	// only identifiers can be functions!
 	auto data = lower(atom.get_identifier(), allow_functions);

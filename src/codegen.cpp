@@ -196,17 +196,8 @@ llvm::Type* CodeGenerator::generate_type(IR::Type::Atom const& atom, GenericCtx 
 		case 128: return llvm::Type::getFP128Ty(context_);
 		}
 		[[assume(false)]];
-	case IR::Type::Atom::Kind::Integer:
-		switch (atom.get_integer().width_type()) {
-		case IR::Type::Atom::Integer::WidthType::Fixed:
-			return builder_.getIntNTy(atom.get_integer().bit_width().value());
-		case IR::Type::Atom::Integer::WidthType::Ptr:
-			return program_.getDataLayout().getIntPtrType(context_, 0);
-		case IR::Type::Atom::Integer::WidthType::Size:
-			return program_.getDataLayout().getIndexType(context_, 0);
-		}
-		[[assume(false)]];
-	case IR::Type::Atom::Kind::Named: break;
+	case IR::Type::Atom::Kind::Integer: return builder_.getIntNTy(atom.get_integer().bit_width());
+	case IR::Type::Atom::Kind::Named:   break;
 	}
 
 	if (generic_ctx.contains(atom.get_named().name.value))
@@ -274,10 +265,7 @@ llvm::Value* CodeGenerator::call_built_in(
 		// since there is no built-in function, we do 0-x
 		assert(arguments.size() == 1);
 		return builder_.CreateSub(
-			builder_.getIntN(
-				function_arguments[0].value.type.get_atom().get_integer().bit_width().value(),
-				0
-			),
+			builder_.getIntN(function_arguments[0].value.type.get_atom().get_integer().bit_width(), 0),
 			arguments[0],
 			"",
 			true,
@@ -371,7 +359,6 @@ llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom, GenericC
 	case IR::Value::Atom::Kind::Identifier:
 		return builder_.CreateLoad(generate_type(atom.type, generic_ctx), variables_[atom.get_identifier()]);
 	case IR::Value::Atom::Kind::Literal:       break;
-	case IR::Value::Atom::Kind::Bool:          return builder_.getInt1(atom.get_bool());
 	case IR::Value::Atom::Kind::StructLiteral: break;
 	case IR::Value::Atom::Kind::Error:         [[assume(false)]];
 	}
@@ -401,85 +388,13 @@ llvm::Value* CodeGenerator::generate_value(IR::Value::Atom const& atom, GenericC
 	IR::Value::Atom::Literal const& literal = atom.get_literal();
 
 	switch (literal.kind) {
-	case IR::Value::Atom::Literal::Kind::Number:
-		// this is a bit verbose :P
-		switch (atom.type.get_atom().kind()) {
-		case IR::Type::Atom::Kind::Integer:
-			switch (atom.type.get_atom().get_integer().width_type()) {
-				// TODO: parse with the correct radix
-			case IR::Type::Atom::Integer::WidthType::Fixed:
-				return llvm::ConstantInt::get(
-					context_,
-					llvm::APInt(
-						atom.type.get_atom().get_integer().bit_width().value(),
-						literal.literal,
-						10
-					)
-				);
-			case IR::Type::Atom::Integer::WidthType::Ptr:
-				return llvm::ConstantInt::get(
-					context_,
-					llvm::APInt(
-						program_.getDataLayout().getAddressSizeInBits((unsigned) 0),
-						literal.literal,
-						10
-					)
-				);
-			case IR::Type::Atom::Integer::WidthType::Size:
-				return llvm::ConstantInt::get(
-					context_,
-					llvm::APInt(
-						program_.getDataLayout().getPointerSizeInBits(0),
-						literal.literal,
-						10
-					)
-				);
-			}
-		case IR::Type::Atom::Kind::Float:
-			switch (atom.type.get_atom().get_float().width_value()) {
-			case 16:
-				return llvm::ConstantFP::get(
-					context_,
-					llvm::APFloat(llvm::APFloat::IEEEhalf(), literal.literal)
-				);
-			case 32:
-				return llvm::ConstantFP::get(
-					context_,
-					llvm::APFloat(llvm::APFloat::IEEEsingle(), literal.literal)
-				);
-			case 64:
-				return llvm::ConstantFP::get(
-					context_,
-					llvm::APFloat(llvm::APFloat::IEEEdouble(), literal.literal)
-				);
-			case 128:
-				return llvm::ConstantFP::get(
-					context_,
-					llvm::APFloat(llvm::APFloat::IEEEquad(), literal.literal)
-				);
-			}
-			[[assume(false)]];
-		case IR::Type::Atom::Kind::Void:
-		case IR::Type::Atom::Kind::Char:
-		case IR::Type::Atom::Kind::Bool:
-		case IR::Type::Atom::Kind::Named:
-		case IR::Type::Atom::Kind::Error:
-			std::cout << "genuinely what are you doing" << std::endl;
-			std::exit(0);
-		}
-
-	case IR::Value::Atom::Literal::Kind::String:
-		std::cout << "unsupported string literal lol!!" << std::endl;
-		std::exit(0);
-	case IR::Value::Atom::Literal::Kind::Char: break;
+	case IR::Value::Atom::Literal::Kind::Int:
+		return llvm::ConstantInt::get(context_, std::get<llvm::APSInt>(literal.literal));
+	case IR::Value::Atom::Literal::Kind::Float:
+		return llvm::ConstantFP::get(context_, std::get<llvm::APFloat>(literal.literal));
+	case IR::Value::Atom::Literal::Kind::Char: return builder_.getInt8(std::get<char>(literal.literal));
+	case IR::Value::Atom::Literal::Kind::Bool: return builder_.getInt1(std::get<bool>(literal.literal));
 	}
-
-	// for chars, we need to look up the codepoint
-	// FIXME: this is very primitive
-	uint8_t codepoint = 0;
-	if (literal.literal.size() == 3) codepoint = literal.literal[1];
-	else if (literal.literal.size() == 4) codepoint = Lexer::lookup_escaped(literal.literal[2]).value();
-	return builder_.getInt8(codepoint);
 }
 
 llvm::Value*
