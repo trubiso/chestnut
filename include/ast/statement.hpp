@@ -61,9 +61,13 @@ struct Statement {
 		Spanned<Scope>      loop;
 	};
 
-	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If, While };
+	using Break    = std::monostate;
+	using Continue = std::monostate;
 
-	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If, While> value_t;
+	enum class Kind { Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If, While, Break, Continue };
+
+	typedef std::variant<Declare, Set, Expression, Return, Scope, Label, Goto, Branch, If, While, Break, Continue>
+		value_t;
 
 	value_t value;
 	bool    is_auto_generated = false;
@@ -113,6 +117,14 @@ struct Statement {
 		return Statement(value_t {std::in_place_index<(size_t) Kind::While>, std::move(while_)});
 	}
 
+	inline static Statement make_break() {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Break>, std::monostate {}});
+	}
+
+	inline static Statement make_continue() {
+		return Statement(value_t {std::in_place_index<(size_t) Kind::Continue>, std::monostate {}});
+	}
+
 	inline bool is_declare() const { return kind() == Kind::Declare; }
 
 	inline bool is_set() const { return kind() == Kind::Set; }
@@ -132,6 +144,10 @@ struct Statement {
 	inline bool is_if() const { return kind() == Kind::If; }
 
 	inline bool is_while() const { return kind() == Kind::While; }
+
+	inline bool is_break() const { return kind() == Kind::Break; }
+
+	inline bool is_continue() const { return kind() == Kind::Continue; }
 
 	inline Declare const& get_declare() const { return std::get<(size_t) Kind::Declare>(value); }
 

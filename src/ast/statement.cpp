@@ -87,6 +87,8 @@ std::ostream& operator<<(std::ostream& os, Statement const& statement) {
 	case Statement::Kind::Branch:     return os << statement.get_branch();
 	case Statement::Kind::If:         return os << statement.get_if();
 	case Statement::Kind::While:      return os << statement.get_while();
+	case Statement::Kind::Break:      return os << "[break;]";
+	case Statement::Kind::Continue:   return os << "[continue;]";
 	}
 
 	Scope const& scope = statement.get_scope();

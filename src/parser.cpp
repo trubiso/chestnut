@@ -13,9 +13,10 @@ namespace AST {
 
 #define SPANNED(fn) spanned((std::function<decltype((fn) ())()>) [&, this] { return (fn) (); })
 // FIXME: clang-format won't stop jiggling this macro around LOL
-#define SPANNED_REASON(fn, reason)                                                                                     \
-	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&,                               \
-		                                                                      this] { return (fn) (reason); })
+#define SPANNED_REASON(fn, reason)                                                               \
+	spanned((std::function<decltype((fn) (std::declval<decltype(reason)>()))()>) [&, this] { \
+		return (fn) (reason);                                                            \
+	})
 
 Diagnostic ExpectedDiagnostic::as_diagnostic(FileContext const& context) const {
 	std::stringstream title_stream {}, subtitle_stream {};
@@ -1092,12 +1093,20 @@ std::optional<Statement> Parser::consume_statement_while() {
 	);
 }
 
+std::optional<Statement> Parser::consume_statement_break() {
+	return AST::Statement::make_break();
+}
+
+std::optional<Statement> Parser::consume_statement_continue() {
+	return AST::Statement::make_continue();
+}
+
 std::optional<Statement> Parser::consume_statement() {
 	if (peek_symbol(Token::Symbol::LBrace)) return consume_statement_scope();
 
 	if (peek_label()) return consume_statement_label();
 
-	// FIXME: if someone had a function or variable called const/mut/return/goto, this would break!
+	// FIXME: if someone had a function or variable called const/mut/return/goto/..., this would break!
 
 	if (peek_keyword(Keyword::Const) || peek_keyword(Keyword::Mut)) { return consume_statement_declare(); }
 	if (consume_keyword(Keyword::Return)) return consume_statement_return();
@@ -1105,6 +1114,8 @@ std::optional<Statement> Parser::consume_statement() {
 	if (consume_keyword(Keyword::Branch)) return consume_statement_branch();
 	if (consume_keyword(Keyword::If)) return consume_statement_if();
 	if (consume_keyword(Keyword::While)) return consume_statement_while();
+	if (consume_keyword(Keyword::Break)) return consume_statement_break();
+	if (consume_keyword(Keyword::Continue)) return consume_statement_continue();
 
 	return consume_statement_set();
 }
@@ -1277,22 +1288,24 @@ std::optional<Trait::Constraint> Parser::expect_trait_constraint(std::string_vie
 
 char const* Parser::get_variant_name(Keyword keyword) {
 	switch (keyword) {
-	case Keyword::Def:    return "def";
-	case Keyword::Import: return "import";
-	case Keyword::Module: return "module";
-	case Keyword::Export: return "export";
-	case Keyword::Const:  return "const";
-	case Keyword::Mut:    return "mut";
-	case Keyword::Anon:   return "anon";
-	case Keyword::Func:   return "func";
-	case Keyword::Return: return "return";
-	case Keyword::Goto:   return "goto";
-	case Keyword::Branch: return "branch";
-	case Keyword::If:     return "if";
-	case Keyword::Else:   return "else";
-	case Keyword::Struct: return "struct";
-	case Keyword::Trait:  return "trait";
-	case Keyword::While:  return "while";
+	case Keyword::Def:      return "def";
+	case Keyword::Import:   return "import";
+	case Keyword::Module:   return "module";
+	case Keyword::Export:   return "export";
+	case Keyword::Const:    return "const";
+	case Keyword::Mut:      return "mut";
+	case Keyword::Anon:     return "anon";
+	case Keyword::Func:     return "func";
+	case Keyword::Return:   return "return";
+	case Keyword::Goto:     return "goto";
+	case Keyword::Branch:   return "branch";
+	case Keyword::If:       return "if";
+	case Keyword::Else:     return "else";
+	case Keyword::Struct:   return "struct";
+	case Keyword::Trait:    return "trait";
+	case Keyword::While:    return "while";
+	case Keyword::Break:    return "break";
+	case Keyword::Continue: return "continue";
 	}
 }
 
