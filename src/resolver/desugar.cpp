@@ -14,7 +14,8 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	case AST::Expression::Atom::Kind::NumberLiteral:
 	case AST::Expression::Atom::Kind::StringLiteral:
 	case AST::Expression::Atom::Kind::CharLiteral:
-	case AST::Expression::Atom::Kind::BoolLiteral:   return {};
+	case AST::Expression::Atom::Kind::BoolLiteral:
+	case AST::Expression::Atom::Kind::StaticMember:  return {};
 	case AST::Expression::Atom::Kind::StructLiteral: break;
 	case AST::Expression::Atom::Kind::Expression:
 		return desugar_control_flow_expr(*atom.get_expression(), span, label_counter, file_id);
@@ -592,6 +593,14 @@ AST::Scope Resolver::desugar_control_flow(
 	return new_scope;
 }
 
+void Resolver::desugar_control_flow(AST::TraitImplementation& trait_implementation, FileContext::ID file_id) {
+	for (auto& method : trait_implementation.methods) desugar_control_flow(method, file_id);
+}
+
+void Resolver::desugar_control_flow(AST::Trait& trait, FileContext::ID file_id) {
+	for (auto& method : trait.methods) desugar_control_flow(method, file_id);
+}
+
 void Resolver::desugar_control_flow(AST::Function& function, FileContext::ID file_id) {
 	if (!function.body.has_value()) return;
 	// we initialize the label counter for everyone else. we reserve 0 for the entry block
@@ -607,6 +616,10 @@ void Resolver::desugar_control_flow(AST::Module& module, FileContext::ID file_id
 			desugar_control_flow(std::get<AST::Function>(value), file_id);
 		else if (std::holds_alternative<AST::Module>(value))
 			desugar_control_flow(std::get<AST::Module>(value), file_id);
+		else if (std::holds_alternative<AST::Trait>(value))
+			desugar_control_flow(std::get<AST::Trait>(value), file_id);
+		else if (std::holds_alternative<AST::TraitImplementation>(value))
+			desugar_control_flow(std::get<AST::TraitImplementation>(value), file_id);
 	}
 }
 

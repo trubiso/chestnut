@@ -503,6 +503,10 @@ private:
 
 	/// Desugars all higher-level control-flow structures within a scope.
 	AST::Scope desugar_control_flow(AST::Scope&&, AST::Statement::Label::ID& label_counter, FileContext::ID, std::optional<LoopCtx> const&);
+	/// Desugars all higher-level control-flow structures within a trait implementation's methods.
+	void desugar_control_flow(AST::TraitImplementation&, FileContext::ID);
+	/// Desugars all higher-level control-flow structures within a trait's methods.
+	void desugar_control_flow(AST::Trait&, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within a function.
 	void desugar_control_flow(AST::Function&, FileContext::ID);
 	/// Desugars all higher-level control-flow structures within a module.
