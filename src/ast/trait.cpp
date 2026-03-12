@@ -17,6 +17,17 @@ std::ostream& operator<<(std::ostream& os, Trait const& trait) {
 		os << constraint;
 		if (++count < trait.constraints.size()) os << " + ";
 	}
+	if (!trait.methods.empty()) {
+		os << " with methods: {\n";
+		os.iword(0)++;
+		for (auto const& method : trait.methods) {
+			for (long i = 0; i < os.iword(0); ++i) os << "    ";
+			os << method << '\n';
+		}
+		os.iword(0)--;
+		for (long i = 0; i < os.iword(0); ++i) os << "    ";
+		os << "}";
+	}
 	return os;
 }
 

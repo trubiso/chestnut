@@ -1328,14 +1328,15 @@ std::optional<Trait> Parser::parse_trait() {
 	if (!name.has_value()) return {};
 	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
 	std::vector<Trait::Constraint>    constraints {};
-	if (!consume_symbol(Token::Symbol::Colon)) goto return_;
+	std::vector<Function>             methods {};
+	if (!consume_symbol(Token::Symbol::Colon)) goto methods;
 
 	{
 		std::optional<Trait::Constraint> constraint
 			= expect_trait_constraint("expected trait constraint after `:`");
 		if (!constraint.has_value()) return {};
 		constraints.push_back(std::move(constraint.value()));
-		if (!peek_symbol(Token::Symbol::Plus)) goto return_;
+		if (!peek_symbol(Token::Symbol::Plus)) goto methods;
 		assert(consume_symbol(Token::Symbol::Plus));
 
 		while ((constraint = parse_trait_constraint()).has_value()) {
@@ -1343,8 +1344,37 @@ std::optional<Trait> Parser::parse_trait() {
 			if (!consume_symbol(Token::Symbol::Plus)) break;
 		}
 	}
-return_:
-	return Trait {std::move(name.value()), std::move(generic_declaration), std::move(constraints)};
+
+methods:
+	if (consume_symbol(Token::Symbol::LBrace)) {
+		skip_semis();
+		std::optional<Function> function;
+		while ((function = parse_function()).has_value()) {
+			if (function.value().body.has_value()) {
+				diagnostics_.push_back(
+					Diagnostic::error(
+						"trait method cannot have default implementation",
+						"default implementations are not yet supported",
+						{Diagnostic::Sample(
+							context_,
+							function.value().name.span,
+							OutFmt::Color::Red
+						)}
+					)
+				);
+			}
+			methods.push_back(std::move(function.value()));
+			skip_semis();
+		}
+		expect_symbol("expected closing brace to end trait body", Token::Symbol::RBrace);
+	}
+
+	return Trait {
+		std::move(name.value()),
+		std::move(generic_declaration),
+		std::move(constraints),
+		std::move(methods)
+	};
 }
 
 std::optional<Struct::Field> Parser::parse_struct_field() {
