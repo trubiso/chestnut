@@ -17,6 +17,7 @@ std::ostream& operator<<(std::ostream& os, Module::InnerItem const& item) {
 	else if (std::holds_alternative<Import>(item)) return os << std::get<Import>(item);
 	else if (std::holds_alternative<Struct>(item)) return os << std::get<Struct>(item);
 	else if (std::holds_alternative<Trait>(item)) return os << std::get<Trait>(item);
+	else if (std::holds_alternative<TraitImplementation>(item)) return os << std::get<TraitImplementation>(item);
 	[[assume(false)]];
 }
 

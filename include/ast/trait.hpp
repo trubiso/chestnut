@@ -25,4 +25,14 @@ struct Trait {
 std::ostream& operator<<(std::ostream&, Trait::Constraint const&);
 std::ostream& operator<<(std::ostream&, Trait const&);
 
+struct TraitImplementation {
+	std::optional<GenericDeclaration> generic_declaration;
+
+	Spanned<Type>              type;  // name of implementer
+	Spanned<Type::Atom::Named> name;  // name of implemented trait (we use a named type atom to have a generic list)
+	std::vector<Function>      methods;  // implemented methods
+};
+
+std::ostream& operator<<(std::ostream&, TraitImplementation const&);
+
 }  // namespace AST

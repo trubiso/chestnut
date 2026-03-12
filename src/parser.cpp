@@ -1330,6 +1330,7 @@ char const* Parser::get_variant_name(Keyword keyword) {
 	case Keyword::While:    return "while";
 	case Keyword::Break:    return "break";
 	case Keyword::Continue: return "continue";
+	case Keyword::Mark:     return "mark";
 	}
 }
 
@@ -1397,6 +1398,71 @@ methods:
 		std::move(name.value()),
 		std::move(generic_declaration),
 		std::move(constraints),
+		std::move(methods)
+	};
+}
+
+std::optional<TraitImplementation> Parser::parse_trait_implementation() {
+	if (!consume_keyword(Keyword::Mark)) return {};
+	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
+
+	auto type = SPANNED_REASON(expect_type, "expected type to mark");
+	if (!type.has_value()) return {};
+	expect_symbol("expected colon after type to mark to introduce trait name", Token::Symbol::Colon);
+
+	auto name = SPANNED_REASON(expect_type_atom, "expected trait name");
+	if (!name.has_value()) return {};
+	if (!name.value().value.get_atom().is_named()) {
+		// TODO: maybe in the future reframe these as named types
+		auto const& atom = name.value().value.get_atom();
+
+		std::stringstream subtitle_stream {};
+		if (atom.is_inferred()) {
+			subtitle_stream << "cannot infer which trait to mark this type as";
+		} else if (atom.is_integer()
+		           && atom.get_integer().width_type() == Type::Atom::Integer::WidthType::Any) {
+			subtitle_stream << "no type can be marked with built-in marker traits such as `int` and `uint`";
+		} else {
+			subtitle_stream << "the provided name corresponds to a built-in type";
+		}
+		diagnostics_.push_back(
+			Diagnostic::error(
+				"expected trait name",
+				subtitle_stream.str(),
+				{Diagnostic::Sample(context_, name.value().span, OutFmt::Color::Red)}
+			)
+		);
+		return {};
+	}
+
+	std::vector<Function> methods {};
+
+	if (consume_symbol(Token::Symbol::LBrace)) {
+		skip_semis();
+		std::optional<Function> function;
+		while ((function = parse_function()).has_value()) {
+			if (!function.value().body.has_value()) {
+				diagnostics_.push_back(
+					Diagnostic::error(
+						"trait method must be supplied with an implementation",
+						{Diagnostic::Sample(
+							context_,
+							function.value().name.span,
+							OutFmt::Color::Red
+						)}
+					)
+				);
+			}
+			methods.push_back(std::move(function.value()));
+			skip_semis();
+		}
+		expect_symbol("expected closing brace to end trait body", Token::Symbol::RBrace);
+	}
+
+	return TraitImplementation {
+		std::move(generic_declaration),
+		std::move(type.value()),
+		{name.value().span, std::move(name.value().value.get_atom().get_named())},
 		std::move(methods)
 	};
 }
@@ -1668,6 +1734,10 @@ std::optional<Module::Item> Parser::parse_module_item() {
 		});
 	} else if (peek_keyword(Keyword::Trait)) {
 		item = parse_trait().transform([tags = std::move(tags), exported](auto&& value) {
+			return Module::Item {std::move(tags), exported, std::move(value)};
+		});
+	} else if (peek_keyword(Keyword::Mark)) {
+		item = parse_trait_implementation().transform([tags = std::move(tags), exported](auto&& value) {
 			return Module::Item {std::move(tags), exported, std::move(value)};
 		});
 	}

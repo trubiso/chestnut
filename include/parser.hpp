@@ -69,6 +69,7 @@ private:
 		While,
 		Break,
 		Continue,
+		Mark,
 	};
 
 	FileContext   context_;
@@ -213,16 +214,17 @@ private:
 	// skip semicolons
 	void skip_semis();
 
-	std::optional<Trait::Constraint> parse_trait_constraint();
-	std::optional<Trait>             parse_trait();
-	std::optional<Struct::Field>     parse_struct_field();
-	std::optional<Struct>            parse_struct();
-	std::optional<Function>          parse_function();
-	std::optional<Alias>             parse_alias();
-	std::optional<Import>            parse_import();
-	std::optional<Module>            parse_module();
-	std::optional<Module::Item>      parse_module_item();
-	std::optional<Module::Body>      parse_module_body(bool bare = false);
+	std::optional<Trait::Constraint>   parse_trait_constraint();
+	std::optional<Trait>               parse_trait();
+	std::optional<TraitImplementation> parse_trait_implementation();
+	std::optional<Struct::Field>       parse_struct_field();
+	std::optional<Struct>              parse_struct();
+	std::optional<Function>            parse_function();
+	std::optional<Alias>               parse_alias();
+	std::optional<Import>              parse_import();
+	std::optional<Module>              parse_module();
+	std::optional<Module::Item>        parse_module_item();
+	std::optional<Module::Body>        parse_module_body(bool bare = false);
 };
 
 }  // namespace AST
