@@ -53,6 +53,10 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom::StructLiteral const
 	return os << ']';
 }
 
+std::ostream& operator<<(std::ostream& os, Expression::Atom::StaticMember const& static_member) {
+	return os << "[static member " << static_member.type.value << "::" << static_member.member.value << ']';
+}
+
 std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	switch (atom.kind()) {
 	case Expression::Atom::Kind::Identifier:    return os << atom.get_identifier();
@@ -62,6 +66,7 @@ std::ostream& operator<<(std::ostream& os, Expression::Atom const& atom) {
 	case Expression::Atom::Kind::BoolLiteral:
 		return os << '[' << (atom.get_bool_literal().value ? "true" : "false") << ']';
 	case Expression::Atom::Kind::StructLiteral: return os << atom.get_struct_literal();
+	case Expression::Atom::Kind::StaticMember:  return os << atom.get_static_member();
 	case Expression::Atom::Kind::Expression:    return os << '(' << *atom.get_expression() << ')';
 	}
 	[[assume(false)]];

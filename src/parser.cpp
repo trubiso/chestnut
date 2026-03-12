@@ -286,10 +286,14 @@ std::optional<Expression> Parser::consume_expression_atom() {
 			);
 		}
 
-		// special case for struct literals
-		if (peek_symbol(Token::Symbol::Lt) || peek_symbol(Token::Symbol::LBrace)) {
-			size_t                     index        = tokens_.index();
-			std::optional<GenericList> generic_list = std::nullopt;
+		// special case for struct literals and static members
+		// FIXME: this implementation of static members does not work for complex types
+		if (peek_symbol(Token::Symbol::Lt)
+		    || peek_symbol(Token::Symbol::LBrace)
+		    || peek_symbol(Token::Symbol::ColonColon)) {
+			size_t                     index            = tokens_.index();
+			std::optional<GenericList> generic_list     = std::nullopt;
+			bool                       is_static_member = false;
 			// this might still not be a struct literal, but a function call!
 			// we check it here because the function call calls this for its callee, meaning that the
 			// function call won't check for generics before we do.
@@ -304,18 +308,38 @@ std::optional<Expression> Parser::consume_expression_atom() {
 					tokens_.set_index(index);
 					goto bail;
 				}
-				// if we don't get an opening brace, this is probably a function call :P
+				// if we don't get an opening brace or a ::, this is probably a function call :P
 				if (!consume_symbol(Token::Symbol::LBrace)) {
-					tokens_.set_index(index);
-					goto bail;
+					if (consume_symbol(Token::Symbol::ColonColon)) {
+						is_static_member = true;
+					} else {
+						tokens_.set_index(index);
+						goto bail;
+					}
 				}
-			} else assert(consume_symbol(Token::Symbol::LBrace));
+			} else
+				assert(consume_symbol(Token::Symbol::LBrace)
+				       || (is_static_member = true, consume_symbol(Token::Symbol::ColonColon)));
 
-			// TODO: correct type
+			// TODO: correct span
 			Spanned<Type::Atom::Named> type {
 				identifier.value().span,
 				Type::Atom::Named {identifier.value(), std::move(generic_list)}
 			};
+
+			if (is_static_member) {
+				// we have a type and ::, so now we need the field name (we won't try to parse any more
+				// levels of :: after this)
+				auto member = SPANNED_REASON(
+					expect_unqualified_identifier,
+					"expected member name after `::`"
+				);
+				// TODO: better error recovery lol
+				if (!member.has_value()) return {};
+				return Expression::make_atom(
+					Expression::Atom::make_static_member(std::move(type), std::move(member.value()))
+				);
+			}
 
 			std::optional<Expression::Atom::StructLiteral::Field> maybe_field;
 			std::vector<Expression::Atom::StructLiteral::Field>   fields {};
