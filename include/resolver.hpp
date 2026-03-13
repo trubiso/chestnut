@@ -552,12 +552,13 @@ private:
 
 	bool resolve_trait_name(Spanned<AST::Identifier>&, Scope const&, FileContext::ID);
 
-	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
+	/// If the identifier needs to be converted into a static member, returns from which index onward to do so.
+	[[nodiscard]] std::optional<size_t> resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
+	[[nodiscard]] std::optional<size_t> resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
 	void resolve(AST::Type::Atom::Named&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type::Atom&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type&, Span, Scope const&, FileContext::ID);
 	void resolve(Spanned<AST::Type>&, Scope const&, FileContext::ID);
-	void resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
 	void resolve(AST::Expression::UnaryOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::AddressOperation&, Scope const&, FileContext::ID);
 	void resolve(AST::Expression::BinaryOperation&, Scope const&, FileContext::ID);

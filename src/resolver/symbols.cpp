@@ -63,7 +63,7 @@ void Resolver::add_unknown_symbol_diagnostic(
 	);
 }
 
-void Resolver::resolve(
+std::optional<size_t> Resolver::resolve(
 	AST::Identifier& identifier,
 	Span             span,
 	Scope const&     scope,
@@ -71,21 +71,21 @@ void Resolver::resolve(
 	bool             include_unimported
 ) {
 	// do not try to resolve already resolved identifiers (just in case, i don't think we will ever hit this)
-	if (identifier.id.has_value()) return;
+	if (identifier.id.has_value()) return std::nullopt;
 
 	// unqualified identifiers get resolved differently
 	if (identifier.is_unqualified()) {
 		// happy path for built-in traits
 		if (built_in_traits_.contains(identifier.name())) {
 			identifier.id = built_in_traits_.at(identifier.name()).name.value.id;
-			return;
+			return std::nullopt;
 		}
 
 		Scope const* traversing_scope = &scope;
 		while (traversing_scope != nullptr) {
 			if (traversing_scope->symbols.contains(identifier.name())) {
 				identifier.id = traversing_scope->symbols.at(identifier.name());
-				return;
+				return std::nullopt;
 			}
 			traversing_scope = traversing_scope->parent;
 		}
@@ -106,13 +106,13 @@ void Resolver::resolve(
 
 		add_unknown_symbol_diagnostic(identifier.name(), span, symbol_vector, "current", file_id);
 
-		return;
+		return std::nullopt;
 	}
 
 	if (!identifier.absolute) {
 		// TODO: resolve non-absolute qualified identifiers
 		std::cout << "unsupported non-absolute qualified identifier detected!" << std::endl;
-		return;
+		return std::nullopt;
 	}
 
 	// since this is an absolutely qualified identifier, we must find it in the global scope
@@ -135,7 +135,7 @@ void Resolver::resolve(
 			file_id
 		);
 
-		return;
+		return std::nullopt;
 	}
 
 	// the module to check within
@@ -150,9 +150,10 @@ void Resolver::resolve(
 	for (size_t i = 1; i < identifier.path.size(); ++i) {
 		Spanned<std::string> const& fragment = identifier.path[i];
 		if (cannot_traverse_further) {
-			// for now, this can only mean it is a function, which does not have subitems
-			std::cout << "tried to access a function/struct's subitems !" << std::endl;
-			break;
+			// this means that this must become a static member!
+			// we identify the accessee at least :)
+			identifier.id = pointed_ids;
+			return i;
 		}
 
 		// we reset each cycle so that we don't end up racking up all of the pointed items
@@ -277,10 +278,20 @@ void Resolver::resolve(
 
 	// if we didn't find anything, we intentionally pass on the empty vector to the identifier
 	identifier.id = pointed_ids;
+	return std::nullopt;
+}
+
+std::optional<size_t> Resolver::resolve(
+	Spanned<AST::Identifier>& identifier,
+	Scope const&              scope,
+	FileContext::ID           file_id,
+	bool                      include_unimported
+) {
+	return resolve(identifier.value, identifier.span, scope, file_id, include_unimported);
 }
 
 void Resolver::resolve(AST::Type::Atom::Named& named, Span span, Scope const& scope, FileContext::ID file_id) {
-	resolve(named.name, scope, file_id);
+	assert(!resolve(named.name, scope, file_id).has_value() && "TODO: support static member types");
 	if (named.generic_list.has_value()) {
 		for (auto& generic : named.generic_list.value().ordered) resolve(generic, scope, file_id);
 		for (auto& generic : named.generic_list.value().labeled) resolve(std::get<1>(generic), scope, file_id);
@@ -303,15 +314,6 @@ void Resolver::resolve(AST::Type& type, Span span, Scope const& scope, FileConte
 
 void Resolver::resolve(Spanned<AST::Type>& type, Scope const& scope, FileContext::ID file_id) {
 	return resolve(type.value, type.span, scope, file_id);
-}
-
-void Resolver::resolve(
-	Spanned<AST::Identifier>& identifier,
-	Scope const&              scope,
-	FileContext::ID           file_id,
-	bool                      include_unimported
-) {
-	return resolve(identifier.value, identifier.span, scope, file_id, include_unimported);
 }
 
 void Resolver::resolve(AST::Expression::UnaryOperation& unary_operation, Scope const& scope, FileContext::ID file_id) {
@@ -367,7 +369,10 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	AST::Expression::Atom& atom = expression.get_atom();
 	if (atom.is_identifier()) {
 		// identifiers need to be resolved
-		resolve(atom.get_identifier(), span, scope, file_id);
+		assert(!resolve(atom.get_identifier(), span, scope, file_id).has_value()
+		       && "TODO: support static members in expressions");
+	} else if (atom.is_static_member()) {
+		assert(false && "TODO: support static members in expressions");
 	} else if (atom.is_expression()) {
 		// for subexpressions, we just recurse
 		resolve(*atom.get_expression(), span, scope, file_id);
@@ -447,7 +452,7 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 }
 
 bool Resolver::resolve_trait_name(Spanned<AST::Identifier>& name, Scope const& scope, FileContext::ID file_id) {
-	resolve(name, scope, file_id);
+	assert(!resolve(name, scope, file_id).has_value() && "trait name is static member??");
 	// diagnostic already thrown
 	if (!name.value.id.has_value() || name.value.id.value().empty()) return false;
 	// TODO: maybe a trait and a struct share a name, and we need to filter this to only traits!
@@ -562,12 +567,14 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			child_scope.symbols.emplace(submodule.name.value.name(), submodule.name.value.id.value());
 		} else if (std::holds_alternative<AST::Alias>(value)) {
 			auto& alias = std::get<AST::Alias>(value);
-			resolve(alias.value, child_scope, file_id);
+			assert(!resolve(alias.value, child_scope, file_id).has_value()
+			       && "TODO: alias into static member");
 			if (!alias.value.value.id.has_value() || alias.value.value.id.value().empty()) continue;
 			child_scope.symbols.emplace(alias.name.value.name(), alias.value.value.id.value());
 		} else if (std::holds_alternative<AST::Import>(value)) {
 			auto& import = std::get<AST::Import>(value);
-			resolve(import.name, scope, file_id, true);
+			assert(!resolve(import.name, scope, file_id, true).has_value()
+			       && "import imports static member??");
 			if (!import.name.value.id.has_value()) continue;
 			// we need to make sure we only import exported symbols
 			std::vector<AST::SymbolID> actual_ids {};
