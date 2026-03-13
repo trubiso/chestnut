@@ -53,7 +53,7 @@ std::ostream& Resolver::debug_print_type(std::ostream& os, TypeInfo const& type)
 		return os << ")";
 	} else if (type.is_generic()) {
 		TypeInfo::Generic const& generic = type.get_generic();
-		os << symbol_pool_.at(generic.name).name;
+		os << "@" << generic.name << " (" << symbol_pool_.at(generic.name).name << ")";
 		if (!generic.declared_constraints.empty()) {
 			os << ": ";
 			size_t count = 0;
