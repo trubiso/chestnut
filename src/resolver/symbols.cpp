@@ -369,9 +369,42 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	AST::Expression::Atom& atom = expression.get_atom();
 	if (atom.is_identifier()) {
 		// identifiers need to be resolved
-		assert(!resolve(atom.get_identifier(), span, scope, file_id).has_value()
-		       && "TODO: support static members in expressions");
+		auto potential_idx = resolve(atom.get_identifier(), span, scope, file_id);
+		if (!potential_idx.has_value()) return;
+
+		// this is actually a static member!
+		{
+			AST::Identifier& identifier = atom.get_identifier();
+			size_t           idx        = potential_idx.value();
+			assert(idx > 0 && !identifier.is_unqualified());
+
+			Span type_span {span.start, identifier.path[idx - 1].span.end};
+
+			std::vector<Spanned<std::string>> new_path {};
+			std::move(
+				identifier.path.cbegin(),
+				identifier.path.cbegin() + idx,
+				std::back_inserter(new_path)
+			);
+			AST::Identifier type_id {identifier.absolute, std::move(new_path)};
+			type_id.id = identifier.id;
+			Spanned<AST::Type::Atom::Named> type {
+				type_span,
+				AST::Type::Atom::Named {{type_span, std::move(type_id)}, std::nullopt}
+			};
+
+			new_path = {};
+			std::move(identifier.path.cbegin() + idx, identifier.path.cend(), std::back_inserter(new_path));
+			Spanned<AST::Identifier> member {
+				Span {identifier.path[idx].span.start,            span.end},
+				AST::Identifier {                          false, std::move(new_path)}
+			};
+
+			atom = AST::Expression::Atom::make_static_member(std::move(type), std::move(member));
+		}
+		goto static_member;
 	} else if (atom.is_static_member()) {
+	static_member:
 		assert(false && "TODO: support static members in expressions");
 	} else if (atom.is_expression()) {
 		// for subexpressions, we just recurse
