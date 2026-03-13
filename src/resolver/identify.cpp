@@ -57,28 +57,7 @@ void Resolver::identify(AST::Struct& struct_, bool exported, FileContext::ID fil
 	                {}}
 	);
 
-	// make stub generics (their type will be added during symbol resolution!)
-	if (struct_.generic_declaration.has_value())
-		for (auto& generic : struct_.generic_declaration.value().generics) {
-			identify(generic.name.value);
-			TypeInfo::ID stub_type = register_type(
-				TypeInfo::make_bottom(),
-				generic.name.span,
-				file_id,
-				generic.name.value.id.value()[0]
-			);
-			symbol_pool_.push_back(
-				Symbol {generic.name.value.id.value()[0],
-			                file_id,
-			                generic.name.span,
-			                generic.name.value.name(),
-			                Generic {},
-			                stub_type,
-			                false,
-			                false,
-			                {}}
-			);
-		}
+	if (struct_.generic_declaration.has_value()) identify(struct_.generic_declaration.value(), file_id);
 }
 
 void Resolver::identify(AST::Trait& trait, bool exported, FileContext::ID file_id) {
@@ -96,55 +75,14 @@ void Resolver::identify(AST::Trait& trait, bool exported, FileContext::ID file_i
 	                {}}
 	);
 
-	// make stub generics (their type will be added during symbol resolution!)
-	if (trait.generic_declaration.has_value())
-		for (auto& generic : trait.generic_declaration.value().generics) {
-			identify(generic.name.value);
-			TypeInfo::ID stub_type = register_type(
-				TypeInfo::make_bottom(),
-				generic.name.span,
-				file_id,
-				generic.name.value.id.value()[0]
-			);
-			symbol_pool_.push_back(
-				Symbol {generic.name.value.id.value()[0],
-			                file_id,
-			                generic.name.span,
-			                generic.name.value.name(),
-			                Generic {},
-			                stub_type,
-			                false,
-			                false,
-			                {}}
-			);
-		}
+	if (trait.generic_declaration.has_value()) identify(trait.generic_declaration.value(), file_id);
 
 	for (AST::Function& method : trait.methods) identify(method, exported, file_id);
 }
 
 void Resolver::identify(AST::TraitImplementation& trait_implementation, bool exported, FileContext::ID file_id) {
-	// make stub generics (their type will be added during symbol resolution!)
 	if (trait_implementation.generic_declaration.has_value())
-		for (auto& generic : trait_implementation.generic_declaration.value().generics) {
-			identify(generic.name.value);
-			TypeInfo::ID stub_type = register_type(
-				TypeInfo::make_bottom(),
-				generic.name.span,
-				file_id,
-				generic.name.value.id.value()[0]
-			);
-			symbol_pool_.push_back(
-				Symbol {generic.name.value.id.value()[0],
-			                file_id,
-			                generic.name.span,
-			                generic.name.value.name(),
-			                Generic {},
-			                stub_type,
-			                false,
-			                false,
-			                {}}
-			);
-		}
+		identify(trait_implementation.generic_declaration.value(), file_id);
 
 	// TODO: do we really want to make these methods have an ID? we probably instead want their ID to be linked with
 	// the trait's method
@@ -179,33 +117,15 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 		);
 	}
 
-	// make stub generics (their type will be added during symbol resolution!)
 	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
-	if (function.generic_declaration.has_value())
-		for (auto& generic : function.generic_declaration.value().generics) {
-			identify(generic.name.value);
-			TypeInfo::ID stub_type = register_type(
-				TypeInfo::make_bottom(),
-				generic.name.span,
-				file_id,
-				generic.name.value.id.value()[0]
-			);
-			symbol_pool_.push_back(
-				Symbol {generic.name.value.id.value()[0],
-			                file_id,
-			                generic.name.span,
-			                generic.name.value.name(),
-			                Generic {},
-			                stub_type,
-			                false,
-			                false,
-			                {}}
-			);
+	if (function.generic_declaration.has_value()) {
+		identify(function.generic_declaration.value(), file_id);
+		for (auto& generic : function.generic_declaration.value().generics)
 			generics.emplace_back(
 				generic.anonymous ? std::nullopt : std::optional {generic.name.value.name()},
-				stub_type
+				get_single_symbol(generic.name.value).type
 			);
-		}
+	}
 
 	TypeInfo::ID return_
 		= register_type(from_type(function.return_type.value, file_id), function.return_type.span, file_id);
@@ -229,6 +149,29 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 	                exported,
 	                {}}
 	);
+}
+
+void Resolver::identify(AST::GenericDeclaration& generic_declaration, FileContext::ID file_id) {
+	for (auto& generic : generic_declaration.generics) {
+		identify(generic.name.value);
+		TypeInfo::ID stub_type = register_type(
+			TypeInfo::make_bottom(),
+			generic.name.span,
+			file_id,
+			generic.name.value.id.value()[0]
+		);
+		symbol_pool_.push_back(
+			Symbol {generic.name.value.id.value()[0],
+		                file_id,
+		                generic.name.span,
+		                generic.name.value.name(),
+		                Generic {},
+		                stub_type,
+		                false,
+		                false,
+		                {}}
+		);
+	}
 }
 
 void Resolver::identify_module_items() {

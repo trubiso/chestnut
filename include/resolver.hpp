@@ -431,6 +431,8 @@ private:
 	void identify(AST::TraitImplementation&, bool exported, FileContext::ID);
 	/// Identifies the function with an ID.
 	void identify(AST::Function&, bool exported, FileContext::ID);
+	/// Identifies a generic declaration's generics with stub types later filled in by the symbols phase.
+	void identify(AST::GenericDeclaration&, FileContext::ID);
 	/// Identifies all module items with an ID, but does not resolve aliases.
 	void identify_module_items();
 	/// Creates a generic type for a built-in operator.
