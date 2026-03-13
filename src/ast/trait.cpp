@@ -34,7 +34,9 @@ std::ostream& operator<<(std::ostream& os, Trait const& trait) {
 }
 
 std::ostream& operator<<(std::ostream& os, TraitImplementation const& implementation) {
-	os << "mark type " << implementation.type.value << " as " << implementation.name.value;
+	os << "mark";
+	if (implementation.generic_declaration.has_value()) os << implementation.generic_declaration.value();
+	os << " type " << implementation.type.value << " as " << implementation.name.value;
 	if (!implementation.methods.empty()) {
 		os << ", providing implementations: {\n";
 		os.iword(0)++;
