@@ -405,7 +405,35 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 		goto static_member;
 	} else if (atom.is_static_member()) {
 	static_member:
-		assert(false && "TODO: support static members in expressions");
+		auto& static_member = atom.get_static_member();
+		if (!static_member.member.value.is_unqualified())
+			assert(false && "TODO: support chained static members");
+		resolve(static_member.type.value, static_member.type.span, scope, file_id);
+		auto& type_id_arr = static_member.type.value.name.value.id;
+		// bail out if it has no value
+		if (!type_id_arr.has_value() || type_id_arr.value().empty()) return;
+		if (type_id_arr.value().size() > 1)
+			assert(false && "TODO: support potentially unresolved static members");
+		auto& type_symbol = get_single_symbol(type_id_arr.value().at(0));
+		if (std::holds_alternative<AST::Function*>(type_symbol.item)) {
+			assert(
+				false
+				&& "TODO: diagnostic for accessing static member of function (functions have no static members)"
+			);
+		} else if (std::holds_alternative<AST::Struct*>(type_symbol.item)) {
+			assert(false && "TODO: static members within structs");
+		} else if (std::holds_alternative<AST::Trait*>(type_symbol.item)) {
+			auto& trait  = *std::get<AST::Trait*>(type_symbol.item);
+			auto  name   = static_member.member.value.name();
+			auto  method = std::find_if(
+                                trait.methods.cbegin(),
+                                trait.methods.cend(),
+                                [&name](AST::Function const& method) { return method.name.value.name() == name; }
+                        );
+			if (method == trait.methods.cend())
+				assert(false && "TODO: diagnostic for accessing nonexistent static member");
+			static_member.member.value.id = method->name.value.id;
+		} else assert(false);
 	} else if (atom.is_expression()) {
 		// for subexpressions, we just recurse
 		resolve(*atom.get_expression(), span, scope, file_id);
