@@ -488,12 +488,15 @@ IR::Value::Atom Resolver::lower_atom(
 		return lower_atom(atom.get_struct_literal(), type_id, span, basic_blocks, file_id, allow_functions);
 	case AST::Expression::Atom::Kind::Expression:
 		return extract_value(*atom.get_expression(), span, basic_blocks, file_id).value;
-	case AST::Expression::Atom::Kind::Identifier: break;
+	case AST::Expression::Atom::Kind::Identifier:
+	case AST::Expression::Atom::Kind::StaticMember: break;
 	}
 
 	// for identifiers, we need to extract the type as well.
 	// only identifiers can be functions!
-	auto data = lower(atom.get_identifier(), allow_functions);
+	auto data
+		= lower(atom.is_static_member() ? atom.get_static_member().member.value : atom.get_identifier(),
+	                allow_functions);
 	if (!data.has_value()) return IR::Value::Atom::make_error();
 	auto [identifier, type] = std::move(data.value());
 	return IR::Value::Atom::make_identifier(identifier, std::move(type));
