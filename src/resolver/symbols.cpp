@@ -161,7 +161,9 @@ void Resolver::resolve(
 		size_t actual_additions = 0;
 		for (auto const& item : root_module->body.items) {
 			auto const& value = std::get<AST::Module::InnerItem>(item.value);
-			if (std::holds_alternative<AST::Import>(value)) continue;
+			if (std::holds_alternative<AST::Import>(value)
+			    || std::holds_alternative<AST::TraitImplementation>(value))
+				continue;
 			std::string name = AST::Module::get_name(item.value);
 
 			if (name != fragment.value) continue;
@@ -181,6 +183,11 @@ void Resolver::resolve(
 					pointed_items.push_back(&get_single_symbol(id));
 					added_items++;
 				}
+				cannot_traverse_further = true;
+			} else if (std::holds_alternative<AST::Trait>(value)) {
+				assert(std::get<AST::Trait>(value).name.value.id.has_value());
+				pointed_items.push_back(&get_single_symbol(std::get<AST::Trait>(value).name.value));
+				added_items++;
 				cannot_traverse_further = true;
 			} else if (std::holds_alternative<AST::Module>(value)) {
 				root_module = &std::get<AST::Module>(value);
@@ -225,7 +232,9 @@ void Resolver::resolve(
 			bool unimported_same_name_item_exists = false;
 			for (auto const& item : root_module->body.items) {
 				auto const& value = std::get<AST::Module::InnerItem>(item.value);
-				if (std::holds_alternative<AST::Import>(value)) continue;
+				if (std::holds_alternative<AST::Import>(value)
+				    || std::holds_alternative<AST::TraitImplementation>(value))
+					continue;
 				std::optional<std::vector<AST::SymbolID>> const* symbol_id = nullptr;
 				if (std::holds_alternative<AST::Function>(value)) {
 					symbol_id = &std::get<AST::Function>(value).name.value.id;
@@ -235,6 +244,8 @@ void Resolver::resolve(
 					symbol_id = &std::get<AST::Alias>(value).value.value.id;
 				} else if (std::holds_alternative<AST::Struct>(value)) {
 					symbol_id = &std::get<AST::Struct>(value).name.value.id;
+				} else if (std::holds_alternative<AST::Trait>(value)) {
+					symbol_id = &std::get<AST::Trait>(value).name.value.id;
 				} else [[assume(false)]];
 
 				if (!symbol_id->has_value()) continue;
