@@ -113,11 +113,14 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 	case AST::Expression::Atom::Kind::BoolLiteral:   return register_type(TypeInfo::make_known_bool(), span, file_id);
 	case AST::Expression::Atom::Kind::StructLiteral: return infer(atom.get_struct_literal(), span, file_id);
 	case AST::Expression::Atom::Kind::Expression:    return infer(*atom.get_expression(), span, file_id);
-	case AST::Expression::Atom::Kind::Identifier:    break;
+	case AST::Expression::Atom::Kind::Identifier:
+	case AST::Expression::Atom::Kind::StaticMember:  break;
 	}
 
 	// for identifiers, we match the type in the symbol pool
-	AST::Identifier const& identifier = atom.get_identifier();
+	AST::Identifier const& identifier
+		// TODO: bind static member generics
+		= atom.is_static_member() ? atom.get_static_member().member.value : atom.get_identifier();
 	if (!identifier.id.has_value())
 		return register_type(
 			TypeInfo::make_bottom(),
@@ -424,8 +427,13 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 	std::optional<AST::Identifier*> identifier = std::nullopt;
 
-	if (function_call.callee->value.is_atom() || function_call.callee->value.get_atom().is_identifier())
-		identifier = &function_call.callee->value.get_atom().get_identifier();
+	if (function_call.callee->value.is_atom()) {
+		if (function_call.callee->value.get_atom().is_identifier())
+			identifier = &function_call.callee->value.get_atom().get_identifier();
+		else if (function_call.callee->value.get_atom().is_static_member())
+			// TODO: bind static member generics
+			identifier = &function_call.callee->value.get_atom().get_static_member().member.value;
+	}
 
 	UndecidedOverload overload {
 		expr_type,
