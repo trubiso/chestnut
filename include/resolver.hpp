@@ -425,8 +425,10 @@ private:
 	void identify(AST::Module&, bool exported, FileContext::ID);
 	/// Identifies the struct with an ID.
 	void identify(AST::Struct&, bool exported, FileContext::ID);
-	/// Identifies the trait with an ID.
+	/// Identifies the trait with an ID and its methods.
 	void identify(AST::Trait&, bool exported, FileContext::ID);
+	/// Identifies the trait implementation's methods.
+	void identify(AST::TraitImplementation&, bool exported, FileContext::ID);
 	/// Identifies the function with an ID.
 	void identify(AST::Function&, bool exported, FileContext::ID);
 	/// Identifies all module items with an ID, but does not resolve aliases.
@@ -570,6 +572,7 @@ private:
 	void resolve(AST::Function&, Scope, FileContext::ID);
 	void resolve(AST::Struct&, Scope, FileContext::ID);
 	void resolve(AST::Trait&, Scope, FileContext::ID);
+	void resolve(AST::TraitImplementation&, Scope, FileContext::ID);
 	void resolve(AST::Module&, Scope, FileContext::ID);
 	/// Resolves function bodies and, as such, all identifiers within.
 	void resolve_identifiers();

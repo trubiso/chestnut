@@ -272,8 +272,7 @@ void Resolver::resolve(AST::Type::Atom::Named& named, Span span, Scope const& sc
 	resolve(named.name, scope, file_id);
 	if (named.generic_list.has_value()) {
 		for (auto& generic : named.generic_list.value().ordered) resolve(generic, scope, file_id);
-		for (auto& generic : named.generic_list.value().labeled)
-			resolve(std::get<1>(generic), scope, file_id);
+		for (auto& generic : named.generic_list.value().labeled) resolve(std::get<1>(generic), scope, file_id);
 	}
 	// TODO: prune non-type items. we will need a flag on symbols which correspond to generics, then, to narrow
 	// types down to AST::Struct* or Generic{} or whatever
@@ -521,6 +520,16 @@ void Resolver::resolve(AST::Trait& trait, Scope scope, FileContext::ID file_id) 
 				resolve(std::get<1>(generic), child_scope, file_id);
 		}
 	}
+	// TODO: add a This generic
+	for (auto& method : trait.methods) resolve(method, child_scope, file_id);
+}
+
+void Resolver::resolve(AST::TraitImplementation& trait_implementation, Scope scope, FileContext::ID file_id) {
+	Scope child_scope {&scope, {}};
+	if (trait_implementation.generic_declaration.has_value())
+		resolve(trait_implementation.generic_declaration.value(), child_scope, file_id);
+	// TODO: add a This generic
+	for (auto& method : trait_implementation.methods) resolve(method, child_scope, file_id);
 }
 
 void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id) {
@@ -632,6 +641,8 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			resolve(std::get<AST::Struct>(value), child_scope, file_id);
 		else if (std::holds_alternative<AST::Trait>(value))
 			resolve(std::get<AST::Trait>(value), child_scope, file_id);
+		else if (std::holds_alternative<AST::TraitImplementation>(value))
+			resolve(std::get<AST::TraitImplementation>(value), child_scope, file_id);
 	}
 }
 

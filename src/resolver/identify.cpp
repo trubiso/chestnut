@@ -37,7 +37,8 @@ void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file
 			identify(std::get<AST::Struct>(value), std::get<bool>(item.value), file_id);
 		else if (std::holds_alternative<AST::Trait>(value))
 			identify(std::get<AST::Trait>(value), std::get<bool>(item.value), file_id);
-		// we don't identify trait implementations. we will resolve them later!
+		else if (std::holds_alternative<AST::TraitImplementation>(value))
+			identify(std::get<AST::TraitImplementation>(value), std::get<bool>(item.value), file_id);
 	}
 }
 
@@ -118,9 +119,36 @@ void Resolver::identify(AST::Trait& trait, bool exported, FileContext::ID file_i
 			);
 		}
 
-	for (AST::Function& method : trait.methods) {
-		identify(method, exported, file_id);
-	}
+	for (AST::Function& method : trait.methods) identify(method, exported, file_id);
+}
+
+void Resolver::identify(AST::TraitImplementation& trait_implementation, bool exported, FileContext::ID file_id) {
+	// make stub generics (their type will be added during symbol resolution!)
+	if (trait_implementation.generic_declaration.has_value())
+		for (auto& generic : trait_implementation.generic_declaration.value().generics) {
+			identify(generic.name.value);
+			TypeInfo::ID stub_type = register_type(
+				TypeInfo::make_bottom(),
+				generic.name.span,
+				file_id,
+				generic.name.value.id.value()[0]
+			);
+			symbol_pool_.push_back(
+				Symbol {generic.name.value.id.value()[0],
+			                file_id,
+			                generic.name.span,
+			                generic.name.value.name(),
+			                Generic {},
+			                stub_type,
+			                false,
+			                false,
+			                {}}
+			);
+		}
+
+	// TODO: do we really want to make these methods have an ID? we probably instead want their ID to be linked with
+	// the trait's method
+	for (AST::Function& method : trait_implementation.methods) identify(method, exported, file_id);
 }
 
 void Resolver::identify(AST::Function& function, bool exported, FileContext::ID file_id) {
