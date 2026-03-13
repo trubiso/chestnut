@@ -528,6 +528,8 @@ void Resolver::resolve(AST::TraitImplementation& trait_implementation, Scope sco
 	Scope child_scope {&scope, {}};
 	if (trait_implementation.generic_declaration.has_value())
 		resolve(trait_implementation.generic_declaration.value(), child_scope, file_id);
+	resolve(trait_implementation.name.value, trait_implementation.name.span, child_scope, file_id);
+	resolve(trait_implementation.type, child_scope, file_id);
 	// TODO: add a This generic
 	for (auto& method : trait_implementation.methods) resolve(method, child_scope, file_id);
 }
