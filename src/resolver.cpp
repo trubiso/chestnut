@@ -94,7 +94,7 @@ FileContext Resolver::get_context(FileContext::ID file_id) const {
 
 void Resolver::populate_module_table() {
 	for (ParsedFile& file : parsed_files) {
-		std::string name = file.module.name.value.name();
+		std::string name = file.module.name.value.name;
 		// TODO: do something else about this
 		if (module_table_.contains(name)) std::cout << "this should never happen! clashing names! SOS!";
 		else module_table_.emplace(name, &file.module);
