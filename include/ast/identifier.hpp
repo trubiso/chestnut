@@ -2,11 +2,78 @@
 #include "span.hpp"
 
 #include <iostream>
+#include <memory>
 #include <vector>
 
 namespace AST {
 
 typedef uint32_t SymbolID;
+
+struct GenericList;
+
+struct RichIdentifier {
+	struct Segment {
+		std::string                                 name;
+		std::optional<std::unique_ptr<GenericList>> generic_list;
+		std::optional<std::vector<SymbolID>>        candidates;
+		/// We embed the span directly into the segment for convenience.
+		Span span;
+
+		/// Returns whether candidates is null, i.e. this segment has not yet been reached by the name resolver.
+		bool is_unreached() const;
+		/// Returns whether candidates is empty, i.e. there are no suitable candidates.
+		bool is_error() const;
+		/// Returns whether candidates has a single value.
+		bool is_decided() const;
+		/// Returns whether candidates has several values, i.e. there are several candidates.
+		bool is_undecided() const;
+		/// Returns whether the generic list is null or empty.
+		bool is_plain() const;
+		/// Returns the segment's ID, assuming is_decided().
+		SymbolID id() const;
+	};
+
+	/// Returns whether all segments are decided.
+	bool is_decided() const;
+	/// Returns the identifier's ID (its last segment's single ID), assuming is_decided().
+	SymbolID id() const;
+	/// Returns whether a non-final segment is undecided.
+	bool has_middle_undecided() const;
+	/// Returns whether the final segment is undecided.
+	bool has_final_undecided() const;
+	/// Returns whether any segment is undecided.
+	bool has_undecided() const;
+	/// Returns whether any segment is an error.
+	bool is_error() const;
+	/// Returns whether there are no generics in the identifier.
+	bool is_plain() const;
+	/// Returns whether the identifier is plain and single-segment (unqualified identifier).
+	bool is_name() const;
+	/// Returns the name of the identifier, assuming is_name().
+	std::string const& get_name() const;
+	/// Returns the last undecided segment, assuming has_undecided().
+	Segment& last_undecided_segment();
+	/// Returns whether a segment within the identifier is unreached.
+	bool has_unreached() const;
+	/// Returns the last unreached segment, assuming has_unreached().
+	Segment& last_unreached_segment();
+
+	inline bool absolute() const { return absolute_; }
+
+	inline std::vector<Segment> const& path() const { return path_; }
+
+	/// Constructor for unqualified identifiers.
+	explicit RichIdentifier(Spanned<std::string> name);
+	/// Constructor for qualified identifiers.
+	explicit RichIdentifier(bool absolute, std::vector<Segment> path);
+
+private:
+	bool                 absolute_;
+	std::vector<Segment> path_;
+};
+
+std::ostream& operator<<(std::ostream&, RichIdentifier::Segment const&);
+std::ostream& operator<<(std::ostream&, RichIdentifier const&);
 
 struct Identifier {
 	/// Whether the identifier is an absolutely qualified identifier or not.
