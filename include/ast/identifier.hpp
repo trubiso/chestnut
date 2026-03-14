@@ -86,6 +86,8 @@ struct Identifier {
 
 	/// Whether the root segment should be resolved absolutely instead of relatively.
 	inline bool absolute() const { return absolute_; }
+	/// Forces the identifier to be absolute.
+	inline void force_absolute() { absolute_ = true; }
 
 	inline std::vector<Segment> const& path() const { return path_; }
 

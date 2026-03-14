@@ -8,9 +8,7 @@ namespace AST {
 struct Trait {
 	/// Points to a named trait.
 	struct Constraint {
-		Spanned<OldIdentifier> name;
-
-		std::optional<GenericList> generic_list;
+		Spanned<Identifier> name;
 	};
 
 	Spanned<Name> name;

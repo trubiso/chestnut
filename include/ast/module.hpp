@@ -13,12 +13,12 @@ namespace AST {
 
 struct Alias {
 	Spanned<Name> name;
-	Spanned<OldIdentifier> value;
+	Spanned<Identifier> value;  // plain
 };
 
 /// Imports mark items external to a module as available from within them.
 struct Import {
-	Spanned<OldIdentifier> name;
+	Spanned<Identifier> name;  // plain
 };
 
 // TODO: add an item for constants

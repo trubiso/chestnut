@@ -29,9 +29,7 @@ struct GenericDeclaration {
 		Spanned<Name> name;  // unqualified
 
 		struct Constraint {
-			Spanned<OldIdentifier> name;
-
-			std::optional<GenericList> generic_list;
+			Spanned<Identifier> name;
 		};
 
 		std::vector<Constraint> constraints;
@@ -115,9 +113,7 @@ struct Type {
 		};
 
 		struct Named {
-			Spanned<OldIdentifier> name;
-
-			std::optional<GenericList> generic_list;
+			Spanned<Identifier> name;
 		};
 
 		enum class Kind { Integer, Float, Void, Char, Bool, Named, Inferred };

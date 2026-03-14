@@ -225,15 +225,15 @@ std::optional<Tag> Parser::consume_tag() {
 }
 
 std::optional<Type> Parser::consume_type_atom() {
-	std::optional<Spanned<OldIdentifier>> maybe_name = SPANNED(consume_old_identifier);
+	std::optional<Spanned<Identifier>> maybe_name = SPANNED(consume_identifier);
 	if (!maybe_name.has_value()) return {};
 
-	// if it's a qualified identifier, it's definitely named
-	if (!maybe_name.value().value.is_unqualified()) goto named_type;
+	// if it's not a name, it's definitely a named type
+	if (!maybe_name.value().value.is_name()) goto named_type;
 
 	{
-		// if it's not a qualified identifier, it's a built-in or a named one in scope
-		std::string name = maybe_name.value().value.name();
+		// if it's a name, it's a built-in or a named one in scope
+		std::string name = maybe_name.value().value.get_name();
 
 		// variables have to declared at the top so c++ won't wail
 		bool                               starts_with_u, starts_with_i;
@@ -283,11 +283,7 @@ std::optional<Type> Parser::consume_type_atom() {
 
 named_type:
 	// if none match or it's qualified, it's a named type
-	// therefore, we'll try parsing generics!
-	std::optional<GenericList> generic_list = consume_generic_list();
-	return Type::make_atom(
-		Type::Atom::make_named(Type::Atom::Named {std::move(maybe_name.value()), std::move(generic_list)})
-	);
+	return Type::make_atom(Type::Atom::make_named(Type::Atom::Named {std::move(maybe_name.value())}));
 }
 
 std::optional<Type> Parser::consume_type() {
@@ -354,21 +350,7 @@ std::optional<Expression> Parser::consume_expression_atom() {
 
 		// special case for struct literals
 		if (consume_symbol(Token::Symbol::LBrace)) {
-			// FIXME: we have to change type atom named to use a bare rich identifier, this is completely
-			// wrong and just a stub
-			Spanned<Type::Atom::Named> type {
-				identifier.value().span,
-				Type::Atom::Named {
-						   Spanned<OldIdentifier> {
-						identifier.value().value.path().back().span,
-						OldIdentifier {
-							false,
-							{{identifier.value().value.path().back().span,
-			                                  identifier.value().value.path().back().name}}
-						}
-					}, std::nullopt
-				}
-			};
+			Spanned<Type::Atom::Named> type {identifier.value().span, {std::move(identifier.value())}};
 
 			std::optional<Expression::Atom::StructLiteral::Field> maybe_field;
 			std::vector<Expression::Atom::StructLiteral::Field>   fields {};
@@ -798,17 +780,15 @@ std::optional<GenericDeclaration::Generic> Parser::consume_generic_declaration_g
 
 	std::vector<GenericDeclaration::Generic::Constraint> constraints {};
 	if (consume_symbol(Token::Symbol::Colon)) {
-		std::optional<Spanned<OldIdentifier>> constraint
-			= SPANNED_REASON(expect_old_identifier, "expected trait name after `:`");
+		std::optional<Spanned<Identifier>> constraint
+			= SPANNED_REASON(expect_identifier, "expected trait name after `:`");
 		if (!constraint.has_value()) goto return_;
-		std::optional<GenericList> generic_list = consume_generic_list();
-		constraints.emplace_back(std::move(constraint.value()), std::move(generic_list));
+		constraints.emplace_back(std::move(constraint.value()));
 		if (!peek_symbol(Token::Symbol::Plus)) goto return_;
 		assert(consume_symbol(Token::Symbol::Plus));
 
-		while ((constraint = SPANNED(consume_old_identifier)).has_value()) {
-			generic_list = consume_generic_list();
-			constraints.emplace_back(std::move(constraint.value()), std::move(generic_list));
+		while ((constraint = SPANNED(consume_identifier)).has_value()) {
+			constraints.emplace_back(std::move(constraint.value()));
 			if (!consume_symbol(Token::Symbol::Plus)) break;
 		}
 	}
@@ -869,14 +849,13 @@ std::optional<GenericList::Generic> Parser::consume_generic_list_generic() {
 	std::optional<Spanned<Type>> generic_lhs = SPANNED(consume_type);
 	if (!generic_lhs.has_value()) return {};
 	// check if it's a bare unqualified identifier followed by a colon
-	// TODO: also check that there are no generics
 	if (generic_lhs.value().value.is_atom()
 	    && generic_lhs.value().value.get_atom().is_named()
-	    && generic_lhs.value().value.get_atom().get_named().name.value.is_unqualified()
+	    && generic_lhs.value().value.get_atom().get_named().name.value.is_name()
 	    && consume_symbol(Token::Symbol::Colon)) {
 		Spanned<std::string> label {
 			generic_lhs.value().span,
-			generic_lhs.value().value.get_atom().get_named().name.value.name()
+			generic_lhs.value().value.get_atom().get_named().name.value.get_name()
 		};
 		// now we need the actual generic
 		std::optional<Spanned<Type>> generic_rhs
@@ -1385,10 +1364,9 @@ void Parser::skip_semis() {
 }
 
 std::optional<Trait::Constraint> Parser::parse_trait_constraint() {
-	auto identifier = SPANNED(consume_old_identifier);
+	auto identifier = SPANNED(consume_identifier);
 	if (!identifier.has_value()) return {};
-	std::optional<GenericList> generic_list = consume_generic_list();
-	return Trait::Constraint {std::move(identifier.value()), std::move(generic_list)};
+	return Trait::Constraint {std::move(identifier.value())};
 }
 
 std::optional<Trait> Parser::parse_trait() {
@@ -1694,9 +1672,10 @@ std::optional<Alias> Parser::parse_alias() {
 	if (!consume_keyword(Keyword::Def)) return {};
 	std::optional<Spanned<Name>> name = SPANNED_REASON(expect_name, "expected alias name");
 	if (!name.has_value()) return {};
-	std::optional<Spanned<OldIdentifier>> value = SPANNED_REASON(expect_old_identifier, "expected alias value");
+	std::optional<Spanned<Identifier>> value = SPANNED_REASON(expect_identifier, "expected alias value");
 	if (!value.has_value()) return {};
-	if (!value.value().value.absolute)
+	assert(value.value().value.is_plain() && "non-plain alias");
+	if (!value.value().value.absolute())
 		diagnostics_.push_back(
 			Diagnostic::error(
 				"unsupported relative alias",
@@ -1710,10 +1689,11 @@ std::optional<Alias> Parser::parse_alias() {
 
 std::optional<Import> Parser::parse_import() {
 	if (!consume_keyword(Keyword::Import)) return {};
-	std::optional<Spanned<OldIdentifier>> name
-		= SPANNED_REASON(expect_old_identifier, "expected name of the item to import");
+	std::optional<Spanned<Identifier>> name
+		= SPANNED_REASON(expect_identifier, "expected name of the item to import");
 	if (!name.has_value()) return {};
-	if (name.value().value.absolute)
+	assert(name.value().value.is_plain() && "non-plain import");
+	if (name.value().value.absolute())
 		diagnostics_.push_back(
 			Diagnostic::warning(
 				"redundant absolute qualified identifier marker",
@@ -1724,8 +1704,8 @@ std::optional<Import> Parser::parse_import() {
 				)}
 			)
 		);
-	name.value().value.absolute = true;
-	expect_semicolon("expected semicolon after alias");
+	name.value().value.force_absolute();
+	expect_semicolon("expected semicolon after import");
 	return Import {std::move(name.value())};
 }
 
