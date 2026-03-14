@@ -12,18 +12,18 @@
 namespace AST {
 
 struct Alias {
-	Spanned<Identifier> name;  // unqualified
-	Spanned<Identifier> value;
+	Spanned<OldIdentifier> name;  // unqualified
+	Spanned<OldIdentifier> value;
 };
 
 /// Imports mark items external to a module as available from within them.
 struct Import {
-	Spanned<Identifier> name;
+	Spanned<OldIdentifier> name;
 };
 
 // TODO: add an item for constants
 struct Module {
-	Spanned<Identifier> name;  // unqualified
+	Spanned<OldIdentifier> name;  // unqualified
 
 	// we cannot make this a struct, because C++ does not allow incomplete types in variants (which is fair, but we
 	// know this will be on the heap anyways).

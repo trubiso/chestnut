@@ -104,11 +104,11 @@ private:
 	std::optional<std::string> consume_char_literal();
 
 	std::optional<std::string> consume_bare_unqualified_identifier();
-	std::optional<Identifier>  consume_unqualified_identifier();
-	std::optional<Identifier>  consume_identifier();
+	std::optional<OldIdentifier>  consume_unqualified_identifier();
+	std::optional<OldIdentifier>  consume_identifier();
 
-	std::optional<RichIdentifier::Segment> consume_rich_identifier_segment();
-	std::optional<RichIdentifier>          consume_rich_identifier();
+	std::optional<Identifier::Segment> consume_rich_identifier_segment();
+	std::optional<Identifier>          consume_rich_identifier();
 
 	std::optional<Tag> consume_tag();
 
@@ -190,11 +190,11 @@ private:
 	std::optional<std::string> expect_label(std::string_view reason);
 
 	std::optional<std::string> expect_bare_unqualified_identifier(std::string_view reason);
-	std::optional<Identifier>  expect_unqualified_identifier(std::string_view reason);
-	std::optional<Identifier>  expect_identifier(std::string_view reason);
+	std::optional<OldIdentifier>  expect_unqualified_identifier(std::string_view reason);
+	std::optional<OldIdentifier>  expect_identifier(std::string_view reason);
 
-	std::optional<RichIdentifier::Segment> expect_rich_identifier_segment(std::string_view reason);
-	std::optional<RichIdentifier>          expect_rich_identifier(std::string_view reason);
+	std::optional<Identifier::Segment> expect_rich_identifier_segment(std::string_view reason);
+	std::optional<Identifier>          expect_rich_identifier(std::string_view reason);
 
 	std::optional<Type> expect_type_atom(std::string_view reason);
 	std::optional<Type> expect_type(std::string_view reason);

@@ -117,13 +117,13 @@ std::optional<std::string> Parser::consume_bare_unqualified_identifier() {
 	return token.get_identifier();
 }
 
-std::optional<Identifier> Parser::consume_unqualified_identifier() {
+std::optional<OldIdentifier> Parser::consume_unqualified_identifier() {
 	return SPANNED(consume_bare_unqualified_identifier).transform([](auto&& value) {
-		return Identifier(std::move(value));
+		return OldIdentifier(std::move(value));
 	});
 }
 
-std::optional<Identifier> Parser::consume_identifier() {
+std::optional<OldIdentifier> Parser::consume_identifier() {
 	// NOTE: in the future, we will have to account for static members (T::a) and potentially discarded identifiers
 	// at the beginning (_::a)
 
@@ -145,13 +145,13 @@ std::optional<Identifier> Parser::consume_identifier() {
 			expect_bare_unqualified_identifier,
 			"expected an identifier (there is a trailing `::` in a preceding qualified identifier)"
 		);
-		if (!piece.has_value()) return Identifier(absolute, std::move(path));
+		if (!piece.has_value()) return OldIdentifier(absolute, std::move(path));
 		path.push_back(piece.value());
 	}
-	return Identifier(absolute, std::move(path));
+	return OldIdentifier(absolute, std::move(path));
 }
 
-std::optional<RichIdentifier::Segment> Parser::consume_rich_identifier_segment() {
+std::optional<Identifier::Segment> Parser::consume_rich_identifier_segment() {
 	if (!tokens_.peek().has_value()) return {};
 	size_t begin = tokens_.peek().value().begin;
 
@@ -176,7 +176,7 @@ bail:
 	assert(tokens_.index() > 0 && tokens_.index() - 1 < tokens_.size());
 	size_t end = tokens_.at(tokens_.index() - 1).value().end();
 
-	return RichIdentifier::Segment {
+	return Identifier::Segment {
 		std::move(name.value().value),
 		generic_list.transform([](GenericList& generic_list) {
 			return std::make_unique<GenericList>(std::move(generic_list));
@@ -186,12 +186,12 @@ bail:
 	};
 }
 
-std::optional<RichIdentifier> Parser::consume_rich_identifier() {
+std::optional<Identifier> Parser::consume_rich_identifier() {
 	// if a :: can be consumed before the qualified identifier, it will be consumed and will turn the qualified
 	// identifier absolute
 	bool absolute = consume_symbol(Token::Symbol::ColonColon);
 	// if :: was consumed, that means this is definitely and unambiguously a qualified identifier now
-	std::optional<RichIdentifier::Segment> root
+	std::optional<Identifier::Segment> root
 		= absolute ? expect_rich_identifier_segment(
 				     "expected an identifier segment (`::` starts an absolute qualified identifier)"
 			     )
@@ -199,16 +199,16 @@ std::optional<RichIdentifier> Parser::consume_rich_identifier() {
 	                   : consume_rich_identifier_segment();
 	// now if we didn't find the root we can safely return because, if :: has been parsed, we'll have skipped it :-)
 	if (!root.has_value()) return {};
-	std::vector<RichIdentifier::Segment> path {};
+	std::vector<Identifier::Segment> path {};
 	path.push_back(std::move(root.value()));
 	while (consume_symbol(Token::Symbol::ColonColon)) {
-		std::optional<RichIdentifier::Segment> piece = expect_rich_identifier_segment(
+		std::optional<Identifier::Segment> piece = expect_rich_identifier_segment(
 			"expected an identifier segment (there is a trailing `::` in a preceding qualified identifier)"
 		);
-		if (!piece.has_value()) return RichIdentifier(absolute, std::move(path));
+		if (!piece.has_value()) return Identifier(absolute, std::move(path));
 		path.push_back(std::move(piece.value()));
 	}
-	return RichIdentifier(absolute, std::move(path));
+	return Identifier(absolute, std::move(path));
 }
 
 std::optional<Tag> Parser::consume_tag() {
@@ -220,7 +220,7 @@ std::optional<Tag> Parser::consume_tag() {
 }
 
 std::optional<Type> Parser::consume_type_atom() {
-	std::optional<Spanned<Identifier>> maybe_name = SPANNED(consume_identifier);
+	std::optional<Spanned<OldIdentifier>> maybe_name = SPANNED(consume_identifier);
 	if (!maybe_name.has_value()) return {};
 
 	// if it's a qualified identifier, it's definitely named
@@ -335,7 +335,7 @@ std::optional<Expression::Atom::StructLiteral::Field> Parser::consume_expression
 
 std::optional<Expression> Parser::consume_expression_atom() {
 	// it could be a potentially qualified identifier
-	std::optional<Spanned<RichIdentifier>> identifier = SPANNED(consume_rich_identifier);
+	std::optional<Spanned<Identifier>> identifier = SPANNED(consume_rich_identifier);
 	if (identifier.has_value()) {
 		// special case for "true" and "false", which refer to boolean literals. they are strict keywords in
 		// this sense
@@ -354,9 +354,9 @@ std::optional<Expression> Parser::consume_expression_atom() {
 			Spanned<Type::Atom::Named> type {
 				identifier.value().span,
 				Type::Atom::Named {
-						   Spanned<Identifier> {
+						   Spanned<OldIdentifier> {
 						identifier.value().value.path().back().span,
-						Identifier {
+						OldIdentifier {
 							false,
 							{{identifier.value().value.path().back().span,
 			                                  identifier.value().value.path().back().name}}
@@ -420,7 +420,7 @@ std::optional<Expression> Parser::consume_expression_atom() {
 	// we only want to accept suffix literals if they're right beside the current token
 	Span                       current_span = tokens_.peek().value().span();
 	std::optional<std::string> sv;
-	std::optional<Identifier>  suffix;  // we always try to consume an extra suffix
+	std::optional<OldIdentifier>  suffix;  // we always try to consume an extra suffix
 
 	if (sv = consume_number_literal(), sv.has_value()) {
 		if (tokens_.peek().has_value() && tokens_.peek().value().span().start == current_span.end)
@@ -471,9 +471,9 @@ std::optional<Expression::FunctionCall::Argument> Parser::consume_expression_fun
 		auto& identifier = argument_lhs.value().value.get_atom().get_identifier();
 		// TODO: get rid of identifiers here, since we never actually identify these arguments through
 		// conventional ways
-		Spanned<Identifier> label {
+		Spanned<OldIdentifier> label {
 			identifier.path().back().span,
-			Identifier {false, {{identifier.path().back().span, identifier.path().back().name}}}
+			OldIdentifier {false, {{identifier.path().back().span, identifier.path().back().name}}}
 		};
 		// and we require an actual argument
 		std::optional<Spanned<Expression>> argument_rhs
@@ -795,7 +795,7 @@ std::optional<GenericDeclaration::Generic> Parser::consume_generic_declaration_g
 
 	std::vector<GenericDeclaration::Generic::Constraint> constraints {};
 	if (consume_symbol(Token::Symbol::Colon)) {
-		std::optional<Spanned<Identifier>> constraint
+		std::optional<Spanned<OldIdentifier>> constraint
 			= SPANNED_REASON(expect_identifier, "expected trait name after `:`");
 		if (!constraint.has_value()) goto return_;
 		std::optional<GenericList> generic_list = consume_generic_list();
@@ -968,7 +968,7 @@ std::optional<Statement> Parser::consume_statement_declare() {
 		"expected variable name after mutability qualifier to begin variable declaration"
 	);
 	if (!maybe_name.has_value()) return {};
-	Spanned<Identifier> name = maybe_name.value();
+	Spanned<OldIdentifier> name = maybe_name.value();
 
 	std::optional<Spanned<Type>> type;
 	if (consume_symbol(Token::Symbol::Colon)) {
@@ -1271,19 +1271,19 @@ std::optional<std::string> Parser::expect_bare_unqualified_identifier(std::strin
 	EXPECT(consume_bare_unqualified_identifier, "identifier");
 }
 
-std::optional<Identifier> Parser::expect_unqualified_identifier(std::string_view reason) {
+std::optional<OldIdentifier> Parser::expect_unqualified_identifier(std::string_view reason) {
 	EXPECT(consume_unqualified_identifier, "identifier");
 }
 
-std::optional<Identifier> Parser::expect_identifier(std::string_view reason) {
+std::optional<OldIdentifier> Parser::expect_identifier(std::string_view reason) {
 	EXPECT(consume_identifier, "(qualified) identifier");
 }
 
-std::optional<RichIdentifier::Segment> Parser::expect_rich_identifier_segment(std::string_view reason) {
+std::optional<Identifier::Segment> Parser::expect_rich_identifier_segment(std::string_view reason) {
 	EXPECT(consume_rich_identifier_segment, "identifier segment");
 }
 
-std::optional<RichIdentifier> Parser::expect_rich_identifier(std::string_view reason) {
+std::optional<Identifier> Parser::expect_rich_identifier(std::string_view reason) {
 	EXPECT(consume_rich_identifier, "identifier");
 }
 
@@ -1684,9 +1684,9 @@ std::optional<Function> Parser::parse_function() {
 
 std::optional<Alias> Parser::parse_alias() {
 	if (!consume_keyword(Keyword::Def)) return {};
-	std::optional<Spanned<Identifier>> name = SPANNED_REASON(expect_unqualified_identifier, "expected alias name");
+	std::optional<Spanned<OldIdentifier>> name = SPANNED_REASON(expect_unqualified_identifier, "expected alias name");
 	if (!name.has_value()) return {};
-	std::optional<Spanned<Identifier>> value = SPANNED_REASON(expect_identifier, "expected alias value");
+	std::optional<Spanned<OldIdentifier>> value = SPANNED_REASON(expect_identifier, "expected alias value");
 	if (!value.has_value()) return {};
 	if (!value.value().value.absolute)
 		diagnostics_.push_back(
@@ -1702,7 +1702,7 @@ std::optional<Alias> Parser::parse_alias() {
 
 std::optional<Import> Parser::parse_import() {
 	if (!consume_keyword(Keyword::Import)) return {};
-	std::optional<Spanned<Identifier>> name
+	std::optional<Spanned<OldIdentifier>> name
 		= SPANNED_REASON(expect_identifier, "expected name of the item to import");
 	if (!name.has_value()) return {};
 	if (name.value().value.absolute)
@@ -1723,7 +1723,7 @@ std::optional<Import> Parser::parse_import() {
 
 std::optional<Module> Parser::parse_module() {
 	if (!consume_keyword(Keyword::Module)) return {};
-	std::optional<Spanned<Identifier>> name = SPANNED_REASON(expect_identifier, "expected module name");
+	std::optional<Spanned<OldIdentifier>> name = SPANNED_REASON(expect_identifier, "expected module name");
 	if (!name.has_value()) return {};
 	std::optional<Module::Body> body = parse_module_body();
 	if (!body.has_value()) return {};
@@ -1799,7 +1799,7 @@ std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 Module Parser::parse_all(std::string name) {
 	Module::Body body = parse_module_body(true).value_or(Module::Body {});
 	return Module {
-		Spanned<Identifier> {Span(0), Identifier(Spanned<std::string> {Span(0), name})},
+		Spanned<OldIdentifier> {Span(0), OldIdentifier(Spanned<std::string> {Span(0), name})},
 		std::move(body)
 	};
 }

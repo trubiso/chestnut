@@ -70,7 +70,7 @@ void Resolver::constrain_candidate(UndecidedOverload& undecided_overload) {
 	undecided_overload.function_call->call_type = {candidate.call_id};
 }
 
-void Resolver::constrain_candidate(AST::Identifier* identifier, TypeInfo::Named::Candidate& candidate) {
+void Resolver::constrain_candidate(AST::OldIdentifier* identifier, TypeInfo::Named::Candidate& candidate) {
 	// constrain the identifier for lowering later
 	if (identifier) identifier->id = {candidate.name};
 

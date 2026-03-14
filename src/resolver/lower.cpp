@@ -244,7 +244,7 @@ diagnostic:
 }
 
 std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>>
-Resolver::lower(Spanned<AST::Identifier> const& identifier, bool allow_functions) {
+Resolver::lower(Spanned<AST::OldIdentifier> const& identifier, bool allow_functions) {
 	auto data = lower(identifier.value, allow_functions);
 	if (!data.has_value()) return std::nullopt;
 	auto [id, type] = std::move(data.value());
@@ -253,14 +253,14 @@ Resolver::lower(Spanned<AST::Identifier> const& identifier, bool allow_functions
 }
 
 std::optional<std::tuple<IR::Identifier, IR::Type>>
-Resolver::lower(AST::Identifier const& identifier, bool allow_functions) {
+Resolver::lower(AST::OldIdentifier const& identifier, bool allow_functions) {
 	// for identifiers, we need to ensure that they are fully resolved
 	if (!identifier.id.has_value() || identifier.id.value().size() != 1) { return std::nullopt; }
 	AST::SymbolID id = identifier.id.value()[0];
 	return std::tuple {id, reconstruct_type(symbol_pool_.at(id).type, allow_functions)};
 }
 
-Spanned<IR::Identifier> Resolver::lower_identifier(Spanned<AST::Identifier> const& identifier) {
+Spanned<IR::Identifier> Resolver::lower_identifier(Spanned<AST::OldIdentifier> const& identifier) {
 	return {identifier.span, identifier.value.id.value()[0]};
 }
 

@@ -11,7 +11,7 @@ typedef uint32_t SymbolID;
 
 struct GenericList;
 
-struct RichIdentifier {
+struct Identifier {
 	struct Segment {
 		std::string                                 name;
 		std::optional<std::unique_ptr<GenericList>> generic_list;
@@ -63,19 +63,19 @@ struct RichIdentifier {
 	inline std::vector<Segment> const& path() const { return path_; }
 
 	/// Constructor for unqualified identifiers.
-	explicit RichIdentifier(Spanned<std::string> name);
+	explicit Identifier(Spanned<std::string> name);
 	/// Constructor for qualified identifiers.
-	explicit RichIdentifier(bool absolute, std::vector<Segment> path);
+	explicit Identifier(bool absolute, std::vector<Segment> path);
 
 private:
 	bool                 absolute_;
 	std::vector<Segment> path_;
 };
 
-std::ostream& operator<<(std::ostream&, RichIdentifier::Segment const&);
-std::ostream& operator<<(std::ostream&, RichIdentifier const&);
+std::ostream& operator<<(std::ostream&, Identifier::Segment const&);
+std::ostream& operator<<(std::ostream&, Identifier const&);
 
-struct Identifier {
+struct OldIdentifier {
 	/// Whether the identifier is an absolutely qualified identifier or not.
 	bool absolute;
 	/// The candidates for this identifier's ID. It starts out as std::nullopt, but becomes a vector of candidates
@@ -96,18 +96,18 @@ struct Identifier {
 		return path[0].value;
 	}
 
-	Spanned<Identifier> extract_unqualified_with_span() const {
+	Spanned<OldIdentifier> extract_unqualified_with_span() const {
 		assert(is_unqualified());
-		return Spanned<Identifier> {path[0].span, *this};
+		return Spanned<OldIdentifier> {path[0].span, *this};
 	}
 
 	inline Spanned<std::string> const& last_fragment() const { return path.at(path.size() - 1); }
 
 	/// Constructor for unqualified identifiers.
-	explicit Identifier(Spanned<std::string>&& value) : absolute {false}, id {}, path {std::move(value)} {}
+	explicit OldIdentifier(Spanned<std::string>&& value) : absolute {false}, id {}, path {std::move(value)} {}
 
 	/// Constructor for qualified identifiers.
-	explicit Identifier(bool absolute, std::vector<Spanned<std::string>>&& path)
+	explicit OldIdentifier(bool absolute, std::vector<Spanned<std::string>>&& path)
 		: absolute {absolute}
 		, id {}
 		, path {path} {
@@ -115,6 +115,6 @@ struct Identifier {
 	}
 };
 
-std::ostream& operator<<(std::ostream&, Identifier const&);
+std::ostream& operator<<(std::ostream&, OldIdentifier const&);
 
 }  // namespace AST

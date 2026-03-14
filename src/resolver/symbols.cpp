@@ -64,7 +64,7 @@ void Resolver::add_unknown_symbol_diagnostic(
 }
 
 std::optional<size_t> Resolver::resolve(
-	AST::Identifier& identifier,
+	AST::OldIdentifier& identifier,
 	Span             span,
 	Scope const&     scope,
 	FileContext::ID  file_id,
@@ -282,7 +282,7 @@ std::optional<size_t> Resolver::resolve(
 }
 
 std::optional<size_t> Resolver::resolve(
-	Spanned<AST::Identifier>& identifier,
+	Spanned<AST::OldIdentifier>& identifier,
 	Scope const&              scope,
 	FileContext::ID           file_id,
 	bool                      include_unimported
@@ -374,7 +374,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 
 		// this is actually a static member!
 		{
-			AST::Identifier& identifier = atom.get_identifier();
+			AST::OldIdentifier& identifier = atom.get_identifier();
 			size_t           idx        = potential_idx.value();
 			assert(idx > 0 && !identifier.is_unqualified());
 
@@ -386,7 +386,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 				identifier.path.cbegin() + idx,
 				std::back_inserter(new_path)
 			);
-			AST::Identifier type_id {identifier.absolute, std::move(new_path)};
+			AST::OldIdentifier type_id {identifier.absolute, std::move(new_path)};
 			type_id.id = identifier.id;
 			Spanned<AST::Type::Atom::Named> type {
 				type_span,
@@ -395,9 +395,9 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 
 			new_path = {};
 			std::move(identifier.path.cbegin() + idx, identifier.path.cend(), std::back_inserter(new_path));
-			Spanned<AST::Identifier> member {
+			Spanned<AST::OldIdentifier> member {
 				Span {identifier.path[idx].span.start,            span.end},
-				AST::Identifier {                          false, std::move(new_path)}
+				AST::OldIdentifier {                          false, std::move(new_path)}
 			};
 
 			atom = AST::Expression::Atom::make_static_member(std::move(type), std::move(member));
@@ -512,7 +512,7 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 	for (auto& statement : ast_scope) { resolve(statement, resolver_scope, file_id); }
 }
 
-bool Resolver::resolve_trait_name(Spanned<AST::Identifier>& name, Scope const& scope, FileContext::ID file_id) {
+bool Resolver::resolve_trait_name(Spanned<AST::OldIdentifier>& name, Scope const& scope, FileContext::ID file_id) {
 	assert(!resolve(name, scope, file_id).has_value() && "trait name is static member??");
 	// diagnostic already thrown
 	if (!name.value.id.has_value() || name.value.id.value().empty()) return false;

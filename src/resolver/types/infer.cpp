@@ -118,7 +118,7 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 	}
 
 	// for identifiers, we match the type in the symbol pool
-	AST::Identifier const& identifier
+	AST::OldIdentifier const& identifier
 		// TODO: bind static member generics
 		= atom.is_static_member() ? atom.get_static_member().member.value : atom.get_identifier();
 	if (!identifier.id.has_value())
@@ -425,7 +425,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		candidates.push_back(std::move(candidate));
 	}
 
-	std::optional<AST::Identifier*> identifier = std::nullopt;
+	std::optional<AST::OldIdentifier*> identifier = std::nullopt;
 
 	if (function_call.callee->value.is_atom()) {
 		if (function_call.callee->value.get_atom().is_identifier())
@@ -491,16 +491,16 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, F
 			                expression.get_unary_operation().operand->span,
 			                file_id);
 
-			UndecidedDeref deref { argument, register_type(TypeInfo::make_unknown(), span, file_id) };
+			UndecidedDeref deref {argument, register_type(TypeInfo::make_unknown(), span, file_id)};
 			expression.type = deref.result_type;
 			if (!try_decide(deref)) undecided_derefs.push_back(std::move(deref));
-			
+
 			return expression.type.value();
 		} else {
 			// TODO: get the operator span
 			Span operator_span = span;
 
-			AST::Identifier callee_identifier {
+			AST::OldIdentifier callee_identifier {
 				{operator_span, get_variant_name(operator_)}
 			};
 			callee_identifier.id   = get_operator_candidates(operator_, !is_unary);

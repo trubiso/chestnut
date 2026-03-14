@@ -79,7 +79,7 @@ private:
 		};
 
 		struct Named {
-			AST::Identifier* name;
+			AST::OldIdentifier* name;
 
 			struct Partial {
 				std::vector<ID>                          ordered_generics;
@@ -215,7 +215,7 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named(AST::Identifier* name, std::vector<ID>&& ordered_generics = {}, std::vector<std::tuple<std::string, ID>> labeled_generics = {}) {
+		inline static TypeInfo make_named(AST::OldIdentifier* name, std::vector<ID>&& ordered_generics = {}, std::vector<std::tuple<std::string, ID>> labeled_generics = {}) {
 			return TypeInfo(
 				value_t {
 					std::in_place_index<(size_t) Kind::Named>,
@@ -227,7 +227,7 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named(AST::Identifier* name, std::vector<Named::Candidate>&& candidates) {
+		inline static TypeInfo make_named(AST::OldIdentifier* name, std::vector<Named::Candidate>&& candidates) {
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{name, std::move(candidates)}});
 		}
 		
@@ -420,7 +420,7 @@ private:
 	std::unordered_map<std::string, AST::Trait> built_in_traits_ {};
 
 	/// Produces a single ID for the identifier and sets it; the caller must register this ID in the symbol pool.
-	void identify(AST::Identifier&);
+	void identify(AST::OldIdentifier&);
 	/// Identifies the module with an ID and its non-alias items.
 	void identify(AST::Module&, bool exported, FileContext::ID);
 	/// Identifies the struct with an ID.
@@ -448,9 +448,9 @@ private:
 	/// Identifies all built-in operators.
 	void identify_built_in_operators();
 	/// Pushes a particular built-in trait to the symbol pool.
-	void push_built_in_trait(AST::Identifier const&, std::vector<AST::SymbolID>&& constraints = {});
+	void push_built_in_trait(AST::OldIdentifier const&, std::vector<AST::SymbolID>&& constraints = {});
 	/// Makes a built-in identifier with a stub span and the provided name.
-	Spanned<AST::Identifier> make_built_in_identifier(std::string name);
+	Spanned<AST::OldIdentifier> make_built_in_identifier(std::string name);
 	/// Identifies all built-in traits.
 	void identify_built_in_traits();
 	/// Populates the label map given a statement.
@@ -532,7 +532,7 @@ private:
 	inline Symbol& get_single_symbol(AST::SymbolID id) { return symbol_pool_.at(id); }
 
 	/// Gets a symbol from the symbol pool, assuming the identifier is fully resolved.
-	inline Symbol& get_single_symbol(AST::Identifier const& identifier) {
+	inline Symbol& get_single_symbol(AST::OldIdentifier const& identifier) {
 		assert(identifier.id.has_value() && identifier.id.value().size() == 1);
 		return get_single_symbol(identifier.id.value().at(0));
 	}
@@ -550,11 +550,11 @@ private:
 		bool add_import_suggestion = false
 	);
 
-	bool resolve_trait_name(Spanned<AST::Identifier>&, Scope const&, FileContext::ID);
+	bool resolve_trait_name(Spanned<AST::OldIdentifier>&, Scope const&, FileContext::ID);
 
 	/// If the identifier needs to be converted into a static member, returns from which index onward to do so.
-	[[nodiscard]] std::optional<size_t> resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
-	[[nodiscard]] std::optional<size_t> resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
+	[[nodiscard]] std::optional<size_t> resolve(AST::OldIdentifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
+	[[nodiscard]] std::optional<size_t> resolve(Spanned<AST::OldIdentifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
 	void resolve(AST::Type::Atom::Named&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type::Atom&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type&, Span, Scope const&, FileContext::ID);
@@ -596,7 +596,7 @@ private:
 
 	struct UndecidedOverload {
 		TypeInfo::ID                    expr_type;
-		std::optional<AST::Identifier*> identifier;
+		std::optional<AST::OldIdentifier*> identifier;
 
 		struct Candidate {
 			TypeInfo::ID function;
@@ -814,7 +814,7 @@ private:
 	/// Constrains a single function overload candidate (the undecided overload must have only 1 candidate!).
 	void constrain_candidate(UndecidedOverload&);
 	/// Adds the correct trait constraints to a named type's generics according to the provided candidate.
-	void constrain_candidate(AST::Identifier*, TypeInfo::Named::Candidate&);
+	void constrain_candidate(AST::OldIdentifier*, TypeInfo::Named::Candidate&);
 	/// Tries to decide all single-candidate named types. It's necessary to do this,
 	/// since these types will get overlooked by the main type decision loop, because they are already decided.
 	void decide_supposedly_known_named_types();
@@ -855,11 +855,11 @@ private:
 	Spanned<IR::Value> lower_get_default_value(IR::Type const&, Span, FileContext::ID);
 
 	/// Lowers any identifier into its IR equivalent and type.
-	std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>> lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
+	std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>> lower(Spanned<AST::OldIdentifier> const&, bool allow_functions = false);
 	/// Lowers any identifier into its IR equivalent and type.
-	std::optional<std::tuple<IR::Identifier, IR::Type>> lower(AST::Identifier const&, bool allow_functions = false);
+	std::optional<std::tuple<IR::Identifier, IR::Type>> lower(AST::OldIdentifier const&, bool allow_functions = false);
 	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-alias module items).
-	Spanned<IR::Identifier> lower_identifier(Spanned<AST::Identifier> const&);
+	Spanned<IR::Identifier> lower_identifier(Spanned<AST::OldIdentifier> const&);
 
 	// FIXME: clang-format goes BALLISTIC over these function declarations
 	// TODO: fix allow_functions

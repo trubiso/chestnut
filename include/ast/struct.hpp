@@ -5,7 +5,7 @@
 namespace AST {
 
 struct Struct {
-	Spanned<Identifier> name;
+	Spanned<OldIdentifier> name;
 
 	std::optional<GenericDeclaration> generic_declaration;
 

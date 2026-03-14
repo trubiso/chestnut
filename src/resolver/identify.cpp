@@ -3,7 +3,7 @@
 
 #include <variant>
 
-void Resolver::identify(AST::Identifier& identifier) {
+void Resolver::identify(AST::OldIdentifier& identifier) {
 	assert(!identifier.id.has_value());
 	identifier.id = {symbol_next()};
 }
@@ -400,7 +400,7 @@ void Resolver::identify_built_in_operators() {
 	);
 }
 
-void Resolver::push_built_in_trait(AST::Identifier const& identifier, std::vector<AST::SymbolID>&& constraints) {
+void Resolver::push_built_in_trait(AST::OldIdentifier const& identifier, std::vector<AST::SymbolID>&& constraints) {
 	std::vector<TypeInfo::Generic::TraitConstraint> trait_constraints {};
 	trait_constraints.reserve(constraints.size());
 	std::transform(
@@ -426,9 +426,9 @@ void Resolver::push_built_in_trait(AST::Identifier const& identifier, std::vecto
 	);
 }
 
-Spanned<AST::Identifier> Resolver::make_built_in_identifier(std::string name) {
+Spanned<AST::OldIdentifier> Resolver::make_built_in_identifier(std::string name) {
 	AST::SymbolID   id = symbol_next();
-	AST::Identifier identifier({Span::zero(), std::move(name)});
+	AST::OldIdentifier identifier({Span::zero(), std::move(name)});
 	identifier.id = {id};
 	return {Span::zero(), identifier};
 }

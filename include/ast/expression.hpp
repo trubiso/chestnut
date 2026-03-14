@@ -24,19 +24,19 @@ struct Expression {
 
 		struct NumberLiteral {
 			std::string               literal;
-			std::optional<Identifier> suffix;  // unqualified
+			std::optional<OldIdentifier> suffix;  // unqualified
 
 			bool is_float() const;
 		};
 
 		struct StringLiteral {
 			std::string               literal;
-			std::optional<Identifier> suffix;  // unqualified
+			std::optional<OldIdentifier> suffix;  // unqualified
 		};
 
 		struct CharLiteral {
 			std::string               literal;
-			std::optional<Identifier> suffix;  // unqualified
+			std::optional<OldIdentifier> suffix;  // unqualified
 		};
 
 		struct BoolLiteral {
@@ -57,7 +57,7 @@ struct Expression {
 		};
 
 		typedef std::variant<
-			RichIdentifier,
+			Identifier,
 			NumberLiteral,
 			StringLiteral,
 			CharLiteral,
@@ -70,11 +70,11 @@ struct Expression {
 
 		inline constexpr Kind kind() const { return (Kind) value.index(); }
 
-		inline static Atom make_identifier(RichIdentifier&& identifier) {
+		inline static Atom make_identifier(Identifier&& identifier) {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, std::move(identifier)});
 		}
 
-		inline static Atom make_number_literal(std::string literal, std::optional<Identifier> suffix) {
+		inline static Atom make_number_literal(std::string literal, std::optional<OldIdentifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::NumberLiteral>,
@@ -83,7 +83,7 @@ struct Expression {
 			);
 		}
 
-		inline static Atom make_string_literal(std::string literal, std::optional<Identifier> suffix) {
+		inline static Atom make_string_literal(std::string literal, std::optional<OldIdentifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::StringLiteral>,
@@ -92,7 +92,7 @@ struct Expression {
 			);
 		}
 
-		inline static Atom make_char_literal(std::string literal, std::optional<Identifier> suffix) {
+		inline static Atom make_char_literal(std::string literal, std::optional<OldIdentifier> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::CharLiteral>,
@@ -133,11 +133,11 @@ struct Expression {
 
 		inline bool is_expression() const { return kind() == Kind::Expression; }
 
-		inline RichIdentifier const& get_identifier() const {
+		inline Identifier const& get_identifier() const {
 			return std::get<(size_t) Kind::Identifier>(value);
 		}
 
-		inline RichIdentifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
+		inline Identifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline NumberLiteral const& get_number_literal() const {
 			return std::get<(size_t) Kind::NumberLiteral>(value);
@@ -190,7 +190,7 @@ struct Expression {
 		std::unique_ptr<Spanned<Expression>> callee;
 
 		typedef Spanned<Expression>                              OrderedArgument;
-		typedef std::tuple<Spanned<Identifier>, OrderedArgument> LabeledArgument;
+		typedef std::tuple<Spanned<OldIdentifier>, OrderedArgument> LabeledArgument;
 
 		typedef std::variant<OrderedArgument, LabeledArgument> Argument;
 
