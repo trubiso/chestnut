@@ -221,7 +221,9 @@ Spanned<IR::Value> Resolver::lower_get_default_value(IR::Type const& type, Span 
 						type.clone()
 					)
 				)};
+		default: assert(false);
 		}
+		assert(false);
 	}
 
 	case IR::Type::Atom::Kind::Bool:
@@ -244,7 +246,7 @@ diagnostic:
 }
 
 std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>>
-Resolver::lower(Spanned<AST::OldIdentifier> const& identifier, bool allow_functions) {
+Resolver::lower(Spanned<AST::Identifier> const& identifier, bool allow_functions) {
 	auto data = lower(identifier.value, allow_functions);
 	if (!data.has_value()) return std::nullopt;
 	auto [id, type] = std::move(data.value());
@@ -253,15 +255,14 @@ Resolver::lower(Spanned<AST::OldIdentifier> const& identifier, bool allow_functi
 }
 
 std::optional<std::tuple<IR::Identifier, IR::Type>>
-Resolver::lower(AST::OldIdentifier const& identifier, bool allow_functions) {
-	// for identifiers, we need to ensure that they are fully resolved
-	if (!identifier.id.has_value() || identifier.id.value().size() != 1) { return std::nullopt; }
-	AST::SymbolID id = identifier.id.value()[0];
+Resolver::lower(AST::Identifier const& identifier, bool allow_functions) {
+	if (!identifier.is_decided()) { return std::nullopt; }
+	AST::SymbolID id = identifier.id();
 	return std::tuple {id, reconstruct_type(symbol_pool_.at(id).type, allow_functions)};
 }
 
-Spanned<IR::Identifier> Resolver::lower_identifier(Spanned<AST::OldIdentifier> const& identifier) {
-	return {identifier.span, identifier.value.id.value()[0]};
+Spanned<IR::Identifier> Resolver::lower_name(Spanned<AST::Name> const& name) {
+	return {name.span, name.value.id.value()};
 }
 
 Spanned<std::tuple<IR::Identifier, IR::Type>> Resolver::extract_value_id(
@@ -488,15 +489,12 @@ IR::Value::Atom Resolver::lower_atom(
 		return lower_atom(atom.get_struct_literal(), type_id, span, basic_blocks, file_id, allow_functions);
 	case AST::Expression::Atom::Kind::Expression:
 		return extract_value(*atom.get_expression(), span, basic_blocks, file_id).value;
-	case AST::Expression::Atom::Kind::Identifier:
-	case AST::Expression::Atom::Kind::StaticMember: break;
+	case AST::Expression::Atom::Kind::Identifier: break;
 	}
 
 	// for identifiers, we need to extract the type as well.
 	// only identifiers can be functions!
-	auto data
-		= lower(atom.is_static_member() ? atom.get_static_member().member.value : atom.get_identifier(),
-	                allow_functions);
+	auto data = lower(atom.get_identifier(), allow_functions);
 	if (!data.has_value()) return IR::Value::Atom::make_error();
 	auto [identifier, type] = std::move(data.value());
 	return IR::Value::Atom::make_identifier(identifier, std::move(type));
@@ -673,6 +671,7 @@ Spanned<IR::Value> Resolver::lower_value(
 	case AST::Expression::Kind::BinaryOperation:
 	case AST::Expression::Kind::If:              [[assume(false)]];
 	}
+	assert(false);
 }
 
 Spanned<IR::Value> Resolver::lower_value(
@@ -855,6 +854,7 @@ Spanned<IR::Place> Resolver::lower_place(
 	case AST::Expression::Kind::BinaryOperation:
 	case AST::Expression::Kind::If:              [[assume(false)]];
 	}
+	assert(false);
 }
 
 Spanned<IR::Place> Resolver::lower_place(
@@ -872,9 +872,10 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	std::vector<IR::BasicBlock>&   basic_blocks,
 	FileContext::ID                file_id
 ) {
-	auto data = lower(declare.name);
-	if (!data.has_value()) return {};
-	auto [name, type] = std::move(data.value());
+	assert(declare.name.value.id.has_value());
+
+	auto name = lower_name(declare.name);
+	auto type = reconstruct_type(symbol_pool_.at(name.value).type, false);
 
 	auto value = declare.value.transform([&basic_blocks, file_id, this](auto&& value) {
 		return lower_value(value, basic_blocks, file_id);
@@ -963,7 +964,10 @@ std::optional<Spanned<IR::Statement>> Resolver::lower(
 	case AST::Statement::Kind::Return:
 	case AST::Statement::Kind::Goto:
 	case AST::Statement::Kind::Branch:     break;
-	case AST::Statement::Kind::If:         return {};
+	case AST::Statement::Kind::If:
+	case AST::Statement::Kind::While:
+	case AST::Statement::Kind::Break:
+	case AST::Statement::Kind::Continue:   return {};
 	}
 
 	// TODO: somehow have a way to insert drop statements before gotos
@@ -1064,7 +1068,7 @@ Resolver::lower(std::optional<AST::GenericDeclaration>& maybe_generic_declaratio
 	new_declaration.reserve(generics.size());
 	for (auto& generic : generics) {
 		std::vector<IR::Generic::Constraint> constraints {};
-		assert(generic.name.value.id.has_value() && generic.name.value.id.value().size() == 1);
+		assert(generic.name.value.id.has_value());
 		auto const& symbol = get_single_symbol(generic.name.value);
 		if (type_pool_.at(symbol.type).is_bottom()) goto bail;
 
@@ -1108,7 +1112,7 @@ Resolver::lower(std::optional<AST::GenericDeclaration>& maybe_generic_declaratio
 			);
 		}
 	bail:
-		new_declaration.emplace_back(generic.name.value.id.value().at(0), std::move(constraints));
+		new_declaration.emplace_back(generic.name.value.id.value(), std::move(constraints));
 	}
 
 	return new_declaration;
@@ -1122,7 +1126,7 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 		// we don't need to push arguments as anonymous or mutable, we only cared during resolution and stuff
 		arguments.push_back(
 			IR::Function::Argument {
-				lower_identifier(name),
+				lower_name(name),
 				{type.span, reconstruct_type(get_single_symbol(name.value).type)}
                 }
 		);
@@ -1183,7 +1187,7 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
 	};
 	auto generic_declaration = lower(function.generic_declaration, file_id);
 	return IR::Function {
-		{function.name.span, function.name.value.id.value()[0]},
+		{function.name.span, function.name.value.id.value()},
 		std::move(generic_declaration),
 		std::move(arguments),
 		std::move(return_type),
@@ -1209,11 +1213,11 @@ IR::Struct Resolver::lower(AST::Struct& struct_, FileContext::ID file_id) {
 	);
 
 	auto generic_declaration = lower(struct_.generic_declaration, file_id);
-	return IR::Struct {lower_identifier(struct_.name), std::move(generic_declaration), std::move(fields)};
+	return IR::Struct {lower_name(struct_.name), std::move(generic_declaration), std::move(fields)};
 }
 
 IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id) {
-	IR::Module module {lower_identifier(original_module.name), {}};
+	IR::Module module {lower_name(original_module.name), {}};
 	// we don't need aliases anymore, those are purely for name resolution
 	// FIXME: ensure structs are lowered before we resolve function bodies
 	for (Spanned<AST::Module::Item>& item : original_module.body.items) {
@@ -1227,16 +1231,16 @@ IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id
 				if (tag.identifier == "extern") lowered_function.extern_ = true;
 			}
 			get_single_symbol(function.name.value).item = std::move(lowered_function);
-			module.items.push_back(function.name.value.id.value()[0]);
+			module.items.push_back(function.name.value.id.value());
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			AST::Module& submodule                       = std::get<AST::Module>(value);
 			get_single_symbol(submodule.name.value).item = lower(submodule, file_id);
-			module.items.push_back(submodule.name.value.id.value()[0]);
+			module.items.push_back(submodule.name.value.id.value());
 		} else if (std::holds_alternative<AST::Struct>(value)) {
 			AST::Struct& struct_                       = std::get<AST::Struct>(value);
 			IR::Struct   lowered_struct_               = lower(struct_, file_id);
 			get_single_symbol(struct_.name.value).item = std::move(lowered_struct_);
-			module.items.push_back(struct_.name.value.id.value()[0]);
+			module.items.push_back(struct_.name.value.id.value());
 		}
 	}
 	return module;

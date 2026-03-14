@@ -860,12 +860,12 @@ private:
 	/// Gets the default value for the given type.
 	Spanned<IR::Value> lower_get_default_value(IR::Type const&, Span, FileContext::ID);
 
-	/// Lowers any identifier into its IR equivalent and type.
-	std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>> lower(Spanned<AST::OldIdentifier> const&, bool allow_functions = false);
-	/// Lowers any identifier into its IR equivalent and type.
-	std::optional<std::tuple<IR::Identifier, IR::Type>> lower(AST::OldIdentifier const&, bool allow_functions = false);
-	/// Lowers an identifier which should ALWAYS be resolved (i.e. those of non-alias module items).
-	Spanned<IR::Identifier> lower_identifier(Spanned<AST::OldIdentifier> const&);
+	/// Lowers an identifier into its IR equivalent and type.
+	std::optional<std::tuple<Spanned<IR::Identifier>, IR::Type>> lower(Spanned<AST::Identifier> const&, bool allow_functions = false);
+	/// Lowers an identifier into its IR equivalent and type.
+	std::optional<std::tuple<IR::Identifier, IR::Type>> lower(AST::Identifier const&, bool allow_functions = false);
+	/// Lowers a name.
+	Spanned<IR::Identifier> lower_name(Spanned<AST::Name> const&);
 
 	// FIXME: clang-format goes BALLISTIC over these function declarations
 	// TODO: fix allow_functions
