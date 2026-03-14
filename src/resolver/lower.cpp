@@ -553,7 +553,7 @@ Spanned<IR::Value> Resolver::lower_value(
 		std::string argument_name  = std::get<0>(function.arguments.at(i)).value();
 		bool        argument_found = false;
 		for (auto const& [label, argument] : function_call.arguments.labeled) {
-			if (label.value.name() == argument_name) {
+			if (label.value == argument_name) {
 				arguments.push_back(extract_value(argument, basic_blocks, file_id));
 				argument_found = true;
 			}

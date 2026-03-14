@@ -468,18 +468,15 @@ std::optional<Expression::FunctionCall::Argument> Parser::consume_expression_fun
 	    && consume_symbol(Token::Symbol::Colon)) {
 		// then, the bare unqualified identifier is the label
 		auto& identifier = argument_lhs.value().value.get_atom().get_identifier();
-		// TODO: get rid of identifiers here, since we never actually identify these arguments through
-		// conventional ways
-		Spanned<OldIdentifier> label {
-			identifier.path().back().span,
-			OldIdentifier {false, {{identifier.path().back().span, identifier.path().back().name}}}
-		};
 		// and we require an actual argument
 		std::optional<Spanned<Expression>> argument_rhs
 			= SPANNED_REASON(expect_expression, "expected argument value after argument label");
 		// we don't really have anything to return if there's no argument
 		if (!argument_rhs.has_value()) return {};
-		return Expression::FunctionCall::LabeledArgument {label, std::move(argument_rhs.value())};
+		return Expression::FunctionCall::LabeledArgument {
+			identifier.path().back().spanned_name(),
+			std::move(argument_rhs.value())
+		};
 	}
 	// otherwise it's just a regular argument
 	return Expression::FunctionCall::OrderedArgument {std::move(argument_lhs.value())};
@@ -519,8 +516,8 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 					arguments.labeled.cbegin(),
 					arguments.labeled.cend(),
 					[&labeled_argument](auto const& existing_argument) {
-						return std::get<0>(existing_argument).value.name()
-					            == std::get<0>(labeled_argument).value.name();
+						return std::get<0>(existing_argument).value
+					            == std::get<0>(labeled_argument).value;
 					}
 				);
 

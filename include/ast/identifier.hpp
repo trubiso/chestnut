@@ -50,6 +50,9 @@ struct Identifier {
 
 		explicit Segment(std::string name, Span span, std::optional<std::unique_ptr<GenericList>> generic_list);
 		explicit Segment(std::string name, Span span);
+
+		/// Returns the segment as its spanned name.
+		Spanned<std::string> spanned_name() const;
 	};
 
 	/// Returns whether all segments are decided.

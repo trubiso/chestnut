@@ -38,6 +38,10 @@ Identifier::Segment::Segment(std::string name, Span span, std::optional<std::uni
 
 Identifier::Segment::Segment(std::string name, Span span) : Segment {std::move(name), std::move(span), std::nullopt} {}
 
+Spanned<std::string> Identifier::Segment::spanned_name() const {
+	return {span, name};
+}
+
 bool Identifier::is_decided() const {
 	return std::all_of(path_.cbegin(), path_.cend(), [](Segment const& segment) { return segment.is_decided(); });
 }

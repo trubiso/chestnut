@@ -23,19 +23,19 @@ struct Expression {
 		};
 
 		struct NumberLiteral {
-			std::string               literal;
+			std::string                  literal;
 			std::optional<OldIdentifier> suffix;  // unqualified
 
 			bool is_float() const;
 		};
 
 		struct StringLiteral {
-			std::string               literal;
+			std::string                  literal;
 			std::optional<OldIdentifier> suffix;  // unqualified
 		};
 
 		struct CharLiteral {
-			std::string               literal;
+			std::string                  literal;
 			std::optional<OldIdentifier> suffix;  // unqualified
 		};
 
@@ -133,9 +133,7 @@ struct Expression {
 
 		inline bool is_expression() const { return kind() == Kind::Expression; }
 
-		inline Identifier const& get_identifier() const {
-			return std::get<(size_t) Kind::Identifier>(value);
-		}
+		inline Identifier const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline Identifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
 
@@ -189,8 +187,8 @@ struct Expression {
 	struct FunctionCall {
 		std::unique_ptr<Spanned<Expression>> callee;
 
-		typedef Spanned<Expression>                              OrderedArgument;
-		typedef std::tuple<Spanned<OldIdentifier>, OrderedArgument> LabeledArgument;
+		typedef Spanned<Expression>                               OrderedArgument;
+		typedef std::tuple<Spanned<std::string>, OrderedArgument> LabeledArgument;
 
 		typedef std::variant<OrderedArgument, LabeledArgument> Argument;
 

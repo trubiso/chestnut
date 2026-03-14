@@ -220,13 +220,13 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 					arguments_under_consideration.cbegin(),
 					arguments_under_consideration.cend(),
 					[&identifier](std::string_view actual_argument) {
-						return actual_argument == identifier.value.name();
+						return actual_argument == identifier.value;
 					}
 				);
 
 				if (!argument_exists) {
 					std::stringstream text {};
-					text << "missing labeled argument `" << identifier.value.name() << "`";
+					text << "missing labeled argument `" << identifier.value << "`";
 					rejections.push_back(
 						Diagnostic::Sample(
 							get_context(get_type_file_id(callable_id)),
@@ -335,7 +335,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	);
 	ordered_arguments.reserve(function_call.arguments.labeled.size());
 	for (auto& [identifier, value] : function_call.arguments.labeled) {
-		labeled_arguments.emplace(identifier.value.name(), infer(value.value, value.span, file_id));
+		labeled_arguments.emplace(identifier.value, infer(value.value, value.span, file_id));
 	}
 
 	std::vector<TypeInfo::ID>                     ordered_generics {};
