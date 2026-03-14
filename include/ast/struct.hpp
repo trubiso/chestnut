@@ -5,7 +5,7 @@
 namespace AST {
 
 struct Struct {
-	Spanned<OldIdentifier> name;
+	Spanned<Name> name;
 
 	std::optional<GenericDeclaration> generic_declaration;
 
@@ -14,7 +14,7 @@ struct Struct {
 		Spanned<std::string> name;
 		Spanned<Type>        type;
 
-		std::optional<uint32_t> type_id;
+		std::optional<uint32_t> type_id = {};
 	};
 
 	std::vector<Field> fields;

@@ -13,7 +13,7 @@ struct Trait {
 		std::optional<GenericList> generic_list;
 	};
 
-	Spanned<OldIdentifier> name;
+	Spanned<Name> name;
 
 	std::optional<GenericDeclaration> generic_declaration;
 

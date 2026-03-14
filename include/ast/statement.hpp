@@ -16,7 +16,7 @@ typedef std::vector<Spanned<Statement>> Scope;
 
 struct Statement {
 	struct Declare {
-		Spanned<OldIdentifier>                name;  // unqualified
+		Spanned<Name>                      name;
 		std::optional<Spanned<Type>>       type;
 		std::optional<Spanned<Expression>> value;
 

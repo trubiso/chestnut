@@ -12,7 +12,7 @@
 namespace AST {
 
 struct Alias {
-	Spanned<OldIdentifier> name;  // unqualified
+	Spanned<Name> name;
 	Spanned<OldIdentifier> value;
 };
 
@@ -23,7 +23,7 @@ struct Import {
 
 // TODO: add an item for constants
 struct Module {
-	Spanned<OldIdentifier> name;  // unqualified
+	Spanned<Name> name;
 
 	// we cannot make this a struct, because C++ does not allow incomplete types in variants (which is fair, but we
 	// know this will be on the heap anyways).

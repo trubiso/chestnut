@@ -109,6 +109,7 @@ private:
 
 	std::optional<Identifier::Segment> consume_identifier_segment();
 	std::optional<Identifier>          consume_identifier();
+	std::optional<Name>                consume_name();
 
 	std::optional<Tag> consume_tag();
 
@@ -172,7 +173,7 @@ private:
 	/// Returns the first matching symbol in the vector, if any do match.
 	std::optional<Token::Symbol> peek_symbols(std::vector<Token::Symbol> const&) const;
 	bool                         peek_keyword(Keyword) const;
-	bool                         peek_unqualified_identifier() const;
+	bool                         peek_name() const;
 	bool                         peek_label() const;
 
 	// expect_ methods do the same as consume_, but throw a diagnostic as well
@@ -195,6 +196,7 @@ private:
 
 	std::optional<Identifier::Segment> expect_identifier_segment(std::string_view reason);
 	std::optional<Identifier>          expect_identifier(std::string_view reason);
+	std::optional<Name>                expect_name(std::string_view reason);
 
 	std::optional<Type> expect_type_atom(std::string_view reason);
 	std::optional<Type> expect_type(std::string_view reason);

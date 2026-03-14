@@ -210,6 +210,12 @@ std::optional<Identifier> Parser::consume_identifier() {
 	return Identifier(absolute, std::move(path));
 }
 
+std::optional<Name> Parser::consume_name() {
+	auto name = consume_bare_unqualified_identifier();
+	if (!name.has_value()) return {};
+	return Name {std::move(name.value())};
+}
+
 std::optional<Tag> Parser::consume_tag() {
 	if (!consume_symbol(Token::Symbol::At)) return {};
 	std::optional<std::string> name
@@ -779,14 +785,15 @@ std::optional<Expression> Parser::consume_expression() {
 
 std::optional<GenericDeclaration::Generic> Parser::consume_generic_declaration_generic() {
 	// ["anon"] <name> [":" <generic>,*]
-	auto generic_name = SPANNED(consume_old_unqualified_identifier);
+	auto generic_name = SPANNED(consume_name);
 	if (!generic_name.has_value()) return {};
 
 	// name might actually just be anon
 	bool anonymous = false;
-	if (generic_name.value().value.name() == "anon" && peek_unqualified_identifier()) {
+	if (generic_name.value().value.name == "anon" && peek_name()) {
 		anonymous    = true;
-		generic_name = SPANNED(consume_old_unqualified_identifier);
+		generic_name = SPANNED(consume_name);
+		assert(generic_name.has_value());
 	}
 
 	std::vector<GenericDeclaration::Generic::Constraint> constraints {};
@@ -817,12 +824,12 @@ std::optional<GenericDeclaration> Parser::consume_generic_declaration() {
 
 	std::optional<GenericDeclaration::Generic> generic;
 	while ((generic = consume_generic_declaration_generic()).has_value()) {
-		auto generic_name      = generic.value().name.value.name();
+		auto generic_name      = generic.value().name.value.name;
 		auto duplicate_generic = std::find_if(
 			generics.cbegin(),
 			generics.cend(),
 			[&generic_name](GenericDeclaration::Generic const& given_generic) {
-				return given_generic.name.value.name() == generic_name;
+				return given_generic.name.value.name == generic_name;
 			}
 		);
 
@@ -960,11 +967,11 @@ std::optional<Statement> Parser::consume_statement_declare() {
 	tokens_.advance();
 
 	auto maybe_name = SPANNED_REASON(
-		expect_old_identifier,
+		expect_name,
 		"expected variable name after mutability qualifier to begin variable declaration"
 	);
 	if (!maybe_name.has_value()) return {};
-	Spanned<OldIdentifier> name = maybe_name.value();
+	Spanned<Name> name = maybe_name.value();
 
 	std::optional<Spanned<Type>> type;
 	if (consume_symbol(Token::Symbol::Colon)) {
@@ -1206,7 +1213,7 @@ bool Parser::peek_keyword(Keyword keyword) const {
 	return token.get_identifier() == get_variant_name(keyword);
 }
 
-bool Parser::peek_unqualified_identifier() const {
+bool Parser::peek_name() const {
 	auto maybe_token = tokens_.peek();
 	if (!maybe_token.has_value()) return false;
 	return maybe_token.value().is_identifier();
@@ -1281,6 +1288,10 @@ std::optional<Identifier::Segment> Parser::expect_identifier_segment(std::string
 
 std::optional<Identifier> Parser::expect_identifier(std::string_view reason) {
 	EXPECT(consume_identifier, "identifier");
+}
+
+std::optional<Name> Parser::expect_name(std::string_view reason) {
+	EXPECT(consume_name, "name");
 }
 
 std::optional<Type> Parser::expect_type_atom(std::string_view reason) {
@@ -1382,7 +1393,7 @@ std::optional<Trait::Constraint> Parser::parse_trait_constraint() {
 
 std::optional<Trait> Parser::parse_trait() {
 	if (!consume_keyword(Keyword::Trait)) return {};
-	auto name = SPANNED_REASON(expect_old_identifier, "expected trait name");
+	auto name = SPANNED_REASON(expect_name, "expected trait name");
 	if (!name.has_value()) return {};
 	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
 	std::vector<Trait::Constraint>    constraints {};
@@ -1512,7 +1523,7 @@ std::optional<Struct::Field> Parser::parse_struct_field() {
 
 std::optional<Struct> Parser::parse_struct() {
 	if (!consume_keyword(Keyword::Struct)) return {};
-	auto name = SPANNED_REASON(expect_old_identifier, "expected struct name");
+	auto name = SPANNED_REASON(expect_name, "expected struct name");
 	if (!name.has_value()) return {};
 	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
 
@@ -1531,7 +1542,7 @@ std::optional<Struct> Parser::parse_struct() {
 
 std::optional<Function> Parser::parse_function() {
 	if (!consume_keyword(Keyword::Func)) return {};
-	auto name = SPANNED_REASON(expect_old_identifier, "expected function name");
+	auto name = SPANNED_REASON(expect_name, "expected function name");
 	if (!name.has_value()) return {};
 	std::optional<GenericDeclaration> generic_declaration = consume_generic_declaration();
 
@@ -1540,16 +1551,16 @@ std::optional<Function> Parser::parse_function() {
 	// TODO: do not allow any type in function signatures to be non-specific uint/int.
 	std::vector<Function::Argument> arguments {};
 	while (true) {
-		auto argument_name = SPANNED(consume_old_unqualified_identifier);
+		auto argument_name = SPANNED(consume_name);
 		if (!argument_name.has_value()) break;
 		// we know arguments may be anonymous or mutable
 		bool anonymous = false, mutable_ = false;
 		// store the span for diagnostics
 		std::optional<Span> anon_span, mut_span;
 		// if we get `anon` or `mut`, they might be qualifying the argument
-		while ((argument_name.value().value.name() == "anon" || argument_name.value().value.name() == "mut")
-		       && peek_unqualified_identifier()) {
-			if (argument_name.value().value.name() == "anon") {
+		while ((argument_name.value().value.name == "anon" || argument_name.value().value.name == "mut")
+		       && peek_name()) {
+			if (argument_name.value().value.name == "anon") {
 				if (anonymous)
 					diagnostics_.push_back(
 						Diagnostic::warning(
@@ -1594,7 +1605,8 @@ std::optional<Function> Parser::parse_function() {
 				mut_span = argument_name.value().span;
 				mutable_ = true;
 			}
-			argument_name = SPANNED(consume_old_unqualified_identifier);
+			argument_name = SPANNED(consume_name);
+			assert(argument_name.has_value());
 		}
 		if (!expect_symbol("expected `:` to specify argument type", Token::Symbol::Colon)) return {};
 		auto argument_type = SPANNED_REASON(expect_type, "expected argument type");
@@ -1604,7 +1616,7 @@ std::optional<Function> Parser::parse_function() {
 			arguments.cbegin(),
 			arguments.cend(),
 			[&argument_name](Function::Argument const& argument) {
-				return argument.name.value.name() == argument_name.value().value.name();
+				return argument.name.value.name == argument_name.value().value.name;
 			}
 		);
 
@@ -1680,8 +1692,7 @@ std::optional<Function> Parser::parse_function() {
 
 std::optional<Alias> Parser::parse_alias() {
 	if (!consume_keyword(Keyword::Def)) return {};
-	std::optional<Spanned<OldIdentifier>> name
-		= SPANNED_REASON(expect_old_unqualified_identifier, "expected alias name");
+	std::optional<Spanned<Name>> name = SPANNED_REASON(expect_name, "expected alias name");
 	if (!name.has_value()) return {};
 	std::optional<Spanned<OldIdentifier>> value = SPANNED_REASON(expect_old_identifier, "expected alias value");
 	if (!value.has_value()) return {};
@@ -1720,7 +1731,7 @@ std::optional<Import> Parser::parse_import() {
 
 std::optional<Module> Parser::parse_module() {
 	if (!consume_keyword(Keyword::Module)) return {};
-	std::optional<Spanned<OldIdentifier>> name = SPANNED_REASON(expect_old_identifier, "expected module name");
+	std::optional<Spanned<Name>> name = SPANNED_REASON(expect_name, "expected module name");
 	if (!name.has_value()) return {};
 	std::optional<Module::Body> body = parse_module_body();
 	if (!body.has_value()) return {};
@@ -1796,7 +1807,7 @@ std::optional<Module::Body> Parser::parse_module_body(bool bare) {
 Module Parser::parse_all(std::string name) {
 	Module::Body body = parse_module_body(true).value_or(Module::Body {});
 	return Module {
-		Spanned<OldIdentifier> {Span(0), OldIdentifier(Spanned<std::string> {Span(0), name})},
+		Spanned<Name> {Span(0), Name(name)},
 		std::move(body)
 	};
 }

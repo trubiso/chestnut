@@ -10,13 +10,13 @@ namespace AST {
 
 struct Function {
 	struct Argument {
-		Spanned<OldIdentifier> name;  // unqualified
-		Spanned<Type>       type;
-		bool                anonymous;
-		bool                mutable_;
+		Spanned<Name> name;
+		Spanned<Type> type;
+		bool          anonymous;
+		bool          mutable_;
 	};
 
-	Spanned<OldIdentifier>               name;  // unqualified
+	Spanned<Name>                     name;
 	std::optional<GenericDeclaration> generic_declaration;
 	std::vector<Argument>             arguments;
 	Spanned<Type>                     return_type;

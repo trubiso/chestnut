@@ -26,7 +26,7 @@ std::ostream& operator<<(std::ostream&, GenericList const&);
 
 struct GenericDeclaration {
 	struct Generic {
-		Spanned<OldIdentifier> name;  // unqualified
+		Spanned<Name> name;  // unqualified
 
 		struct Constraint {
 			Spanned<OldIdentifier> name;

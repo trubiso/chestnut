@@ -4,6 +4,12 @@
 
 namespace AST {
 
+std::ostream& operator<<(std::ostream& os, Name const& name) {
+	os << name.name;
+	if (name.id.has_value()) os << " (@" << name.id.value() << ')';
+	return os;
+}
+
 bool Identifier::Segment::is_unreached() const {
 	return !candidates.has_value();
 }

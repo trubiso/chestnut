@@ -3,7 +3,7 @@
 namespace AST {
 
 std::ostream& operator<<(std::ostream& os, Alias const& alias) {
-	return os << "def " << alias.name.value.name() << ' ' << alias.value.value;
+	return os << "def " << alias.name.value.name << ' ' << alias.value.value;
 }
 
 std::ostream& operator<<(std::ostream& os, Import const& import) {
@@ -41,15 +41,15 @@ std::ostream& operator<<(std::ostream& os, Module const& module) {
 
 std::string const& Module::get_name(InnerItem const& inner_item) {
 	if (std::holds_alternative<AST::Function>(inner_item))
-		return std::get<AST::Function>(inner_item).name.value.name();
+		return std::get<AST::Function>(inner_item).name.value.name;
 	else if (std::holds_alternative<AST::Module>(inner_item))
-		return std::get<AST::Module>(inner_item).name.value.name();
+		return std::get<AST::Module>(inner_item).name.value.name;
 	else if (std::holds_alternative<AST::Alias>(inner_item))
-		return std::get<AST::Alias>(inner_item).name.value.name();
+		return std::get<AST::Alias>(inner_item).name.value.name;
 	else if (std::holds_alternative<AST::Struct>(inner_item))
-		return std::get<AST::Struct>(inner_item).name.value.name();
+		return std::get<AST::Struct>(inner_item).name.value.name;
 	else if (std::holds_alternative<AST::Trait>(inner_item))
-		return std::get<AST::Trait>(inner_item).name.value.name();
+		return std::get<AST::Trait>(inner_item).name.value.name;
 	// this segfaults on purpose because i don't want anyone to call this for imports
 	else if (std::holds_alternative<AST::Import>(inner_item)) return "";
 	[[assume(false)]];

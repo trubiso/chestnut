@@ -16,7 +16,11 @@ struct Name {
 	std::string name;
 	/// The ID of the item, or null if it hasn't yet been reached by the symbol resolver/identifier.
 	std::optional<SymbolID> id;
+
+	explicit Name(std::string name) : name(std::move(name)) {}
 };
+
+std::ostream& operator<<(std::ostream&, Name const&);
 
 struct GenericList;
 
