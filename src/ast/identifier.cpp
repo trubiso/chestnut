@@ -117,6 +117,12 @@ Identifier::Identifier(bool absolute, std::vector<Segment> path) : absolute_ {ab
 	assert(!path_.empty() && "attempted to create identifier with empty path");
 }
 
+Identifier::Identifier(Span span, Name name) : absolute_ {false}, path_ {} {
+	Segment segment {std::move(name.name), std::move(span), std::nullopt};
+	if (name.id.has_value()) segment.candidates = {name.id.value()};
+	path_.push_back(std::move(segment));
+}
+
 std::ostream& operator<<(std::ostream& os, Identifier::Segment const& segment) {
 	os << segment.name;
 	if (segment.generic_list.has_value()) os << *segment.generic_list.value();

@@ -95,6 +95,8 @@ struct Identifier {
 	explicit Identifier(Spanned<std::string> name);
 	/// Constructor for qualified identifiers.
 	explicit Identifier(bool absolute, std::vector<Segment> path);
+	/// Name to identifier promotion.
+	explicit Identifier(Span, Name);
 
 private:
 	bool                 absolute_;

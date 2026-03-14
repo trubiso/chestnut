@@ -14,8 +14,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr(
 	case AST::Expression::Atom::Kind::NumberLiteral:
 	case AST::Expression::Atom::Kind::StringLiteral:
 	case AST::Expression::Atom::Kind::CharLiteral:
-	case AST::Expression::Atom::Kind::BoolLiteral:
-	case AST::Expression::Atom::Kind::StaticMember:  return {};
+	case AST::Expression::Atom::Kind::BoolLiteral:   return {};
 	case AST::Expression::Atom::Kind::StructLiteral: break;
 	case AST::Expression::Atom::Kind::Expression:
 		return desugar_control_flow_expr(*atom.get_expression(), span, label_counter, file_id);
@@ -121,9 +120,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 	AST::SymbolID new_id  = symbol_next();
 	TypeInfo::ID  type_id = register_type(TypeInfo::make_known_bool(), stub_span, file_id, new_id);
 	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, true, false, {}});
-	AST::OldIdentifier new_var {
-		{stub_span, "_"}
-	};
+	AST::Name new_var {"_"};
 	new_var.id = {new_id};
 
 	AST::Expression value = AST::Expression::make_atom(AST::Expression::Atom::make_bool_literal(is_or));
@@ -141,12 +138,12 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 		)
 	);
 
-	AST::OldIdentifier new_var1 = new_var;
-
-	AST::Expression new_var_expr
-		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var)));
-	AST::Expression new_var_expr1
-		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var1)));
+	AST::Expression new_var_expr = AST::Expression::make_atom(
+		AST::Expression::Atom::make_identifier(AST::Identifier {stub_span, new_var})
+	);
+	AST::Expression new_var_expr1 = AST::Expression::make_atom(
+		AST::Expression::Atom::make_identifier(AST::Identifier {stub_span, new_var})
+	);
 
 	AST::Statement::Label set_label {"set", label_counter++};
 	AST::Statement::Label cont_label {"cont", label_counter++};
@@ -197,9 +194,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 	AST::SymbolID new_id  = symbol_next();
 	TypeInfo::ID  type_id = register_type(TypeInfo::make_unknown(), stub_span, file_id, new_id);
 	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, false, false, {}});
-	AST::OldIdentifier new_var {
-		{stub_span, "_"}
-	};
+	AST::Name new_var {"_"};
 	new_var.id = {new_id};
 
 	stmts.emplace_back(
@@ -230,14 +225,15 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 		{{stub_span, goto_false}}
 	};
 
-	AST::OldIdentifier new_var1 = new_var, new_var2 = new_var;
-
-	AST::Expression new_var_expr
-		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var)));
-	AST::Expression new_var_expr1
-		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var1)));
-	AST::Expression new_var_expr2
-		= AST::Expression::make_atom(AST::Expression::Atom::make_identifier(std::move(new_var2)));
+	AST::Expression new_var_expr = AST::Expression::make_atom(
+		AST::Expression::Atom::make_identifier(AST::Identifier {stub_span, new_var})
+	);
+	AST::Expression new_var_expr1 = AST::Expression::make_atom(
+		AST::Expression::Atom::make_identifier(AST::Identifier {stub_span, new_var})
+	);
+	AST::Expression new_var_expr2 = AST::Expression::make_atom(
+		AST::Expression::Atom::make_identifier(AST::Identifier {stub_span, new_var})
+	);
 	new_var_expr.type = new_var_expr1.type = new_var_expr2.type = type_id;
 
 	AST::Statement::Set set_true {
