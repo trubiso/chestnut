@@ -533,10 +533,17 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			if (child_scope.symbols.contains(function.name.value.name))
 				child_scope.symbols.at(function.name.value.name)
 					.push_back(function.name.value.id.value());
-			else child_scope.symbols.emplace(function.name.value.name, function.name.value.id.value());
+			else
+				child_scope.symbols.emplace(
+					function.name.value.name,
+					std::vector {function.name.value.id.value()}
+				);
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			auto& submodule = std::get<AST::Module>(value);
-			child_scope.symbols.emplace(submodule.name.value.name, submodule.name.value.id.value());
+			child_scope.symbols.emplace(
+				submodule.name.value.name,
+				std::vector {submodule.name.value.id.value()}
+			);
 		} else if (std::holds_alternative<AST::Alias>(value)) {
 			auto& alias = std::get<AST::Alias>(value);
 			resolve(alias.value, child_scope, file_id);
@@ -611,13 +618,21 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			if (child_scope.symbols.contains(struct_.name.value.name))
 				child_scope.symbols.at(struct_.name.value.name)
 					.push_back(struct_.name.value.id.value());
-			else child_scope.symbols.emplace(struct_.name.value.name, struct_.name.value.id.value());
+			else
+				child_scope.symbols.emplace(
+					struct_.name.value.name,
+					std::vector {struct_.name.value.id.value()}
+				);
 		} else if (std::holds_alternative<AST::Trait>(value)) {
 			auto& trait = std::get<AST::Trait>(value);
 			// TODO: is it sound to have several traits under the same name?
 			if (child_scope.symbols.contains(trait.name.value.name))
 				child_scope.symbols.at(trait.name.value.name).push_back(trait.name.value.id.value());
-			else child_scope.symbols.emplace(trait.name.value.name, trait.name.value.id.value());
+			else
+				child_scope.symbols.emplace(
+					trait.name.value.name,
+					std::vector {trait.name.value.id.value()}
+				);
 		}
 	}
 
