@@ -9,17 +9,33 @@ namespace AST {
 
 typedef uint32_t SymbolID;
 
+/// Represents the name of an item in a declaration. This differs from a qualified identifier because there are no
+/// associated generics and there is always a single ID.
+struct Name {
+	/// The name of the item.
+	std::string name;
+	/// The ID of the item, or null if it hasn't yet been reached by the symbol resolver/identifier.
+	std::optional<SymbolID> id;
+};
+
 struct GenericList;
 
+/// Represents a qualified identifier.
 struct Identifier {
+	/// Represents a segment within an identifier.
 	struct Segment {
-		std::string                                 name;
+		/// The name of the segment, that is, what the user typed.
+		std::string name;
+		/// An optional amount of generics supplied to this name.
 		std::optional<std::unique_ptr<GenericList>> generic_list;
-		std::optional<std::vector<SymbolID>>        candidates;
+		/// Which item(s) this segment could refer to, or null if it hasn't yet been reached by the symbol
+		/// resolver.
+		std::optional<std::vector<SymbolID>> candidates;
 		/// We embed the span directly into the segment for convenience.
 		Span span;
 
-		/// Returns whether candidates is null, i.e. this segment has not yet been reached by the name resolver.
+		/// Returns whether candidates is null, i.e. this segment has not yet been reached by the symbol
+		/// resolver.
 		bool is_unreached() const;
 		/// Returns whether candidates is empty, i.e. there are no suitable candidates.
 		bool is_error() const;
@@ -31,6 +47,9 @@ struct Identifier {
 		bool is_plain() const;
 		/// Returns the segment's ID, assuming is_decided().
 		SymbolID id() const;
+
+		explicit Segment(std::string name, Span span, std::optional<std::unique_ptr<GenericList>> generic_list);
+		explicit Segment(std::string name, Span span);
 	};
 
 	/// Returns whether all segments are decided.
@@ -47,7 +66,7 @@ struct Identifier {
 	bool is_error() const;
 	/// Returns whether there are no generics in the identifier.
 	bool is_plain() const;
-	/// Returns whether the identifier is plain and single-segment (unqualified identifier).
+	/// Returns whether the identifier is plain and single-segment (that is, a name).
 	bool is_name() const;
 	/// Returns the name of the identifier, assuming is_name().
 	std::string const& get_name() const;
@@ -58,6 +77,7 @@ struct Identifier {
 	/// Returns the last unreached segment, assuming has_unreached().
 	Segment& last_unreached_segment();
 
+	/// Whether the root segment should be resolved absolutely instead of relatively.
 	inline bool absolute() const { return absolute_; }
 
 	inline std::vector<Segment> const& path() const { return path_; }

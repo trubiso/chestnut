@@ -30,6 +30,14 @@ SymbolID Identifier::Segment::id() const {
 	return candidates.value().at(0);
 }
 
+Identifier::Segment::Segment(std::string name, Span span, std::optional<std::unique_ptr<GenericList>> generic_list)
+	: name {std::move(name)}
+	, generic_list {std::move(generic_list)}
+	, candidates {std::nullopt}
+	, span {std::move(span)} {}
+
+Identifier::Segment::Segment(std::string name, Span span) : Segment {std::move(name), std::move(span), std::nullopt} {}
+
 bool Identifier::is_decided() const {
 	return std::all_of(path_.cbegin(), path_.cend(), [](Segment const& segment) { return segment.is_decided(); });
 }
@@ -91,12 +99,10 @@ Identifier::Segment& Identifier::last_unreached_segment() {
 }
 
 Identifier::Identifier(Spanned<std::string> name) : absolute_ {false}, path_ {} {
-	path_.emplace_back(std::move(name.value), std::nullopt, std::nullopt, std::move(name.span));
+	path_.emplace_back(std::move(name.value), std::move(name.span), std::nullopt);
 }
 
-Identifier::Identifier(bool absolute, std::vector<Segment> path)
-	: absolute_ {absolute}
-	, path_ {std::move(path)} {
+Identifier::Identifier(bool absolute, std::vector<Segment> path) : absolute_ {absolute}, path_ {std::move(path)} {
 	// TODO: validate path more thoroughly
 	assert(!path_.empty() && "attempted to create identifier with empty path");
 }

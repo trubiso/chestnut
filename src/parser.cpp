@@ -178,11 +178,10 @@ bail:
 
 	return Identifier::Segment {
 		std::move(name.value().value),
+		Span(begin, end),
 		generic_list.transform([](GenericList& generic_list) {
 			return std::make_unique<GenericList>(std::move(generic_list));
-		}),
-		std::nullopt,
-		Span(begin, end)
+		})
 	};
 }
 
