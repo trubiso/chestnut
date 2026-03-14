@@ -55,4 +55,18 @@ std::string const& Module::get_name(InnerItem const& inner_item) {
 	[[assume(false)]];
 }
 
+Name const& Module::get_actual_name(InnerItem const& inner_item) {
+	if (std::holds_alternative<AST::Function>(inner_item))
+		return std::get<AST::Function>(inner_item).name.value;
+	else if (std::holds_alternative<AST::Module>(inner_item))
+		return std::get<AST::Module>(inner_item).name.value;
+	else if (std::holds_alternative<AST::Alias>(inner_item))
+		return std::get<AST::Alias>(inner_item).name.value;
+	else if (std::holds_alternative<AST::Struct>(inner_item))
+		return std::get<AST::Struct>(inner_item).name.value;
+	else if (std::holds_alternative<AST::Trait>(inner_item))
+		return std::get<AST::Trait>(inner_item).name.value;
+	assert(false);
+}
+
 }  // namespace AST

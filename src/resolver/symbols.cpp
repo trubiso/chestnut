@@ -63,29 +63,33 @@ void Resolver::add_unknown_symbol_diagnostic(
 	);
 }
 
-std::optional<size_t> Resolver::resolve(
-	AST::OldIdentifier& identifier,
+void Resolver::resolve_root(
+	AST::Identifier& identifier,
 	Span             span,
 	Scope const&     scope,
 	FileContext::ID  file_id,
 	bool             include_unimported
 ) {
-	// do not try to resolve already resolved identifiers (just in case, i don't think we will ever hit this)
-	if (identifier.id.has_value()) return std::nullopt;
+	// TODO: filter only imported items if the identifier only has a root!
 
-	// unqualified identifiers get resolved differently
-	if (identifier.is_unqualified()) {
+	// do not try to resolve if we already reached this
+	if (!identifier.root().is_unreached()) return;
+
+	AST::Identifier::Segment& root = identifier.root();
+
+	// if it's not absolute, we determine it from the scope
+	if (!identifier.absolute()) {
 		// happy path for built-in traits
-		if (built_in_traits_.contains(identifier.name())) {
-			identifier.id = built_in_traits_.at(identifier.name()).name.value.id;
-			return std::nullopt;
+		if (built_in_traits_.contains(root.name)) {
+			root.candidates = {built_in_traits_.at(root.name).name.value.id.value()};
+			return;
 		}
 
 		Scope const* traversing_scope = &scope;
 		while (traversing_scope != nullptr) {
-			if (traversing_scope->symbols.contains(identifier.name())) {
-				identifier.id = traversing_scope->symbols.at(identifier.name());
-				return std::nullopt;
+			if (traversing_scope->symbols.contains(root.name)) {
+				root.candidates = traversing_scope->symbols.at(root.name);
+				return;
 			}
 			traversing_scope = traversing_scope->parent;
 		}
@@ -104,20 +108,15 @@ std::optional<size_t> Resolver::resolve(
 			symbol_vector.push_back(std::move(symbol_set.extract(it++).value()));
 		}
 
-		add_unknown_symbol_diagnostic(identifier.name(), span, symbol_vector, "current", file_id);
+		add_unknown_symbol_diagnostic(root.name, span, symbol_vector, "current", file_id);
 
-		return std::nullopt;
+		root.candidates = std::vector<AST::SymbolID> {};  // ensure to mark candidates as an empty array, thus
+		                                                  // marking it as reached!
+		return;
 	}
 
-	if (!identifier.absolute) {
-		// TODO: resolve non-absolute qualified identifiers
-		std::cout << "unsupported non-absolute qualified identifier detected!" << std::endl;
-		return std::nullopt;
-	}
-
-	// since this is an absolutely qualified identifier, we must find it in the global scope
-	// we do an initial check to ensure that it is in the global scope
-	if (!module_table_.contains(identifier.path[0].value)) {
+	// if it is absolute, the root must exist in the module table
+	if (!module_table_.contains(root.name)) {
 		std::vector<std::string> modules {};
 		modules.reserve(module_table_.size());
 		std::transform(
@@ -127,162 +126,153 @@ std::optional<size_t> Resolver::resolve(
 			[](auto const& v) { return v.first; }
 		);
 
-		add_unknown_symbol_diagnostic(
-			identifier.path[0].value,
-			identifier.path[0].span,
-			modules,
-			"global",
-			file_id
-		);
+		add_unknown_symbol_diagnostic(root.name, root.span, modules, "global", file_id);
 
-		return std::nullopt;
+		root.candidates = std::vector<AST::SymbolID> {};  // ensure to mark candidates as an empty array, thus
+		                                                  // marking it as reached!
+		return;
 	}
 
-	// the module to check within
-	AST::Module const* root_module = module_table_.at(identifier.path[0].value);
-	// the item(s) found after traversal
-	std::vector<Symbol*> pointed_items {};
-	// the id for each of the pointed items
-	std::vector<AST::SymbolID> pointed_ids {};
-	// set this once we reach a function or something decidedly without subitems
-	bool cannot_traverse_further = false;
+	root.candidates = {module_table_.at(root.name)->name.value.id.value()};
+}
 
-	for (size_t i = 1; i < identifier.path.size(); ++i) {
-		Spanned<std::string> const& fragment = identifier.path[i];
-		if (cannot_traverse_further) {
-			// this means that this must become a static member!
-			// we identify the accessee at least :)
-			identifier.id = pointed_ids;
-			return i;
-		}
+void Resolver::resolve_next(
+	AST::Identifier& identifier,
+	Span             span,
+	Scope const&     scope,
+	FileContext::ID  file_id,
+	bool             include_unimported
+) {
+	if (!identifier.can_be_name_resolved()) {
+		std::cout
+			<< "warning: tried to keep resolving an identifier which cannot be name resolved further"
+			<< std::endl;
+		return;
+	}
 
-		// we reset each cycle so that we don't end up racking up all of the pointed items
-		pointed_items           = {};
-		pointed_ids             = {};
-		size_t actual_additions = 0;
-		for (auto const& item : root_module->body.items) {
+	// we have our new relative root and our unreached segment
+	AST::Identifier::Segment& root      = identifier.last_decided_segment_before_unreached();
+	AST::Identifier::Segment& unreached = identifier.first_unreached_segment();
+
+	Symbol& root_symbol = symbol_pool_.at(root.id());
+
+	std::unordered_map<std::string, std::vector<AST::SymbolID>> items {};
+
+	// now, we get all items within our root
+	if (std::holds_alternative<AST::Module*>(root_symbol.item)) {
+		auto& module = *std::get<AST::Module*>(root_symbol.item);
+		for (auto const& item : module.body.items) {
 			auto const& value = std::get<AST::Module::InnerItem>(item.value);
 			if (std::holds_alternative<AST::Import>(value)
 			    || std::holds_alternative<AST::TraitImplementation>(value))
 				continue;
-			std::string name = AST::Module::get_name(item.value);
 
-			if (name != fragment.value) continue;
-
-			// found!
-			size_t added_items = 0;
-			if (std::holds_alternative<AST::Function>(value)) {
-				assert(std::get<AST::Function>(value).name.value.id.has_value());
-				for (AST::SymbolID id : std::get<AST::Function>(value).name.value.id.value()) {
-					pointed_items.push_back(&get_single_symbol(id));
-					added_items++;
-				}
-				cannot_traverse_further = true;
-			} else if (std::holds_alternative<AST::Struct>(value)) {
-				assert(std::get<AST::Struct>(value).name.value.id.has_value());
-				for (AST::SymbolID id : std::get<AST::Struct>(value).name.value.id.value()) {
-					pointed_items.push_back(&get_single_symbol(id));
-					added_items++;
-				}
-				cannot_traverse_further = true;
-			} else if (std::holds_alternative<AST::Trait>(value)) {
-				assert(std::get<AST::Trait>(value).name.value.id.has_value());
-				pointed_items.push_back(&get_single_symbol(std::get<AST::Trait>(value).name.value));
-				added_items++;
-				cannot_traverse_further = true;
-			} else if (std::holds_alternative<AST::Module>(value)) {
-				root_module = &std::get<AST::Module>(value);
-				pointed_items.push_back(&get_single_symbol(std::get<AST::Module>(value).name.value));
-				actual_additions++;
-			} else if (std::holds_alternative<AST::Alias>(value)) {
-				auto const& alias = std::get<AST::Alias>(value);
-				// TODO: do something else about this & handle aliases that alias other aliases
-				if (!alias.value.value.id.has_value()) {
-					std::cout << "unresolved alias !" << std::endl;
-					break;
-				}
-				for (AST::SymbolID id : alias.value.value.id.value()) {
-					pointed_items.push_back(&get_single_symbol(id));
-					added_items++;
-
-					// change the root module if we are definitely pointing towards a module
-					if (std::holds_alternative<AST::Module*>(
-						    pointed_items.at(pointed_items.size() - 1)->item
-					    ))
-						root_module = &*std::get<AST::Module*>(
-							pointed_items.at(pointed_items.size() - 1)->item
-						);
-				}
-			}
-
-			// only include imported items
-			for (size_t j = 1; j <= added_items; ++j) {
-				Symbol* symbol        = pointed_items.at(pointed_items.size() - j);
-				bool    should_import = include_unimported || symbol->is_visible(file_id);
-				// only apply these conditions to the tip of the identifier
-				if (i + 1 < identifier.path.size() || should_import) {
-					pointed_ids.push_back(symbol->id);
-					actual_additions++;
-				}
-			}
+			auto& name = AST::Module::get_actual_name(value);
+			if (items.contains(name.name)) items.at(name.name).push_back(name.id.value());
+			else items.insert_or_assign(name.name, std::vector {name.id.value()});
 		}
-
-		if (!actual_additions) {
-			std::vector<std::string> possibilities {};
-			possibilities.reserve(root_module->body.items.size());
-			bool unimported_same_name_item_exists = false;
-			for (auto const& item : root_module->body.items) {
-				auto const& value = std::get<AST::Module::InnerItem>(item.value);
-				if (std::holds_alternative<AST::Import>(value)
-				    || std::holds_alternative<AST::TraitImplementation>(value))
-					continue;
-				std::optional<std::vector<AST::SymbolID>> const* symbol_id = nullptr;
-				if (std::holds_alternative<AST::Function>(value)) {
-					symbol_id = &std::get<AST::Function>(value).name.value.id;
-				} else if (std::holds_alternative<AST::Module>(value)) {
-					symbol_id = &std::get<AST::Module>(value).name.value.id;
-				} else if (std::holds_alternative<AST::Alias>(value)) {
-					symbol_id = &std::get<AST::Alias>(value).value.value.id;
-				} else if (std::holds_alternative<AST::Struct>(value)) {
-					symbol_id = &std::get<AST::Struct>(value).name.value.id;
-				} else if (std::holds_alternative<AST::Trait>(value)) {
-					symbol_id = &std::get<AST::Trait>(value).name.value.id;
-				} else [[assume(false)]];
-
-				if (!symbol_id->has_value()) continue;
-				bool any_are_visible = false;
-				for (AST::SymbolID id : symbol_id->value()) {
-					if (symbol_pool_.at(id).is_visible(file_id)) {
-						any_are_visible = true;
-						break;
-					} else if (symbol_pool_.at(id).name == fragment.value)
-						unimported_same_name_item_exists = true;
-				}
-				if (!any_are_visible) continue;
-
-				possibilities.push_back(AST::Module::get_name(item.value));
-			}
-
-			add_unknown_symbol_diagnostic(
-				identifier.path[i].value,
-				identifier.path[i].span,
-				possibilities,
-				"specified",
-				file_id,
-				unimported_same_name_item_exists
-			);
-
-			break;
+	} else if (std::holds_alternative<AST::Function*>(root_symbol.item)) {
+		assert(false && "TODO: diagnostic for trying to access a function's static members");
+		unreached.candidates = std::vector<AST::SymbolID> {};  // ensure to mark candidates as an empty array,
+		                                                       // thus marking it as reached!
+		return;
+	} else if (std::holds_alternative<AST::Struct*>(root_symbol.item)) {
+		assert(false && "TODO: struct static members");
+		unreached.candidates = std::vector<AST::SymbolID> {};  // ensure to mark candidates as an empty array,
+		                                                       // thus marking it as reached!
+		return;
+	} else if (std::holds_alternative<AST::Trait*>(root_symbol.item)) {
+		auto& trait = *std::get<AST::Trait*>(root_symbol.item);
+		for (auto const& method : trait.methods) {
+			auto& name = method.name.value;
+			if (items.contains(name.name)) items.at(name.name).push_back(name.id.value());
+			else items.insert_or_assign(name.name, std::vector {name.id.value()});
 		}
+	} else {
+		assert(false && "TODO: diagnostic for trying to access a static member of a variable");
+		unreached.candidates = std::vector<AST::SymbolID> {};  // ensure to mark candidates as an empty array,
+		                                                       // thus marking it as reached!
+		return;
 	}
 
-	// if we didn't find anything, we intentionally pass on the empty vector to the identifier
-	identifier.id = pointed_ids;
-	return std::nullopt;
+	bool add_import_suggestion = false;
+
+	// if the unreached segment's name exists within those items, we set the correct candidates
+	if (items.contains(unreached.name)) {
+		// if we include unimported or we're not at the tip, we just set the candidates directly
+		if (include_unimported || !identifier.last_is_only_unreached()) {
+			unreached.candidates = items.at(unreached.name);
+			return;
+		}
+
+		// otherwise, we determine the candidates by which are imported
+		std::vector<AST::SymbolID> candidates {};
+		std::copy_if(
+			items.at(unreached.name).cbegin(),
+			items.at(unreached.name).cend(),
+			std::back_inserter(candidates),
+			[this, file_id](AST::SymbolID candidate) {
+				return symbol_pool_.at(candidate).is_visible(file_id);
+			}
+		);
+
+		// if some candidates are imported, we set them
+		if (!candidates.empty()) {
+			unreached.candidates = items.at(unreached.name);
+			return;
+		}
+
+		// if no candidates are imported, we must throw a diagnostic
+		add_import_suggestion = true;
+	}
+
+	// otherwise, we throw a diagnostic
+	std::vector<std::string> possibilities {};
+	// push only possibilities that could've been visible
+	for (auto& [possibility, id] : items)
+		if (std::any_of(id.cbegin(), id.cend(), [this, file_id](AST::SymbolID candidate) {
+			    return symbol_pool_.at(candidate).is_visible(file_id);
+		    }))
+			possibilities.push_back(std::move(possibility));
+
+	add_unknown_symbol_diagnostic(
+		unreached.name,
+		unreached.span,
+		possibilities,
+		"specified",
+		file_id,
+		add_import_suggestion
+	);
+
+	unreached.candidates = std::vector<AST::SymbolID> {};  // ensure to mark candidates as an empty array, thus
+	                                                       // marking it as reached!
+	return;
 }
 
-std::optional<size_t> Resolver::resolve(
-	Spanned<AST::OldIdentifier>& identifier,
+void Resolver::resolve(
+	AST::Identifier& identifier,
+	Span             span,
+	Scope const&     scope,
+	FileContext::ID  file_id,
+	bool             include_unimported
+) {
+	// we can pre-resolve all generic lists, since those don't depend on the identifier
+	// FIXME: we must ensure that these generic lists are reflected in each identifier's generic declaration. thus,
+	// it might be smarter to resolve generic lists for each successfully resolved segment and throw an error if
+	// they are redundant.
+	for (AST::Identifier::Segment const& segment : identifier.path()) {
+		if (!segment.generic_list.has_value()) continue;
+		for (auto& generic : segment.generic_list.value()->ordered) resolve(generic, scope, file_id);
+		for (auto& generic : segment.generic_list.value()->labeled)
+			resolve(std::get<1>(generic), scope, file_id);
+	}
+	resolve_root(identifier, span, scope, file_id, include_unimported);
+	while (identifier.can_be_name_resolved()) resolve_next(identifier, span, scope, file_id, include_unimported);
+	assert(!identifier.has_middle_undecided() && "unsupported middle undecided");
+}
+
+void Resolver::resolve(
+	Spanned<AST::Identifier>& identifier,
 	Scope const&              scope,
 	FileContext::ID           file_id,
 	bool                      include_unimported
@@ -291,11 +281,7 @@ std::optional<size_t> Resolver::resolve(
 }
 
 void Resolver::resolve(AST::Type::Atom::Named& named, Span span, Scope const& scope, FileContext::ID file_id) {
-	assert(!resolve(named.name, scope, file_id).has_value() && "TODO: support static member types");
-	if (named.generic_list.has_value()) {
-		for (auto& generic : named.generic_list.value().ordered) resolve(generic, scope, file_id);
-		for (auto& generic : named.generic_list.value().labeled) resolve(std::get<1>(generic), scope, file_id);
-	}
+	resolve(named.name, scope, file_id);
 	// TODO: prune non-type items. we will need a flag on symbols which correspond to generics, then, to narrow
 	// types down to AST::Struct* or Generic{} or whatever
 }
@@ -369,71 +355,7 @@ void Resolver::resolve(AST::Expression& expression, Span span, Scope const& scop
 	AST::Expression::Atom& atom = expression.get_atom();
 	if (atom.is_identifier()) {
 		// identifiers need to be resolved
-		auto potential_idx = resolve(atom.get_identifier(), span, scope, file_id);
-		if (!potential_idx.has_value()) return;
-
-		// this is actually a static member!
-		{
-			AST::OldIdentifier& identifier = atom.get_identifier();
-			size_t           idx        = potential_idx.value();
-			assert(idx > 0 && !identifier.is_unqualified());
-
-			Span type_span {span.start, identifier.path[idx - 1].span.end};
-
-			std::vector<Spanned<std::string>> new_path {};
-			std::move(
-				identifier.path.cbegin(),
-				identifier.path.cbegin() + idx,
-				std::back_inserter(new_path)
-			);
-			AST::OldIdentifier type_id {identifier.absolute, std::move(new_path)};
-			type_id.id = identifier.id;
-			Spanned<AST::Type::Atom::Named> type {
-				type_span,
-				AST::Type::Atom::Named {{type_span, std::move(type_id)}, std::nullopt}
-			};
-
-			new_path = {};
-			std::move(identifier.path.cbegin() + idx, identifier.path.cend(), std::back_inserter(new_path));
-			Spanned<AST::OldIdentifier> member {
-				Span {identifier.path[idx].span.start,            span.end},
-				AST::OldIdentifier {                          false, std::move(new_path)}
-			};
-
-			atom = AST::Expression::Atom::make_static_member(std::move(type), std::move(member));
-		}
-		goto static_member;
-	} else if (atom.is_static_member()) {
-	static_member:
-		auto& static_member = atom.get_static_member();
-		if (!static_member.member.value.is_unqualified())
-			assert(false && "TODO: support chained static members");
-		resolve(static_member.type.value, static_member.type.span, scope, file_id);
-		auto& type_id_arr = static_member.type.value.name.value.id;
-		// bail out if it has no value
-		if (!type_id_arr.has_value() || type_id_arr.value().empty()) return;
-		if (type_id_arr.value().size() > 1)
-			assert(false && "TODO: support potentially unresolved static members");
-		auto& type_symbol = get_single_symbol(type_id_arr.value().at(0));
-		if (std::holds_alternative<AST::Function*>(type_symbol.item)) {
-			assert(
-				false
-				&& "TODO: diagnostic for accessing static member of function (functions have no static members)"
-			);
-		} else if (std::holds_alternative<AST::Struct*>(type_symbol.item)) {
-			assert(false && "TODO: static members within structs");
-		} else if (std::holds_alternative<AST::Trait*>(type_symbol.item)) {
-			auto& trait  = *std::get<AST::Trait*>(type_symbol.item);
-			auto  name   = static_member.member.value.name();
-			auto  method = std::find_if(
-                                trait.methods.cbegin(),
-                                trait.methods.cend(),
-                                [&name](AST::Function const& method) { return method.name.value.name() == name; }
-                        );
-			if (method == trait.methods.cend())
-				assert(false && "TODO: diagnostic for accessing nonexistent static member");
-			static_member.member.value.id = method->name.value.id;
-		} else assert(false);
+		resolve(atom.get_identifier(), span, scope, file_id);
 	} else if (atom.is_expression()) {
 		// for subexpressions, we just recurse
 		resolve(*atom.get_expression(), span, scope, file_id);
@@ -463,24 +385,24 @@ void Resolver::resolve(AST::Statement::Declare& declare, Scope& scope, FileConte
 	if (declare.name.value.id.has_value()) return;
 	identify(declare.name.value);
 	symbol_pool_.push_back(
-		Symbol {declare.name.value.id.value()[0],
+		Symbol {declare.name.value.id.value(),
 	                file_id,
 	                declare.name.span,
-	                declare.name.value.name(),
+	                declare.name.value.name,
 	                {},
 	                register_type(
 				declare.type.has_value() ? from_type(declare.type.value().value, file_id)
 							 : TypeInfo::make_unknown(),
 				declare.type.has_value() ? declare.type.value().span : declare.name.span,
 				file_id,
-				declare.name.value.id.value()[0]
+				declare.name.value.id.value()
 			),
 	                declare.mutable_.value,
 	                false,
 	                {}}
 	);
 	// intentionally replace (shadowing)
-	scope.symbols.insert_or_assign(declare.name.value.name(), declare.name.value.id.value());
+	scope.symbols.insert_or_assign(declare.name.value.name, std::vector {declare.name.value.id.value()});
 }
 
 void Resolver::resolve(AST::Statement::Set& set, Scope& scope, FileContext::ID file_id) {
@@ -499,12 +421,15 @@ void Resolver::resolve(Spanned<AST::Statement>& statement, Scope& scope, FileCon
 	case AST::Statement::Kind::Expression:
 		resolve(statement.value.get_expression(), statement.span, scope, file_id);
 		return;
-	case AST::Statement::Kind::Return: resolve(statement.value.get_return(), scope, file_id); return;
-	case AST::Statement::Kind::Scope:  resolve(statement.value.get_scope(), scope, file_id); return;
+	case AST::Statement::Kind::Return:   resolve(statement.value.get_return(), scope, file_id); return;
+	case AST::Statement::Kind::Scope:    resolve(statement.value.get_scope(), scope, file_id); return;
 	case AST::Statement::Kind::Label:
-	case AST::Statement::Kind::Goto:   return;
-	case AST::Statement::Kind::Branch: resolve(statement.value.get_branch().condition, scope, file_id); return;
-	case AST::Statement::Kind::If:     return;
+	case AST::Statement::Kind::Goto:     return;
+	case AST::Statement::Kind::Branch:   resolve(statement.value.get_branch().condition, scope, file_id); return;
+	case AST::Statement::Kind::If:
+	case AST::Statement::Kind::While:
+	case AST::Statement::Kind::Break:
+	case AST::Statement::Kind::Continue: return;
 	}
 }
 
@@ -512,12 +437,12 @@ void Resolver::resolve(AST::Scope& ast_scope, Scope resolver_scope, FileContext:
 	for (auto& statement : ast_scope) { resolve(statement, resolver_scope, file_id); }
 }
 
-bool Resolver::resolve_trait_name(Spanned<AST::OldIdentifier>& name, Scope const& scope, FileContext::ID file_id) {
-	assert(!resolve(name, scope, file_id).has_value() && "trait name is static member??");
+bool Resolver::resolve_trait_name(Spanned<AST::Identifier>& name, Scope const& scope, FileContext::ID file_id) {
+	resolve(name, scope, file_id);
 	// diagnostic already thrown
-	if (!name.value.id.has_value() || name.value.id.value().empty()) return false;
+	if (!name.value.has_at_least_one_id()) return false;
 	// TODO: maybe a trait and a struct share a name, and we need to filter this to only traits!
-	if (name.value.id.value().size() > 1) {
+	if (name.value.has_final_undecided()) {
 		parsed_files.at(file_id).diagnostics.push_back(
 			Diagnostic::error(
 				"ambiguous trait",
@@ -544,24 +469,15 @@ void Resolver::resolve(AST::GenericDeclaration& generic_declaration, Scope& scop
 	// we now actually create these generics
 	for (auto& generic : generic_declaration.generics) {
 		for (auto& constraint : generic.constraints) {
+			// FIXME: we need an option for identifier resolution to not decide generics, because, as of
+			// right now, we cannot reference generics that appear later in the generic declaration
 			auto& name = constraint.name;
 			resolve_trait_name(name, scope, file_id);
-			// FIXME: resolving subgenerics this early has the side effect that we cannot reference generics
-			// that appear later in the generic declaration!
-			if (constraint.generic_list.has_value()) {
-				// TODO: support labeled arguments at some point
-				if (!constraint.generic_list.value().labeled.empty()) {
-					assert(false && "we do not support labeled arguments in traits. sorry!");
-				}
-				for (auto& subgeneric : constraint.generic_list.value().ordered) {
-					resolve(subgeneric, scope, file_id);
-				}
-			}
 		}
 		type_pool_.at(get_single_symbol(generic.name.value).type)
-			= TypeInfo::make_generic(TypeInfo::Generic {generic.name.value.id.value()[0], {}, {}});
+			= TypeInfo::make_generic(TypeInfo::Generic {generic.name.value.id.value(), {}, {}});
 		unchecked_generics.push_back(get_single_symbol(generic.name.value).type);
-		scope.symbols.insert_or_assign(generic.name.value.name(), generic.name.value.id.value());
+		scope.symbols.insert_or_assign(generic.name.value.name, std::vector {generic.name.value.id.value()});
 	}
 }
 
@@ -572,7 +488,10 @@ void Resolver::resolve(AST::Function& function, Scope scope, FileContext::ID fil
 	for (auto& argument : function.arguments) {
 		resolve(argument.type, child_scope, file_id);
 		// intentionally replace (shadowing)
-		child_scope.symbols.insert_or_assign(argument.name.value.name(), argument.name.value.id.value());
+		child_scope.symbols.insert_or_assign(
+			argument.name.value.name,
+			std::vector {argument.name.value.id.value()}
+		);
 	}
 	resolve(function.return_type, child_scope, file_id);
 	if (function.body.has_value()) resolve(function.body.value(), child_scope, file_id);
@@ -588,15 +507,7 @@ void Resolver::resolve(AST::Struct& struct_, Scope scope, FileContext::ID file_i
 void Resolver::resolve(AST::Trait& trait, Scope scope, FileContext::ID file_id) {
 	Scope child_scope {&scope, {}};
 	if (trait.generic_declaration.has_value()) resolve(trait.generic_declaration.value(), child_scope, file_id);
-	for (auto& constraint : trait.constraints) {
-		resolve_trait_name(constraint.name, scope, file_id);
-		if (constraint.generic_list.has_value()) {
-			for (auto& generic : constraint.generic_list.value().ordered)
-				resolve(generic, child_scope, file_id);
-			for (auto& generic : constraint.generic_list.value().labeled)
-				resolve(std::get<1>(generic), child_scope, file_id);
-		}
-	}
+	for (auto& constraint : trait.constraints) { resolve_trait_name(constraint.name, scope, file_id); }
 	// TODO: add a This generic
 	for (auto& method : trait.methods) resolve(method, child_scope, file_id);
 }
@@ -619,30 +530,27 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
 			auto& function = std::get<AST::Function>(value);
-			if (child_scope.symbols.contains(function.name.value.name()))
-				child_scope.symbols.at(function.name.value.name())
-					.push_back(function.name.value.id.value()[0]);
-			else child_scope.symbols.emplace(function.name.value.name(), function.name.value.id.value());
+			if (child_scope.symbols.contains(function.name.value.name))
+				child_scope.symbols.at(function.name.value.name)
+					.push_back(function.name.value.id.value());
+			else child_scope.symbols.emplace(function.name.value.name, function.name.value.id.value());
 		} else if (std::holds_alternative<AST::Module>(value)) {
 			auto& submodule = std::get<AST::Module>(value);
-			child_scope.symbols.emplace(submodule.name.value.name(), submodule.name.value.id.value());
+			child_scope.symbols.emplace(submodule.name.value.name, submodule.name.value.id.value());
 		} else if (std::holds_alternative<AST::Alias>(value)) {
 			auto& alias = std::get<AST::Alias>(value);
-			assert(!resolve(alias.value, child_scope, file_id).has_value()
-			       && "TODO: alias into static member");
-			if (!alias.value.value.id.has_value() || alias.value.value.id.value().empty()) continue;
-			child_scope.symbols.emplace(alias.name.value.name(), alias.value.value.id.value());
+			resolve(alias.value, child_scope, file_id);
+			if (!alias.value.value.has_at_least_one_id()) continue;
+			child_scope.symbols.emplace(alias.name.value.name, alias.value.value.ids());
 		} else if (std::holds_alternative<AST::Import>(value)) {
 			auto& import = std::get<AST::Import>(value);
-			assert(!resolve(import.name, scope, file_id, true).has_value()
-			       && "import imports static member??");
-			if (!import.name.value.id.has_value()) continue;
+			resolve(import.name, scope, file_id, true);
+			if (!import.name.value.has_at_least_one_id()) continue;
 			// we need to make sure we only import exported symbols
 			std::vector<AST::SymbolID> actual_ids {};
-			for (AST::SymbolID id : import.name.value.id.value()) {
+			for (AST::SymbolID id : import.name.value.ids()) {
 				if (symbol_pool_.at(id).exported) actual_ids.push_back(id);
 			}
-			import.name.value.id = actual_ids;
 			if (actual_ids.empty()) {
 				// TODO: show candidates
 				parsed_files.at(file_id).diagnostics.push_back(
@@ -656,9 +564,12 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 						)}
 					)
 				);
+				import.name.value.force_ids({});
+				continue;
 			}
+			import.name.value.force_ids(std::move(actual_ids));
 			bool pushed_diagnostic = false;
-			for (AST::SymbolID id : import.name.value.id.value()) {
+			for (AST::SymbolID id : import.name.value.ids()) {
 				auto& imported_from = symbol_pool_.at(id).imported_from;
 				if (symbol_pool_.at(id).file_id != file_id
 				    && std::find(imported_from.cbegin(), imported_from.cend(), file_id)
@@ -697,17 +608,16 @@ void Resolver::resolve(AST::Module& module, Scope scope, FileContext::ID file_id
 			}
 		} else if (std::holds_alternative<AST::Struct>(value)) {
 			auto& struct_ = std::get<AST::Struct>(value);
-			if (child_scope.symbols.contains(struct_.name.value.name()))
-				child_scope.symbols.at(struct_.name.value.name())
-					.push_back(struct_.name.value.id.value()[0]);
-			else child_scope.symbols.emplace(struct_.name.value.name(), struct_.name.value.id.value());
+			if (child_scope.symbols.contains(struct_.name.value.name))
+				child_scope.symbols.at(struct_.name.value.name)
+					.push_back(struct_.name.value.id.value());
+			else child_scope.symbols.emplace(struct_.name.value.name, struct_.name.value.id.value());
 		} else if (std::holds_alternative<AST::Trait>(value)) {
 			auto& trait = std::get<AST::Trait>(value);
 			// TODO: is it sound to have several traits under the same name?
-			if (child_scope.symbols.contains(trait.name.value.name()))
-				child_scope.symbols.at(trait.name.value.name())
-					.push_back(trait.name.value.id.value()[0]);
-			else child_scope.symbols.emplace(trait.name.value.name(), trait.name.value.id.value());
+			if (child_scope.symbols.contains(trait.name.value.name))
+				child_scope.symbols.at(trait.name.value.name).push_back(trait.name.value.id.value());
+			else child_scope.symbols.emplace(trait.name.value.name, trait.name.value.id.value());
 		}
 	}
 

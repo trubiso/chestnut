@@ -67,6 +67,10 @@ struct Identifier {
 	bool has_middle_undecided() const;
 	/// Returns whether the final segment is undecided.
 	bool has_final_undecided() const;
+	/// Returns whether all non-final segments are decided and the last segment is either decided or undecided.
+	bool has_at_least_one_id() const;
+	/// Returns the identifier's IDs (its last segment's IDs), assuming has_at_least_one_id().
+	std::vector<SymbolID> const& ids() const;
 	/// Returns whether any segment is undecided.
 	bool has_undecided() const;
 	/// Returns whether any segment is an error.
@@ -81,13 +85,31 @@ struct Identifier {
 	Segment& last_undecided_segment();
 	/// Returns whether a segment within the identifier is unreached.
 	bool has_unreached() const;
-	/// Returns the last unreached segment, assuming has_unreached().
-	Segment& last_unreached_segment();
+	/// Returns the first unreached segment, assuming has_unreached().
+	Segment& first_unreached_segment();
+	/// Returns the root segment of the identifier.
+	Segment& root();
+	/// Returns whether this identifier can be name resolved, i.e. if it does not have any undecided segments but it
+	/// does have unreached segments.
+	bool can_be_name_resolved() const;
+	/// Returns the last decided segment before an unreached segment, assuming one such segment exists. This
+	/// function is meant to be used if can_be_name_resolved().
+	Segment& last_decided_segment_before_unreached();
+	/// Returns whether every segment is decided, except for the last segment, which is unreached.
+	bool last_is_only_unreached() const;
 
 	/// Whether the root segment should be resolved absolutely instead of relatively.
 	inline bool absolute() const { return absolute_; }
+
 	/// Forces the identifier to be absolute.
 	inline void force_absolute() { absolute_ = true; }
+
+	/// Forces the last segment's IDs to a set of values. This operation can only be carried out if the last segment
+	/// already had at least one ID, to ensure segment structure isn't broken.
+	inline void force_ids(std::vector<SymbolID> ids) {
+		assert(has_at_least_one_id());
+		path_.back().candidates = std::move(ids);
+	}
 
 	inline std::vector<Segment> const& path() const { return path_; }
 

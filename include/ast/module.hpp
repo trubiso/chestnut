@@ -32,6 +32,7 @@ struct Module {
 	typedef std::variant<Function, Module, Alias, Import, Struct, Trait, TraitImplementation> InnerItem;
 
 	static std::string const& get_name(InnerItem const& inner_item);
+	static Name const& get_actual_name(InnerItem const& inner_item);
 
 	using Item = std::tuple<std::vector<Tag>, bool, InnerItem>;
 

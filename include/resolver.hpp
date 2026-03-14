@@ -537,6 +537,12 @@ private:
 		return get_single_symbol(identifier.id.value().at(0));
 	}
 
+	/// Gets a symbol from the symbol pool, assuming the identifier is fully decided.
+	inline Symbol& get_single_symbol(AST::Identifier const& identifier) {
+		assert(identifier.is_decided());
+		return get_single_symbol(identifier.id());
+	}
+
 	/// Gets a symbol from the symbol pool, assuming the name has been identified.
 	inline Symbol& get_single_symbol(AST::Name const& name) {
 		assert(name.id.has_value());
@@ -556,11 +562,15 @@ private:
 		bool add_import_suggestion = false
 	);
 
-	bool resolve_trait_name(Spanned<AST::OldIdentifier>&, Scope const&, FileContext::ID);
+	bool resolve_trait_name(Spanned<AST::Identifier>&, Scope const&, FileContext::ID);
 
-	/// If the identifier needs to be converted into a static member, returns from which index onward to do so.
-	[[nodiscard]] std::optional<size_t> resolve(AST::OldIdentifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
-	[[nodiscard]] std::optional<size_t> resolve(Spanned<AST::OldIdentifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
+	/// Resolves the root segment of an identifier in the current scope or the global scope, depending on whether it is absolute.
+	void resolve_root(AST::Identifier& identifier, Span span, Scope const& scope, FileContext::ID file_id, bool include_unimported = false);
+	/// Resolves the next unreached segment in the provided identifier, if the last non-unreached segment is decided.
+	void resolve_next(AST::Identifier& identifier, Span span, Scope const& scope, FileContext::ID file_id, bool include_unimported = false);
+	void resolve(AST::Identifier&, Span, Scope const&, FileContext::ID, bool include_unimported = false);
+	void resolve(Spanned<AST::Identifier>&, Scope const&, FileContext::ID, bool include_unimported = false);
+
 	void resolve(AST::Type::Atom::Named&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type::Atom&, Span, Scope const&, FileContext::ID);
 	void resolve(AST::Type&, Span, Scope const&, FileContext::ID);

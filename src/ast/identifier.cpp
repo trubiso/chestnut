@@ -67,6 +67,16 @@ bool Identifier::has_final_undecided() const {
 	return path_.back().is_undecided();
 }
 
+bool Identifier::has_at_least_one_id() const {
+	// if has_final_undecided(), the rest must be decided, otherwise name resolution wouldn't have gotten this far.
+	return is_decided() || has_final_undecided();
+}
+
+std::vector<SymbolID> const& Identifier::ids() const {
+	assert(has_at_least_one_id());
+	return path_.back().candidates.value();
+}
+
 bool Identifier::has_undecided() const {
 	return std::any_of(path_.cbegin(), path_.cend(), [](Segment const& segment) { return segment.is_undecided(); });
 }
@@ -100,12 +110,42 @@ bool Identifier::has_unreached() const {
 	return std::any_of(path_.cbegin(), path_.cend(), [](Segment const& segment) { return segment.is_unreached(); });
 }
 
-Identifier::Segment& Identifier::last_unreached_segment() {
-	assert((has_unreached()) && "attempted to get last unreached segment of non-unreached identifier");
-	for (size_t i = path_.size(); i > 0; --i) {
-		if (path_.at(i - 1).is_unreached()) return path_.at(i - 1);
+Identifier::Segment& Identifier::first_unreached_segment() {
+	assert((has_unreached()) && "attempted to get first unreached segment of non-unreached identifier");
+	for (size_t i = 0; i < path_.size(); ++i) {
+		if (path_.at(i).is_unreached()) return path_.at(i);
 	}
 	assert(false);
+}
+
+Identifier::Segment& Identifier::root() {
+	return path_.at(0);
+}
+
+bool Identifier::can_be_name_resolved() const {
+	return !is_error() && !has_undecided() && has_unreached();
+}
+
+Identifier::Segment& Identifier::last_decided_segment_before_unreached() {
+	assert(can_be_name_resolved());
+	assert(!is_decided());  // is_decided() => !has_unreached() => !can_be_name_resolved().
+	for (size_t i = path_.size(); i > 0; --i) {
+		if (path_.at(i - 1).is_decided()) {
+			// the last decided segment must be immediately before the unreached segment.
+			assert(path_.at(i).is_unreached());  // safety: i == path_.size() => is_decided().
+			return path_.at(i - 1);
+		}
+	}
+	assert(false && "attempted to get last decided segment, but no such segments exist!");
+}
+
+bool Identifier::last_is_only_unreached() const {
+	return std::all_of(
+		       path_.cbegin(),
+		       path_.cbegin() + (path_.size() - 1),
+		       [](Segment const& segment) { return segment.is_decided(); }
+	       )
+	    && path_.back().is_unreached();
 }
 
 Identifier::Identifier(Spanned<std::string> name) : absolute_ {false}, path_ {} {
