@@ -23,20 +23,20 @@ struct Expression {
 		};
 
 		struct NumberLiteral {
-			std::string                  literal;
-			std::optional<OldIdentifier> suffix;  // unqualified
+			std::string                        literal;
+			std::optional<Identifier::Segment> suffix;
 
 			bool is_float() const;
 		};
 
 		struct StringLiteral {
-			std::string                  literal;
-			std::optional<OldIdentifier> suffix;  // unqualified
+			std::string                        literal;
+			std::optional<Identifier::Segment> suffix;
 		};
 
 		struct CharLiteral {
-			std::string                  literal;
-			std::optional<OldIdentifier> suffix;  // unqualified
+			std::string                        literal;
+			std::optional<Identifier::Segment> suffix;
 		};
 
 		struct BoolLiteral {
@@ -74,29 +74,29 @@ struct Expression {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, std::move(identifier)});
 		}
 
-		inline static Atom make_number_literal(std::string literal, std::optional<OldIdentifier> suffix) {
+		inline static Atom make_number_literal(std::string literal, std::optional<Identifier::Segment> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::NumberLiteral>,
-					NumberLiteral {literal, suffix}
+					NumberLiteral {literal, std::move(suffix)}
                         }
 			);
 		}
 
-		inline static Atom make_string_literal(std::string literal, std::optional<OldIdentifier> suffix) {
+		inline static Atom make_string_literal(std::string literal, std::optional<Identifier::Segment> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::StringLiteral>,
-					StringLiteral {literal, suffix}
+					StringLiteral {literal, std::move(suffix)}
                         }
 			);
 		}
 
-		inline static Atom make_char_literal(std::string literal, std::optional<OldIdentifier> suffix) {
+		inline static Atom make_char_literal(std::string literal, std::optional<Identifier::Segment> suffix) {
 			return Atom(
 				value_t {
 					std::in_place_index<(size_t) Kind::CharLiteral>,
-					CharLiteral {literal, suffix}
+					CharLiteral {literal, std::move(suffix)}
                         }
 			);
 		}

@@ -405,26 +405,27 @@ std::optional<Expression> Parser::consume_expression_atom() {
 	// since it's not an identifier, it has to be a literal
 	if (!tokens_.has_value()) return {};
 	// we only want to accept suffix literals if they're right beside the current token
-	Span                         current_span = tokens_.peek().value().span();
-	std::optional<std::string>   sv;
-	std::optional<OldIdentifier> suffix;  // we always try to consume an extra suffix
+	Span                       current_span = tokens_.peek().value().span();
+	std::optional<std::string> sv;
+
+	std::optional<Identifier::Segment> suffix;  // we always try to consume an extra suffix
 
 	if (sv = consume_number_literal(), sv.has_value()) {
 		if (tokens_.peek().has_value() && tokens_.peek().value().span().start == current_span.end)
-			suffix = consume_old_unqualified_identifier();
-		return Expression::make_atom(Expression::Atom::make_number_literal(sv.value(), suffix));
+			suffix = consume_identifier_segment();
+		return Expression::make_atom(Expression::Atom::make_number_literal(sv.value(), std::move(suffix)));
 	}
 
 	if (sv = consume_string_literal(), sv.has_value()) {
 		if (tokens_.peek().has_value() && tokens_.peek().value().span().start == current_span.end)
-			suffix = consume_old_unqualified_identifier();
-		return Expression::make_atom(Expression::Atom::make_string_literal(sv.value(), suffix));
+			suffix = consume_identifier_segment();
+		return Expression::make_atom(Expression::Atom::make_string_literal(sv.value(), std::move(suffix)));
 	}
 
 	if (sv = consume_char_literal(), sv.has_value()) {
 		if (tokens_.peek().has_value() && tokens_.peek().value().span().start == current_span.end)
-			suffix = consume_old_unqualified_identifier();
-		return Expression::make_atom(Expression::Atom::make_char_literal(sv.value(), suffix));
+			suffix = consume_identifier_segment();
+		return Expression::make_atom(Expression::Atom::make_char_literal(sv.value(), std::move(suffix)));
 	}
 
 	if (consume_symbol(Token::Symbol::LParen)) {
