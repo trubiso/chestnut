@@ -119,7 +119,7 @@ Identifier::Identifier(bool absolute, std::vector<Segment> path) : absolute_ {ab
 
 std::ostream& operator<<(std::ostream& os, Identifier::Segment const& segment) {
 	os << segment.name;
-	if (segment.generic_list.has_value()) os << segment.generic_list.value();
+	if (segment.generic_list.has_value()) os << *segment.generic_list.value();
 	if (segment.is_unreached()) return os;
 	if (segment.is_error()) return os << " (error)";
 	os << " (";

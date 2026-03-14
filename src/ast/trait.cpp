@@ -4,7 +4,6 @@ namespace AST {
 
 std::ostream& operator<<(std::ostream& os, Trait::Constraint const& constraint) {
 	os << constraint.name.value;
-	if (constraint.generic_list.has_value()) os << constraint.generic_list.value();
 	return os;
 }
 
