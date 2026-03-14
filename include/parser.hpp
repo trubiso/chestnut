@@ -107,6 +107,9 @@ private:
 	std::optional<Identifier>  consume_unqualified_identifier();
 	std::optional<Identifier>  consume_identifier();
 
+	std::optional<RichIdentifier::Segment> consume_rich_identifier_segment();
+	std::optional<RichIdentifier>          consume_rich_identifier();
+
 	std::optional<Tag> consume_tag();
 
 	std::optional<Type> consume_type_atom();
@@ -189,6 +192,9 @@ private:
 	std::optional<std::string> expect_bare_unqualified_identifier(std::string_view reason);
 	std::optional<Identifier>  expect_unqualified_identifier(std::string_view reason);
 	std::optional<Identifier>  expect_identifier(std::string_view reason);
+
+	std::optional<RichIdentifier::Segment> expect_rich_identifier_segment(std::string_view reason);
+	std::optional<RichIdentifier>          expect_rich_identifier(std::string_view reason);
 
 	std::optional<Type> expect_type_atom(std::string_view reason);
 	std::optional<Type> expect_type(std::string_view reason);

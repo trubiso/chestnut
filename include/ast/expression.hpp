@@ -19,7 +19,6 @@ struct Expression {
 			CharLiteral,
 			BoolLiteral,
 			StructLiteral,
-			StaticMember,
 			Expression
 		};
 
@@ -57,19 +56,13 @@ struct Expression {
 			bool valid = true;
 		};
 
-		struct StaticMember {
-			Spanned<Type::Atom::Named> type;
-			Spanned<Identifier>        member;  // unqualified
-		};
-
 		typedef std::variant<
-			Identifier,
+			RichIdentifier,
 			NumberLiteral,
 			StringLiteral,
 			CharLiteral,
 			BoolLiteral,
 			StructLiteral,
-			StaticMember,
 			std::unique_ptr<Expression>>
 			value_t;
 
@@ -77,8 +70,8 @@ struct Expression {
 
 		inline constexpr Kind kind() const { return (Kind) value.index(); }
 
-		inline static Atom make_identifier(Identifier&& identifier) {
-			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, identifier});
+		inline static Atom make_identifier(RichIdentifier&& identifier) {
+			return Atom(value_t {std::in_place_index<(size_t) Kind::Identifier>, std::move(identifier)});
 		}
 
 		inline static Atom make_number_literal(std::string literal, std::optional<Identifier> suffix) {
@@ -122,15 +115,6 @@ struct Expression {
 			);
 		}
 
-		inline static Atom make_static_member(Spanned<Type::Atom::Named>&& type, Spanned<Identifier>&& member) {
-			return Atom(
-				value_t {
-					std::in_place_index<(size_t) Kind::StaticMember>,
-					StaticMember {std::move(type), std::move(member)}
-                        }
-			);
-		}
-
 		inline static Atom make_expression(std::unique_ptr<Expression>&& expression) {
 			return Atom(value_t {std::in_place_index<(size_t) Kind::Expression>, std::move(expression)});
 		}
@@ -147,13 +131,13 @@ struct Expression {
 
 		inline bool is_struct_literal() const { return kind() == Kind::StructLiteral; }
 
-		inline bool is_static_member() const { return kind() == Kind::StaticMember; }
-
 		inline bool is_expression() const { return kind() == Kind::Expression; }
 
-		inline Identifier const& get_identifier() const { return std::get<(size_t) Kind::Identifier>(value); }
+		inline RichIdentifier const& get_identifier() const {
+			return std::get<(size_t) Kind::Identifier>(value);
+		}
 
-		inline Identifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
+		inline RichIdentifier& get_identifier() { return std::get<(size_t) Kind::Identifier>(value); }
 
 		inline NumberLiteral const& get_number_literal() const {
 			return std::get<(size_t) Kind::NumberLiteral>(value);
@@ -174,12 +158,6 @@ struct Expression {
 		}
 
 		inline StructLiteral& get_struct_literal() { return std::get<(size_t) Kind::StructLiteral>(value); }
-
-		inline StaticMember const& get_static_member() const {
-			return std::get<(size_t) Kind::StaticMember>(value);
-		}
-
-		inline StaticMember& get_static_member() { return std::get<(size_t) Kind::StaticMember>(value); }
 
 		inline std::unique_ptr<Expression> const& get_expression() const {
 			return std::get<(size_t) Kind::Expression>(value);
@@ -374,7 +352,6 @@ std::ostream& operator<<(std::ostream&, Expression::Atom::NumberLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom::StringLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom::CharLiteral const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom::StructLiteral const&);
-std::ostream& operator<<(std::ostream&, Expression::Atom::StaticMember const&);
 std::ostream& operator<<(std::ostream&, Expression::Atom const&);
 std::ostream& operator<<(std::ostream&, Expression::UnaryOperation const&);
 std::ostream& operator<<(std::ostream&, Expression::AddressOperation const&);

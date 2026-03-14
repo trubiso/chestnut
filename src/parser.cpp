@@ -151,6 +151,66 @@ std::optional<Identifier> Parser::consume_identifier() {
 	return Identifier(absolute, std::move(path));
 }
 
+std::optional<RichIdentifier::Segment> Parser::consume_rich_identifier_segment() {
+	if (!tokens_.peek().has_value()) return {};
+	size_t begin = tokens_.peek().value().begin;
+
+	auto name = SPANNED(consume_bare_unqualified_identifier);
+	if (!name.has_value()) return {};
+	std::optional<GenericList> generic_list = std::nullopt;
+	size_t                     index        = tokens_.index();
+	if (peek_symbol(Token::Symbol::Lt)) {
+		// we disambiguate via whitespace to avoid confusing comparison expressions
+		if (name.value().span.end != tokens_.peek().value().span().start) goto bail;
+		generic_list = expect_generic_list(
+			"expected generic list after opening angle bracket (if you wanted a comparison operator, add a space before `<`)"
+		);
+		// we bail if it's invalid
+		if (!generic_list.has_value()) {
+			tokens_.set_index(index);
+			goto bail;
+		}
+	}
+bail:
+
+	assert(tokens_.index() > 0 && tokens_.index() - 1 < tokens_.size());
+	size_t end = tokens_.at(tokens_.index() - 1).value().end();
+
+	return RichIdentifier::Segment {
+		std::move(name.value().value),
+		generic_list.transform([](GenericList& generic_list) {
+			return std::make_unique<GenericList>(std::move(generic_list));
+		}),
+		std::nullopt,
+		Span(begin, end)
+	};
+}
+
+std::optional<RichIdentifier> Parser::consume_rich_identifier() {
+	// if a :: can be consumed before the qualified identifier, it will be consumed and will turn the qualified
+	// identifier absolute
+	bool absolute = consume_symbol(Token::Symbol::ColonColon);
+	// if :: was consumed, that means this is definitely and unambiguously a qualified identifier now
+	std::optional<RichIdentifier::Segment> root
+		= absolute ? expect_rich_identifier_segment(
+				     "expected an identifier segment (`::` starts an absolute qualified identifier)"
+			     )
+
+	                   : consume_rich_identifier_segment();
+	// now if we didn't find the root we can safely return because, if :: has been parsed, we'll have skipped it :-)
+	if (!root.has_value()) return {};
+	std::vector<RichIdentifier::Segment> path {};
+	path.push_back(std::move(root.value()));
+	while (consume_symbol(Token::Symbol::ColonColon)) {
+		std::optional<RichIdentifier::Segment> piece = expect_rich_identifier_segment(
+			"expected an identifier segment (there is a trailing `::` in a preceding qualified identifier)"
+		);
+		if (!piece.has_value()) return RichIdentifier(absolute, std::move(path));
+		path.push_back(std::move(piece.value()));
+	}
+	return RichIdentifier(absolute, std::move(path));
+}
+
 std::optional<Tag> Parser::consume_tag() {
 	if (!consume_symbol(Token::Symbol::At)) return {};
 	std::optional<std::string> name
@@ -275,71 +335,35 @@ std::optional<Expression::Atom::StructLiteral::Field> Parser::consume_expression
 
 std::optional<Expression> Parser::consume_expression_atom() {
 	// it could be a potentially qualified identifier
-	std::optional<Spanned<Identifier>> identifier = SPANNED(consume_identifier);
+	std::optional<Spanned<RichIdentifier>> identifier = SPANNED(consume_rich_identifier);
 	if (identifier.has_value()) {
 		// special case for "true" and "false", which refer to boolean literals. they are strict keywords in
 		// this sense
-		if (identifier.value().value.is_unqualified()
-		    && (identifier.value().value.name() == "true" || identifier.value().value.name() == "false")) {
+		if (identifier.value().value.is_name()
+		    && (identifier.value().value.get_name() == "true"
+		        || identifier.value().value.get_name() == "false")) {
 			return Expression::make_atom(
-				Expression::Atom::make_bool_literal(identifier.value().value.name() == "true")
+				Expression::Atom::make_bool_literal(identifier.value().value.get_name() == "true")
 			);
 		}
 
-		// special case for struct literals and static members
-		// FIXME: this implementation of static members does not work for complex types
-		if (peek_symbol(Token::Symbol::Lt)
-		    || peek_symbol(Token::Symbol::LBrace)
-		    || peek_symbol(Token::Symbol::ColonColon)) {
-			size_t                     index            = tokens_.index();
-			std::optional<GenericList> generic_list     = std::nullopt;
-			bool                       is_static_member = false;
-			// this might still not be a struct literal, but a function call!
-			// we check it here because the function call calls this for its callee, meaning that the
-			// function call won't check for generics before we do.
-			if (peek_symbol(Token::Symbol::Lt)) {
-				// we disambiguate via whitespace to avoid confusing comparison expressions
-				if (identifier.value().span.end != tokens_.peek().value().span().start) goto bail;
-				generic_list = expect_generic_list(
-					"expected generic list after opening angle bracket (if you wanted a comparison operator, add a space before `<`)"
-				);
-				// we bail if it's invalid
-				if (!generic_list.has_value()) {
-					tokens_.set_index(index);
-					goto bail;
-				}
-				// if we don't get an opening brace or a ::, this is probably a function call :P
-				if (!consume_symbol(Token::Symbol::LBrace)) {
-					if (consume_symbol(Token::Symbol::ColonColon)) {
-						is_static_member = true;
-					} else {
-						tokens_.set_index(index);
-						goto bail;
-					}
-				}
-			} else
-				assert(consume_symbol(Token::Symbol::LBrace)
-				       || (is_static_member = true, consume_symbol(Token::Symbol::ColonColon)));
-
-			// TODO: correct span
+		// special case for struct literals
+		if (consume_symbol(Token::Symbol::LBrace)) {
+			// FIXME: we have to change type atom named to use a bare rich identifier, this is completely
+			// wrong and just a stub
 			Spanned<Type::Atom::Named> type {
 				identifier.value().span,
-				Type::Atom::Named {identifier.value(), std::move(generic_list)}
+				Type::Atom::Named {
+						   Spanned<Identifier> {
+						identifier.value().value.path().back().span,
+						Identifier {
+							false,
+							{{identifier.value().value.path().back().span,
+			                                  identifier.value().value.path().back().name}}
+						}
+					}, std::nullopt
+				}
 			};
-
-			if (is_static_member) {
-				// we have a type and ::, so now we need the field name (we won't try to parse any more
-				// levels of :: after this)
-				auto member = SPANNED_REASON(
-					expect_unqualified_identifier,
-					"expected member name after `::`"
-				);
-				// TODO: better error recovery lol
-				if (!member.has_value()) return {};
-				return Expression::make_atom(
-					Expression::Atom::make_static_member(std::move(type), std::move(member.value()))
-				);
-			}
 
 			std::optional<Expression::Atom::StructLiteral::Field> maybe_field;
 			std::vector<Expression::Atom::StructLiteral::Field>   fields {};
@@ -388,7 +412,6 @@ std::optional<Expression> Parser::consume_expression_atom() {
 			);
 		}
 
-	bail:
 		return Expression::make_atom(Expression::Atom::make_identifier(std::move(identifier.value().value)));
 	}
 
@@ -442,11 +465,16 @@ std::optional<Expression::FunctionCall::Argument> Parser::consume_expression_fun
 	// check if it's a bare unqualified identifier followed by a colon
 	if (argument_lhs.value().value.is_atom()
 	    && argument_lhs.value().value.get_atom().is_identifier()
-	    && argument_lhs.value().value.get_atom().get_identifier().is_unqualified()
+	    && argument_lhs.value().value.get_atom().get_identifier().is_name()
 	    && consume_symbol(Token::Symbol::Colon)) {
 		// then, the bare unqualified identifier is the label
-		Spanned<Identifier> label
-			= argument_lhs.value().value.get_atom().get_identifier().extract_unqualified_with_span();
+		auto& identifier = argument_lhs.value().value.get_atom().get_identifier();
+		// TODO: get rid of identifiers here, since we never actually identify these arguments through
+		// conventional ways
+		Spanned<Identifier> label {
+			identifier.path().back().span,
+			Identifier {false, {{identifier.path().back().span, identifier.path().back().name}}}
+		};
 		// and we require an actual argument
 		std::optional<Spanned<Expression>> argument_rhs
 			= SPANNED_REASON(expect_expression, "expected argument value after argument label");
@@ -517,8 +545,8 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 						)
 					);
 				} else {
-					// we only push the argument if it's not duplicate to avoid confusing later
-					// stages
+					// we only push the argument if it's not duplicate to avoid confusing
+					// later stages
 					arguments.labeled.push_back(std::move(labeled_argument));
 				}
 
@@ -542,12 +570,13 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 			if (!consume_single_comma_or_more()) break;
 		}
 
-		// we get the end of the span from the closing parenthesis which is the current token (unless it isn't)
+		// we get the end of the span from the closing parenthesis which is the current token (unless it
+		// isn't)
 		size_t end       = tokens_.has_value() ? tokens_.peek().value().span().end : tokens_.last().span().end;
 		Span   call_span = Span(callee.span.start, end);
 
-		// we do this before checking for closing parenthesis because it's still a function call even if you
-		// forgot the closing parenthesis
+		// we do this before checking for closing parenthesis because it's still a function call even if
+		// you forgot the closing parenthesis
 		callee = Spanned<Expression> {
 			call_span,
 			Expression::make_function_call(
@@ -958,13 +987,13 @@ std::optional<Statement> Parser::consume_statement_declare() {
 		if (value.has_value()
 		    && value.value().value.is_atom()
 		    && value.value().value.get_atom().is_identifier()
-		    && value.value().value.get_atom().get_identifier().is_unqualified()
-		    && value.value().value.get_atom().get_identifier().name() == "undefined") {
+		    && value.value().value.get_atom().get_identifier().is_name()
+		    && value.value().value.get_atom().get_identifier().get_name() == "undefined") {
 			value        = {};
 			is_undefined = true;
 		}
-		// if there is no possible expression (perhaps a semicolon instead), a valueless stmt will be emitted as
-		// fallback
+		// if there is no possible expression (perhaps a semicolon instead), a valueless stmt will be
+		// emitted as fallback
 	}
 
 	expect_semicolon("expected semicolon after variable declaration");
@@ -1193,9 +1222,9 @@ bool Parser::peek_label() const {
 	return maybe_token.value().is_label();
 }
 
-// TODO: add more context to some expected diagnoses (e.g. maybe for closing brace, add the header of what we want to
-// close?). also because some of these stop making sense (e.g. if it wants an argument type but doesn't find it, it goes
-// up and ends up expecting module closure or something)
+// TODO: add more context to some expected diagnoses (e.g. maybe for closing brace, add the header of what we
+// want to close?). also because some of these stop making sense (e.g. if it wants an argument type but doesn't
+// find it, it goes up and ends up expecting module closure or something)
 
 #define EXPECT(fn, what)                                               \
 	auto maybe = fn();                                             \
@@ -1248,6 +1277,14 @@ std::optional<Identifier> Parser::expect_unqualified_identifier(std::string_view
 
 std::optional<Identifier> Parser::expect_identifier(std::string_view reason) {
 	EXPECT(consume_identifier, "(qualified) identifier");
+}
+
+std::optional<RichIdentifier::Segment> Parser::expect_rich_identifier_segment(std::string_view reason) {
+	EXPECT(consume_rich_identifier_segment, "identifier segment");
+}
+
+std::optional<RichIdentifier> Parser::expect_rich_identifier(std::string_view reason) {
+	EXPECT(consume_rich_identifier, "identifier");
 }
 
 std::optional<Type> Parser::expect_type_atom(std::string_view reason) {
