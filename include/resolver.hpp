@@ -420,7 +420,7 @@ private:
 	std::unordered_map<std::string, AST::Trait> built_in_traits_ {};
 
 	/// Produces a single ID for the identifier and sets it; the caller must register this ID in the symbol pool.
-	void identify(AST::OldIdentifier&);
+	void identify(AST::Name&);
 	/// Identifies the module with an ID and its non-alias items.
 	void identify(AST::Module&, bool exported, FileContext::ID);
 	/// Identifies the struct with an ID.
@@ -448,9 +448,9 @@ private:
 	/// Identifies all built-in operators.
 	void identify_built_in_operators();
 	/// Pushes a particular built-in trait to the symbol pool.
-	void push_built_in_trait(AST::OldIdentifier const&, std::vector<AST::SymbolID>&& constraints = {});
-	/// Makes a built-in identifier with a stub span and the provided name.
-	Spanned<AST::OldIdentifier> make_built_in_identifier(std::string name);
+	void push_built_in_trait(AST::Name const&, std::vector<AST::SymbolID>&& constraints = {});
+	/// Makes a built-in name.
+	Spanned<AST::Name> make_built_in_name(std::string name);
 	/// Identifies all built-in traits.
 	void identify_built_in_traits();
 	/// Populates the label map given a statement.
@@ -535,6 +535,12 @@ private:
 	inline Symbol& get_single_symbol(AST::OldIdentifier const& identifier) {
 		assert(identifier.id.has_value() && identifier.id.value().size() == 1);
 		return get_single_symbol(identifier.id.value().at(0));
+	}
+
+	/// Gets a symbol from the symbol pool, assuming the name has been identified.
+	inline Symbol& get_single_symbol(AST::Name const& name) {
+		assert(name.id.has_value());
+		return get_single_symbol(name.id.value());
 	}
 
 	/// Adds a diagnostic indicating a symbol is unknown.

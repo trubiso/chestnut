@@ -3,25 +3,20 @@
 
 #include <variant>
 
-void Resolver::identify(AST::OldIdentifier& identifier) {
-	assert(!identifier.id.has_value());
-	identifier.id = {symbol_next()};
+void Resolver::identify(AST::Name& name) {
+	assert(!name.id.has_value());
+	name.id = symbol_next();
 }
 
 void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file_id) {
 	identify(module.name.value);
 	symbol_pool_.push_back(
-		Symbol {module.name.value.id.value()[0],
+		Symbol {module.name.value.id.value(),
 	                file_id,
 	                module.name.span,
-	                module.name.value.name(),
+	                module.name.value.name,
 	                &module,
-	                register_type(
-				TypeInfo::make_module(),
-				module.name.span,
-				file_id,
-				module.name.value.id.value()[0]
-			),
+	                register_type(TypeInfo::make_module(), module.name.span, file_id, module.name.value.id.value()),
 	                false,
 	                exported,
 	                {}}
@@ -45,12 +40,11 @@ void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file
 void Resolver::identify(AST::Struct& struct_, bool exported, FileContext::ID file_id) {
 	identify(struct_.name.value);
 	symbol_pool_.push_back(
-		Symbol {struct_.name.value.id.value()[0],
+		Symbol {struct_.name.value.id.value(),
 	                file_id,
 	                struct_.name.span,
-	                struct_.name.value.name(),
+	                struct_.name.value.name,
 	                &struct_,
-	                // TODO: register struct type
 	                0,
 	                false,
 	                exported,
@@ -63,12 +57,11 @@ void Resolver::identify(AST::Struct& struct_, bool exported, FileContext::ID fil
 void Resolver::identify(AST::Trait& trait, bool exported, FileContext::ID file_id) {
 	identify(trait.name.value);
 	symbol_pool_.push_back(
-		Symbol {trait.name.value.id.value()[0],
+		Symbol {trait.name.value.id.value(),
 	                file_id,
 	                trait.name.span,
-	                trait.name.value.name(),
+	                trait.name.value.name,
 	                &trait,
-	                // TODO: register trait type?
 	                0,
 	                false,
 	                exported,
@@ -99,13 +92,13 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 			from_type(argument.type.value, file_id),
 			argument.type.span,
 			file_id,
-			argument.name.value.id.value()[0]
+			argument.name.value.id.value()
 		);
 		symbol_pool_.push_back(
-			Symbol {argument.name.value.id.value()[0],
+			Symbol {argument.name.value.id.value(),
 		                file_id,
 		                argument.name.span,
-		                argument.name.value.name(),
+		                argument.name.value.name,
 		                {},
 		                type_id,
 		                argument.mutable_,
@@ -113,7 +106,7 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 		                {}}
 		);
 		arguments.push_back(
-			{argument.anonymous ? std::nullopt : std::optional {argument.name.value.name()}, type_id}
+			{argument.anonymous ? std::nullopt : std::optional {argument.name.value.name}, type_id}
 		);
 	}
 
@@ -122,7 +115,7 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 		identify(function.generic_declaration.value(), file_id);
 		for (auto& generic : function.generic_declaration.value().generics)
 			generics.emplace_back(
-				generic.anonymous ? std::nullopt : std::optional {generic.name.value.name()},
+				generic.anonymous ? std::nullopt : std::optional {generic.name.value.name},
 				get_single_symbol(generic.name.value).type
 			);
 	}
@@ -132,10 +125,10 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 
 	identify(function.name.value);
 	symbol_pool_.push_back(
-		Symbol {function.name.value.id.value()[0],
+		Symbol {function.name.value.id.value(),
 	                file_id,
 	                function.name.span,
-	                function.name.value.name(),
+	                function.name.value.name,
 	                &function,
 	                register_type(
 				TypeInfo::make_function(
@@ -143,7 +136,7 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 				),
 				function.name.span,
 				file_id,
-				function.name.value.id.value()[0]
+				function.name.value.id.value()
 			),
 	                false,
 	                exported,
@@ -158,13 +151,13 @@ void Resolver::identify(AST::GenericDeclaration& generic_declaration, FileContex
 			TypeInfo::make_bottom(),
 			generic.name.span,
 			file_id,
-			generic.name.value.id.value()[0]
+			generic.name.value.id.value()
 		);
 		symbol_pool_.push_back(
-			Symbol {generic.name.value.id.value()[0],
+			Symbol {generic.name.value.id.value(),
 		                file_id,
 		                generic.name.span,
-		                generic.name.value.name(),
+		                generic.name.value.name,
 		                Generic {},
 		                stub_type,
 		                false,
@@ -257,7 +250,7 @@ Resolver::TypeInfo::ID Resolver::create_built_in_generic(std::string&& name, std
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
-	AST::SymbolID trait_symbol = built_in_traits_.at(trait_bound).name.value.id.value().at(0);
+	AST::SymbolID trait_symbol = built_in_traits_.at(trait_bound).name.value.id.value();
 	AST::SymbolID symbol_id    = symbol_next();
 
 	TypeInfo::ID type_id = register_type(
@@ -400,7 +393,7 @@ void Resolver::identify_built_in_operators() {
 	);
 }
 
-void Resolver::push_built_in_trait(AST::OldIdentifier const& identifier, std::vector<AST::SymbolID>&& constraints) {
+void Resolver::push_built_in_trait(AST::Name const& name, std::vector<AST::SymbolID>&& constraints) {
 	std::vector<TypeInfo::Generic::TraitConstraint> trait_constraints {};
 	trait_constraints.reserve(constraints.size());
 	std::transform(
@@ -413,11 +406,11 @@ void Resolver::push_built_in_trait(AST::OldIdentifier const& identifier, std::ve
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 	symbol_pool_.push_back(
-		Symbol {identifier.id.value().at(0),
+		Symbol {name.id.value(),
 	                file_id,
 	                span,
-	                identifier.name(),
-	                &built_in_traits_.at(identifier.name()),
+	                name.name,
+	                &built_in_traits_.at(name.name),
 	                0,
 	                false,
 	                true,
@@ -426,34 +419,44 @@ void Resolver::push_built_in_trait(AST::OldIdentifier const& identifier, std::ve
 	);
 }
 
-Spanned<AST::OldIdentifier> Resolver::make_built_in_identifier(std::string name) {
-	AST::SymbolID   id = symbol_next();
-	AST::OldIdentifier identifier({Span::zero(), std::move(name)});
-	identifier.id = {id};
-	return {Span::zero(), identifier};
+Spanned<AST::Name> Resolver::make_built_in_name(std::string name_string) {
+	AST::SymbolID id = symbol_next();
+	AST::Name     name(std::move(name_string));
+	name.id = {id};
+	return {Span::zero(), name};
 }
 
 void Resolver::identify_built_in_traits() {
+	Span span = Span::zero();
+
 	// we have to use this vector because the brace initializer loves copying
 	std::vector<AST::Trait::Constraint> constraints {};
 
-	auto int_id = make_built_in_identifier("int");
+	auto int_id = make_built_in_name("int");
 	built_in_traits_.insert_or_assign("int", AST::Trait {int_id, {}, {}});
 	push_built_in_trait(int_id.value);
 
-	auto uint_id = make_built_in_identifier("uint");
+	auto uint_id = make_built_in_name("uint");
 	constraints  = std::vector<AST::Trait::Constraint> {};
-	constraints.push_back(AST::Trait::Constraint {int_id, {}});
+	constraints.push_back(
+		AST::Trait::Constraint {
+			{span, AST::Identifier {span, int_id.value}}
+        }
+	);
 	built_in_traits_.insert_or_assign("uint", AST::Trait {uint_id, {}, std::move(constraints)});
-	push_built_in_trait(uint_id.value, {int_id.value.id.value()[0]});
+	push_built_in_trait(uint_id.value, {int_id.value.id.value()});
 
-	auto sint_id = make_built_in_identifier("sint");
+	auto sint_id = make_built_in_name("sint");
 	constraints  = std::vector<AST::Trait::Constraint> {};
-	constraints.push_back(AST::Trait::Constraint {int_id, {}});
+	constraints.push_back(
+		AST::Trait::Constraint {
+			{span, AST::Identifier {span, int_id.value}}
+        }
+	);
 	built_in_traits_.insert_or_assign("sint", AST::Trait {sint_id, {}, std::move(constraints)});
-	push_built_in_trait(sint_id.value, {int_id.value.id.value()[0]});
+	push_built_in_trait(sint_id.value, {int_id.value.id.value()});
 
-	auto float_id = make_built_in_identifier("float");
+	auto float_id = make_built_in_name("float");
 	built_in_traits_.insert_or_assign("float", AST::Trait {float_id, {}, {}});
 	push_built_in_trait(float_id.value);
 }
@@ -478,7 +481,10 @@ void Resolver::identify_populate_labels(
 	case AST::Statement::Kind::Branch: return;
 	case AST::Statement::Kind::Label:  break;
 	// more complex control flow is desugared later
-	case AST::Statement::Kind::If: return;
+	case AST::Statement::Kind::If:
+	case AST::Statement::Kind::While:
+	case AST::Statement::Kind::Break:
+	case AST::Statement::Kind::Continue: return;
 	}
 
 	if (statement.value.is_label()) {
@@ -547,7 +553,10 @@ void Resolver::identify_labels(
 	case AST::Statement::Kind::Goto:
 	case AST::Statement::Kind::Branch: break;
 	// more complex control flow is desugared later
-	case AST::Statement::Kind::If: return;
+	case AST::Statement::Kind::If:
+	case AST::Statement::Kind::While:
+	case AST::Statement::Kind::Break:
+	case AST::Statement::Kind::Continue: return;
 	}
 
 	if (statement.value.is_goto()) {
