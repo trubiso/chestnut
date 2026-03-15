@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace AST {
@@ -37,6 +38,9 @@ struct Identifier {
 		std::optional<std::vector<SymbolID>> candidates;
 		/// We embed the span directly into the segment for convenience.
 		Span span;
+
+		/// A list of all generic bindings created during type resolution for this particular segment.
+		std::optional<std::unordered_map<SymbolID, uint32_t>> generic_bindings = std::nullopt;
 
 		/// Returns whether candidates is null, i.e. this segment has not yet been reached by the symbol
 		/// resolver.
@@ -112,6 +116,9 @@ struct Identifier {
 	}
 
 	inline std::vector<Segment> const& path() const { return path_; }
+
+	/// Careful when modifying segments!
+	inline std::vector<Segment>& path() { return path_; }
 
 	/// Constructor for unqualified identifiers.
 	explicit Identifier(Spanned<std::string> name);

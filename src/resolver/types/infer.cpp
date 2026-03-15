@@ -96,36 +96,40 @@ Resolver::aggregate_generics(AST::Identifier& identifier, FileContext::ID file_i
 	}
 	std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID> global_map {};
 	for (size_t i = 0; i < identifier.path().size() - !include_last_segment; ++i) {
-		AST::Identifier::Segment const&                        segment             = identifier.path().at(i);
-		std::optional<std::optional<AST::GenericDeclaration>*> generic_declaration = std::nullopt;
-		// we must first find which generic declaration this corresponds to
-		auto& item = symbol_pool_.at(segment.id()).item;
-		if (std::holds_alternative<AST::Function*>(item)) {
-			generic_declaration = &std::get<AST::Function*>(item)->generic_declaration;
-		} else if (std::holds_alternative<AST::Struct*>(item)) {
-			generic_declaration = &std::get<AST::Struct*>(item)->generic_declaration;
-		} else if (std::holds_alternative<AST::Trait*>(item)) {
-			generic_declaration = &std::get<AST::Trait*>(item)->generic_declaration;
-		}
+		AST::Identifier::Segment& segment = identifier.path().at(i);
 
-		// now, we obtain the map for each segment
-		auto map = try_reconstruct_generics(
-			segment.generic_list.has_value() ? &*segment.generic_list.value() : nullptr,
-			generic_declaration.has_value()
-				? (generic_declaration.value()->has_value() ? &generic_declaration.value()->value()
-		                                                            : nullptr)
-				: nullptr,
-			file_id
-		);
+		// if the segment's generic bindings haven't yet been discovered, let's do so
+		if (!segment.generic_bindings.has_value()) {
+			std::optional<std::optional<AST::GenericDeclaration>*> generic_declaration = std::nullopt;
+			// we must first find which generic declaration this corresponds to
+			auto& item = symbol_pool_.at(segment.id()).item;
+			if (std::holds_alternative<AST::Function*>(item)) {
+				generic_declaration = &std::get<AST::Function*>(item)->generic_declaration;
+			} else if (std::holds_alternative<AST::Struct*>(item)) {
+				generic_declaration = &std::get<AST::Struct*>(item)->generic_declaration;
+			} else if (std::holds_alternative<AST::Trait*>(item)) {
+				generic_declaration = &std::get<AST::Trait*>(item)->generic_declaration;
+			}
 
-		// if we fail, we return null
-		if (!map.has_value()) {
-			std::cout << "todo: diagnostic: we miserably failed: " << identifier << std::endl;
-			return std::nullopt;
+			// now, we obtain the map for this segment
+			segment.generic_bindings = try_reconstruct_generics(
+				segment.generic_list.has_value() ? &*segment.generic_list.value() : nullptr,
+				generic_declaration.has_value() ? (generic_declaration.value()->has_value()
+			                                                   ? &generic_declaration.value()->value()
+			                                                   : nullptr)
+								: nullptr,
+				file_id
+			);
+
+			// if we fail, we return null
+			if (!segment.generic_bindings.has_value()) {
+				std::cout << "todo: diagnostic: we miserably failed: " << identifier << std::endl;
+				return std::nullopt;
+			}
 		}
 
 		// otherwise we add the newly learnt generics
-		for (auto& [name, type] : map.value()) {
+		for (auto& [name, type] : segment.generic_bindings.value()) {
 			assert(!std::get<1>(global_map.insert_or_assign(name, type))
 			       && "we mapped a generic twice when traversing an identifier, isn't that odd?");
 		}
