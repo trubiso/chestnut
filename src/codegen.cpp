@@ -31,7 +31,9 @@ void CodeGenerator::process(std::vector<IR::Module> const& modules, std::string 
 
 	std::string error;
 
-	llvm::Target const* target = llvm::TargetRegistry::lookupTarget(target_triple, error);
+	llvm::Triple triple(target_triple);
+
+	llvm::Target const* target = llvm::TargetRegistry::lookupTarget(triple, error);
 
 	if (!target) {
 		llvm::errs() << error;
@@ -42,7 +44,8 @@ void CodeGenerator::process(std::vector<IR::Module> const& modules, std::string 
 	auto features = "";
 
 	llvm::TargetOptions opt;
-	auto target_machine = target->createTargetMachine(target_triple, cpu, features, opt, llvm::Reloc::PIC_);
+
+	auto target_machine = target->createTargetMachine(triple, cpu, features, opt, llvm::Reloc::PIC_);
 
 	program_.setDataLayout(target_machine->createDataLayout());
 
