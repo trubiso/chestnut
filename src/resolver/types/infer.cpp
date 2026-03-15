@@ -566,8 +566,11 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	std::optional<AST::Identifier*> identifier = std::nullopt;
 
 	if (function_call.callee->value.is_atom()) {
-		if (function_call.callee->value.get_atom().is_identifier())
+		if (function_call.callee->value.get_atom().is_identifier()) {
 			identifier = &function_call.callee->value.get_atom().get_identifier();
+			// FIXME: we actually need to use these generics!!
+			aggregate_generics(*identifier.value(), file_id, false);
+		}
 	}
 
 	UndecidedOverload overload {
