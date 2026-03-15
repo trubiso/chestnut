@@ -79,7 +79,7 @@ private:
 		};
 
 		struct Named {
-			AST::OldIdentifier* name;
+			AST::Identifier* name;
 
 			struct Partial {
 				std::vector<ID>                          ordered_generics;
@@ -215,7 +215,7 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named(AST::OldIdentifier* name, std::vector<ID>&& ordered_generics = {}, std::vector<std::tuple<std::string, ID>> labeled_generics = {}) {
+		inline static TypeInfo make_named(AST::Identifier* name, std::vector<ID>&& ordered_generics = {}, std::vector<std::tuple<std::string, ID>> labeled_generics = {}) {
 			return TypeInfo(
 				value_t {
 					std::in_place_index<(size_t) Kind::Named>,
@@ -227,7 +227,7 @@ private:
 			);
 		}
 
-		inline static TypeInfo make_named(AST::OldIdentifier* name, std::vector<Named::Candidate>&& candidates) {
+		inline static TypeInfo make_named(AST::Identifier* name, std::vector<Named::Candidate>&& candidates) {
 			return TypeInfo(value_t {std::in_place_index<(size_t) Kind::Named>, Named{name, std::move(candidates)}});
 		}
 		
@@ -612,7 +612,7 @@ private:
 
 	struct UndecidedOverload {
 		TypeInfo::ID                    expr_type;
-		std::optional<AST::OldIdentifier*> identifier;
+		std::optional<AST::Identifier*> identifier;
 
 		struct Candidate {
 			TypeInfo::ID function;
@@ -803,6 +803,11 @@ private:
 	/// declared constraints.
 	bool check_generic_type(TypeInfo::ID);
 
+	/// Same as below, but use nullptr for null.
+	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> try_reconstruct_generics(AST::GenericList*, AST::GenericDeclaration const*, FileContext::ID);
+	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> try_reconstruct_generics(std::optional<AST::GenericList>&, std::optional<AST::GenericDeclaration> const&, FileContext::ID);
+	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> aggregate_generics(AST::Identifier&, FileContext::ID, bool include_last_segment);
+
 	TypeInfo::ID infer(AST::Expression::Atom::StructLiteral&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::Atom&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::FunctionCall&, Span, FileContext::ID);
@@ -830,7 +835,7 @@ private:
 	/// Constrains a single function overload candidate (the undecided overload must have only 1 candidate!).
 	void constrain_candidate(UndecidedOverload&);
 	/// Adds the correct trait constraints to a named type's generics according to the provided candidate.
-	void constrain_candidate(AST::OldIdentifier*, TypeInfo::Named::Candidate&);
+	void constrain_candidate(AST::Identifier*, TypeInfo::Named::Candidate&);
 	/// Tries to decide all single-candidate named types. It's necessary to do this,
 	/// since these types will get overlooked by the main type decision loop, because they are already decided.
 	void decide_supposedly_known_named_types();

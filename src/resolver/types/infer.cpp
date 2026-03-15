@@ -6,6 +6,133 @@
 #include <sstream>
 #include <variant>
 
+std::optional<std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID>> Resolver::try_reconstruct_generics(
+	AST::GenericList*              generic_list,
+	AST::GenericDeclaration const* generic_declaration,
+	FileContext::ID                file_id
+) {
+	if (!generic_list || (generic_list->ordered.empty() && generic_list->labeled.empty())) {
+		// if we don't have any generics, the declaration must have no generics
+		if (generic_declaration && !generic_declaration->generics.empty()) return std::nullopt;
+
+		// if it's OK, we return an empty map
+		return std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID> {};
+	}
+
+	assert(generic_list);
+
+	size_t generic_count        = generic_list->ordered.size() + generic_list->labeled.size();
+	size_t target_generic_count = generic_declaration ? generic_declaration->generics.size() : 0;
+	// whichever object we're instantiating, we need our generic count to be at most its generic count
+	if (target_generic_count < generic_count) return std::nullopt;
+
+	// the generic declaration must have a value now, because, since the generic list is not empty, and it contains
+	// at most as many generics as the declaration, the declaration must contain at least one item so that a
+	// single-item generic list is valid
+	assert(generic_declaration);
+
+	std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID> map {};
+	map.reserve(target_generic_count);
+
+	// for each labeled generic, we try to find it within all generics, ignoring those which were already
+	// provided by ordered generics and those which are anonymous
+	for (auto& [name, type] : generic_list->labeled) {
+		bool found = false;
+		for (size_t i = generic_list->ordered.size(); i < target_generic_count; ++i) {
+			auto const& generic = generic_declaration->generics.at(i);
+			if (generic.anonymous) continue;
+			if (name.value != generic.name.value.name) continue;
+			found = true;
+			map.insert_or_assign(
+				generic.name.value.id.value(),
+				register_type(from_type(type.value, file_id, false), type.span, file_id)
+			);
+		}
+		// if any of them cannot be found, we quit with a null return
+		if (!found) return std::nullopt;
+	}
+
+	// we also reconstruct ordered generics, which are much easier to correspond with the generic declaration
+	for (size_t i = 0; i < generic_list->ordered.size(); ++i) {
+		auto const& generic = generic_declaration->generics.at(i);
+		auto&       type    = generic_list->ordered.at(i);
+		map.insert_or_assign(
+			generic.name.value.id.value(),
+			register_type(from_type(type.value, file_id, false), type.span, file_id)
+		);
+	}
+
+	// finally, all remaining generics get assigned to unknown
+	for (size_t i = generic_list->ordered.size(); i < target_generic_count; ++i) {
+		auto const& generic = generic_declaration->generics.at(i);
+		// TODO: better span
+		if (!map.contains(generic.name.value.id.value()))
+			map.insert_or_assign(
+				generic.name.value.id.value(),
+				register_type(TypeInfo::make_unknown(), generic.name.span, file_id)
+			);
+	}
+
+	return std::move(map);
+}
+
+std::optional<std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID>> Resolver::try_reconstruct_generics(
+	std::optional<AST::GenericList>&              generic_list,
+	std::optional<AST::GenericDeclaration> const& generic_declaration,
+	FileContext::ID                               file_id
+) {
+	return try_reconstruct_generics(
+		generic_list.has_value() ? &generic_list.value() : nullptr,
+		generic_declaration.has_value() ? &generic_declaration.value() : nullptr,
+		file_id
+	);
+}
+
+std::optional<std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID>>
+Resolver::aggregate_generics(AST::Identifier& identifier, FileContext::ID file_id, bool include_last_segment) {
+	if (include_last_segment ? !identifier.is_decided() : !identifier.has_at_least_one_id()) {
+		std::cout << "why did we call this on this kind of identifier?: " << identifier << std::endl;
+		return std::nullopt;
+	}
+	std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID> global_map {};
+	for (size_t i = 0; i < identifier.path().size() - !include_last_segment; ++i) {
+		AST::Identifier::Segment const&                        segment             = identifier.path().at(i);
+		std::optional<std::optional<AST::GenericDeclaration>*> generic_declaration = std::nullopt;
+		// we must first find which generic declaration this corresponds to
+		auto& item = symbol_pool_.at(segment.id()).item;
+		if (std::holds_alternative<AST::Function*>(item)) {
+			generic_declaration = &std::get<AST::Function*>(item)->generic_declaration;
+		} else if (std::holds_alternative<AST::Struct*>(item)) {
+			generic_declaration = &std::get<AST::Struct*>(item)->generic_declaration;
+		} else if (std::holds_alternative<AST::Trait*>(item)) {
+			generic_declaration = &std::get<AST::Trait*>(item)->generic_declaration;
+		}
+
+		// now, we obtain the map for each segment
+		auto map = try_reconstruct_generics(
+			segment.generic_list.has_value() ? &*segment.generic_list.value() : nullptr,
+			generic_declaration.has_value()
+				? (generic_declaration.value()->has_value() ? &generic_declaration.value()->value()
+		                                                            : nullptr)
+				: nullptr,
+			file_id
+		);
+
+		// if we fail, we return null
+		if (!map.has_value()) {
+			std::cout << "todo: diagnostic: we miserably failed: " << identifier << std::endl;
+			return std::nullopt;
+		}
+
+		// otherwise we add the newly learnt generics
+		for (auto& [name, type] : map.value()) {
+			assert(!std::get<1>(global_map.insert_or_assign(name, type))
+			       && "we mapped a generic twice when traversing an identifier, isn't that odd?");
+		}
+	}
+	return global_map;
+}
+
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span, FileContext::ID file_id) {
 	TypeInfo named_type = from_type(struct_literal.type.value, file_id, false);
@@ -113,29 +240,25 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 	case AST::Expression::Atom::Kind::BoolLiteral:   return register_type(TypeInfo::make_known_bool(), span, file_id);
 	case AST::Expression::Atom::Kind::StructLiteral: return infer(atom.get_struct_literal(), span, file_id);
 	case AST::Expression::Atom::Kind::Expression:    return infer(*atom.get_expression(), span, file_id);
-	case AST::Expression::Atom::Kind::Identifier:
-	case AST::Expression::Atom::Kind::StaticMember:  break;
+	case AST::Expression::Atom::Kind::Identifier:    break;
 	}
 
 	// for identifiers, we match the type in the symbol pool
-	AST::OldIdentifier const& identifier
-		// TODO: bind static member generics
-		= atom.is_static_member() ? atom.get_static_member().member.value : atom.get_identifier();
-	if (!identifier.id.has_value())
+	// TODO: bind generics
+	AST::Identifier const& identifier = atom.get_identifier();
+	if (!identifier.has_at_least_one_id())
 		return register_type(
 			TypeInfo::make_bottom(),
 			span,
 			file_id
 		);  // if we don't know what this is, let's ignore
-	std::vector<AST::SymbolID> const& ids = identifier.id.value();
-	if (ids.empty()) return register_type(TypeInfo::make_bottom(), span, file_id);
-	std::vector<TypeInfo::ID> type_ids {};
+	std::vector<AST::SymbolID> const& ids = identifier.ids();
+	std::vector<TypeInfo::ID>         type_ids {};
 	type_ids.reserve(ids.size());
 	std::transform(ids.cbegin(), ids.cend(), std::back_inserter(type_ids), [this](AST::SymbolID id) {
 		return get_single_symbol(id).type;
 	});
-	if (type_ids.size() == 1) return register_type(TypeInfo::make_same_as(type_ids[0]), span, file_id);
-	else return register_type(TypeInfo::make_same_as(std::move(type_ids)), span, file_id);
+	return register_type(TypeInfo::make_same_as(std::move(type_ids)), span, file_id);
 }
 
 Resolver::TypeInfo::ID
@@ -165,7 +288,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	size_t provided_arguments = function_call.arguments.labeled.size() + function_call.arguments.ordered.size();
 	size_t provided_generics  = function_call.generic_list.has_value()
 	                                  ? (function_call.generic_list.value().labeled.size()
-                                            + function_call.generic_list.value().ordered.size())
+	                                     + function_call.generic_list.value().ordered.size())
 	                                  : 0;
 	std::vector<TypeInfo::ID> callable_filtered {};
 	// this list holds all function rejections as code samples so we can provide a rich diagnostic
@@ -318,7 +441,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 
 		// we need to "unresolve" the callee identifier just in case
 		if (function_call.callee->value.is_atom() || function_call.callee->value.get_atom().is_identifier())
-			function_call.callee->value.get_atom().get_identifier().id = {};
+			function_call.callee->value.get_atom().get_identifier().force_ids({});
 
 		return register_type(TypeInfo::make_bottom(), span, file_id);
 	}
@@ -385,6 +508,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			arguments.push_back({name, labeled_arguments.at(name.value())});
 		}
 
+		// TODO: bind generics from identifier
 		auto function_generics = type_pool_.at(callable_id).get_function().generics;
 		assert(function_generics.size() >= provided_generics);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
@@ -425,14 +549,11 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 		candidates.push_back(std::move(candidate));
 	}
 
-	std::optional<AST::OldIdentifier*> identifier = std::nullopt;
+	std::optional<AST::Identifier*> identifier = std::nullopt;
 
 	if (function_call.callee->value.is_atom()) {
 		if (function_call.callee->value.get_atom().is_identifier())
 			identifier = &function_call.callee->value.get_atom().get_identifier();
-		else if (function_call.callee->value.get_atom().is_static_member())
-			// TODO: bind static member generics
-			identifier = &function_call.callee->value.get_atom().get_static_member().member.value;
 	}
 
 	UndecidedOverload overload {
@@ -500,10 +621,12 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression& expression, Span span, F
 			// TODO: get the operator span
 			Span operator_span = span;
 
-			AST::OldIdentifier callee_identifier {
+			// TODO: this could be cleaner
+			AST::Identifier callee_identifier {
 				{operator_span, get_variant_name(operator_)}
 			};
-			callee_identifier.id   = get_operator_candidates(operator_, !is_unary);
+			callee_identifier.last_undecided_segment().candidates
+				= get_operator_candidates(operator_, !is_unary);
 			AST::Expression callee = AST::Expression::make_atom(
 				AST::Expression::Atom::make_identifier(std::move(callee_identifier))
 			);
@@ -559,10 +682,9 @@ void Resolver::infer(AST::Statement::Set& set, FileContext::ID file_id) {
 		// identifiers
 		if (!set.lhs.value.get_atom().is_identifier()) return;
 		// if name resolution failed, we must move on
-		if (!set.lhs.value.get_atom().get_identifier().id.has_value()) return;
-		if (set.lhs.value.get_atom().get_identifier().id.value().empty()) return;
+		if (!set.lhs.value.get_atom().get_identifier().has_at_least_one_id()) return;
 		// TODO: remove this, because set statements either have one lhs or most likely they should be forbidden
-		if (set.lhs.value.get_atom().get_identifier().id.value().size() > 1) {
+		if (!set.lhs.value.get_atom().get_identifier().is_decided()) {
 			std::cout
 				<< "we gotta resolve the lhs for some reason? check whether nameres threw a diagnostic"
 				<< std::endl;
@@ -616,7 +738,10 @@ void Resolver::infer(Spanned<AST::Statement>& statement, AST::SymbolID function,
 		      register_type(TypeInfo::make_known_bool(), statement.value.get_branch().condition.span, file_id),
 		      file_id);
 		return;
-	case AST::Statement::Kind::If: return;
+	case AST::Statement::Kind::If:
+	case AST::Statement::Kind::While:
+	case AST::Statement::Kind::Break:
+	case AST::Statement::Kind::Continue: return;
 	}
 
 	// for expression statements, we want to throw a warning if it results in a non-void result
@@ -643,7 +768,7 @@ void Resolver::infer(AST::GenericDeclaration& generic_declaration, FileContext::
 
 void Resolver::infer(AST::Function& function, FileContext::ID file_id) {
 	if (function.generic_declaration.has_value()) infer(function.generic_declaration.value(), file_id);
-	if (function.body.has_value()) infer(function.body.value(), function.name.value.id.value()[0], file_id);
+	if (function.body.has_value()) infer(function.body.value(), function.name.value.id.value(), file_id);
 }
 
 void Resolver::infer(AST::Struct& struct_, FileContext::ID file_id) {
@@ -657,10 +782,7 @@ void Resolver::infer(AST::Trait& trait, FileContext::ID file_id) {
 	if (trait.generic_declaration.has_value()) infer(trait.generic_declaration.value(), file_id);
 	for (auto& constraint : trait.constraints) {
 		// we generate the constraint and that does all of the generics for us :P
-		auto temp_constraint = AST::GenericDeclaration::Generic::Constraint {
-			constraint.name,
-			std::move(constraint.generic_list)
-		};
+		auto temp_constraint  = AST::GenericDeclaration::Generic::Constraint {std::move(constraint.name)};
 		auto trait_constraint = generate_constraint(temp_constraint, file_id);
 		if (!trait_constraint.has_value()) continue;
 		get_single_symbol(trait.name.value).trait_constraints.push_back(trait_constraint.value());

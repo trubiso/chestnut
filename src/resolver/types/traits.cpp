@@ -5,7 +5,7 @@
 
 Resolver::TypeInfo::Generic::TraitConstraint Resolver::get_built_in_trait(std::string&& name) const {
 	assert(built_in_traits_.contains(name));
-	return {built_in_traits_.at(name).name.value.id.value().at(0), {}};
+	return {built_in_traits_.at(name).name.value.id.value(), {}};
 }
 
 std::vector<Resolver::TypeInfo::Generic::TraitConstraint> Resolver::get_implemented_traits(TypeInfo const& type) const {
@@ -106,7 +106,7 @@ Resolver::expand_trait(TypeInfo::Generic::TraitConstraint const& trait_constrain
 		for (size_t i = 0; i < trait.generic_declaration.value().generics.size(); ++i) {
 			auto const& generic = trait.generic_declaration.value().generics.at(i);
 			generic_map.insert_or_assign(
-				symbol_pool_.at(generic.name.value.id.value().at(0)).type,
+				symbol_pool_.at(generic.name.value.id.value()).type,
 				trait_constraint.arguments.at(i)
 			);
 		}
@@ -186,8 +186,7 @@ void Resolver::ensure_has_constraints(AST::GenericDeclaration::Generic& generic,
 
 std::optional<Resolver::TypeInfo::Generic::TraitConstraint>
 Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint& constraint, FileContext::ID file_id) {
-	if (!constraint.name.value.id.has_value()
-	    || constraint.name.value.id.value().size() != 1
+	if (!constraint.name.value.is_decided()
 	    || !std::holds_alternative<AST::Trait*>(get_single_symbol(constraint.name.value).item)) {
 		// name resolver will already have thrown errors about this
 		return std::nullopt;
@@ -195,80 +194,34 @@ Resolver::generate_constraint(AST::GenericDeclaration::Generic::Constraint& cons
 
 	AST::Trait& trait = *std::get<AST::Trait*>(get_single_symbol(constraint.name.value).item);
 
-	if (!constraint.generic_list.has_value()
-	    || (constraint.generic_list.value().ordered.empty() && constraint.generic_list.value().labeled.empty())) {
-		// if we don't have any generics, the trait must have no generics
-		if (trait.generic_declaration.has_value() && !trait.generic_declaration.value().generics.empty())
-			// TODO: diagnostic
-			return std::nullopt;
-
-		return TypeInfo::Generic::TraitConstraint {constraint.name.value.id.value()[0], {}};
-	}
-
-	// if we do have generics, the trait must have the same quantity
-	// TODO: diagnostic
-	if (!trait.generic_declaration.has_value()) return std::nullopt;
-	auto& trait_generics = trait.generic_declaration.value().generics;
-	// TODO: default generics (default everything to inferred by default)
-	size_t generic_count
-		= constraint.generic_list.value().ordered.size() + constraint.generic_list.value().labeled.size();
-	// TODO: diagnostic
-	if (generic_count != trait_generics.size()) return std::nullopt;
-
-	// check that all labeled generics exist, ignoring ordered ones
-	std::vector<std::string_view> under_consideration {};
-	under_consideration.reserve(trait_generics.size() - constraint.generic_list.value().ordered.size());
-	for (size_t i = constraint.generic_list.value().ordered.size(); i < trait_generics.size(); ++i)
-		if (!trait_generics.at(i).anonymous)
-			under_consideration.push_back(trait_generics.at(i).name.value.name());
-
-	if (std::any_of(
-		    constraint.generic_list.value().labeled.cbegin(),
-		    constraint.generic_list.value().labeled.cend(),
-		    [&under_consideration](auto const& generic) {
-			    auto const& name = std::get<0>(generic);
-			    return !std::any_of(
-				    under_consideration.cbegin(),
-				    under_consideration.cend(),
-				    [&name](std::string_view actual) { return name.value == actual; }
-			    );
-		    }
-	    ))
+	auto generics = aggregate_generics(constraint.name.value, file_id, true);
+	if (!generics.has_value()) {
 		// TODO: diagnostic
 		return std::nullopt;
+	}
 
-	// this is a match! reconstruction time
+	// TODO: bind generics outside of the trait
 	std::vector<TypeInfo::ID> arguments {};
-	arguments.reserve(generic_count);
-	std::transform(
-		constraint.generic_list.value().ordered.begin(),
-		constraint.generic_list.value().ordered.end(),
-		std::back_inserter(arguments),
-		[this, file_id](auto& type) {
-			return register_type(from_type(type.value, file_id, false), type.span, file_id);
+	if (trait.generic_declaration.has_value()) {
+		auto& trait_generics = trait.generic_declaration.value().generics;
+
+		for (auto const& generic : trait_generics) {
+			arguments.push_back(generics.value().at(generic.name.value.id.value()));
 		}
-	);
-	for (size_t i = arguments.size(); i < trait_generics.size(); ++i) {
-		auto corresponding_generic = std::find_if(
-			constraint.generic_list.value().labeled.begin(),
-			constraint.generic_list.value().labeled.end(),
-			[&trait_generics, i](auto& generic) {
-				return std::get<0>(generic).value == trait_generics.at(i).name.value.name();
-			}
-		);
-		auto& type = std::get<1>(*corresponding_generic);
-		arguments.push_back(register_type(from_type(type.value, file_id, false), type.span, file_id));
+
+		// add trait constraints from the trait generics
+		assert(arguments.size() == trait_generics.size());
+		for (size_t i = 0; i < arguments.size(); ++i) {
+			ensure_has_constraints(trait_generics.at(i), get_single_symbol(constraint.name.value).file_id);
+			// FIXME: instantiate entire trait
+			std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
+			auto                                           generic = instantiate_type(
+				get_single_symbol(trait_generics.at(i).name.value).type,
+				generic_map
+			);
+			unify(arguments.at(i), generic, file_id);
+		}
 	}
 
-	// add trait constraints from the trait generics
-	assert(arguments.size() == trait_generics.size());
-	for (size_t i = 0; i < arguments.size(); ++i) {
-		ensure_has_constraints(trait_generics.at(i), get_single_symbol(constraint.name.value).file_id);
-		// FIXME: instantiate entire trait
-		std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map;
-		auto generic = instantiate_type(get_single_symbol(trait_generics.at(i).name.value).type, generic_map);
-		unify(arguments.at(i), generic, file_id);
-	}
-
-	return TypeInfo::Generic::TraitConstraint {constraint.name.value.id.value()[0], std::move(arguments)};
+	return TypeInfo::Generic::TraitConstraint {constraint.name.value.id(), std::move(arguments)};
 }

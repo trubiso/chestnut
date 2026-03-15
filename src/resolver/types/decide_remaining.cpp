@@ -222,7 +222,8 @@ void Resolver::decide_remaining_types() {
 				);
 
 			// we need to "unresolve" the callee identifier just in case
-			if (undecided_overload.identifier.has_value()) undecided_overload.identifier.value()->id = {};
+			if (undecided_overload.identifier.has_value())
+				undecided_overload.identifier.value()->force_ids({});
 		}
 	}
 

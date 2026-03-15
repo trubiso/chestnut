@@ -62,17 +62,21 @@ void Resolver::constrain_candidate(UndecidedOverload& undecided_overload) {
 			debug_print_type(candidate.function);
 			std::cout << std::endl;
 		} else {
-			undecided_overload.identifier.value()->id
-				= {type_symbol_mapping_.at(candidate.function).value()};
+			undecided_overload.identifier.value()->force_ids(
+				{type_symbol_mapping_.at(candidate.function).value()}
+			);
 		}
 	}
 
 	undecided_overload.function_call->call_type = {candidate.call_id};
 }
 
-void Resolver::constrain_candidate(AST::OldIdentifier* identifier, TypeInfo::Named::Candidate& candidate) {
+void Resolver::constrain_candidate(AST::Identifier* identifier, TypeInfo::Named::Candidate& candidate) {
 	// constrain the identifier for lowering later
-	if (identifier) identifier->id = {candidate.name};
+	if (identifier) {
+		assert(identifier->has_at_least_one_id());
+		identifier->force_ids({candidate.name});
+	}
 
 	AST::Struct* struct_             = std::get<AST::Struct*>(get_single_symbol(candidate.name).item);
 	auto         instantiated_struct = instantiate_struct(struct_);
@@ -92,7 +96,7 @@ void Resolver::constrain_candidate(AST::OldIdentifier* identifier, TypeInfo::Nam
 	for (size_t i = 0; i < generics.size(); ++i) {
 		ensure_has_constraints(declared_generics.at(i), get_single_symbol(candidate.name).file_id);
 		auto generic    = instantiated_struct.generic_declaration.at(i);
-		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value()[0]);
+		auto generified = generify_type(generics.at(i), declared_generics.at(i).name.value.id.value());
 
 		for (auto const& constraint : type_pool_.at(generic).get_generic().declared_constraints) {
 			type_pool_.at(generified)

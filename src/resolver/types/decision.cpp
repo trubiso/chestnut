@@ -180,7 +180,7 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 			);
 
 		// we need to "unresolve" the callee identifier just in case
-		if (undecided_overload.identifier.has_value()) undecided_overload.identifier.value()->id = {};
+		if (undecided_overload.identifier.has_value()) undecided_overload.identifier.value()->force_ids({});
 
 		// we also need to set the type to bottom to avoid causing more issues
 		type_pool_.at(undecided_overload.expr_type) = TypeInfo::make_bottom();
@@ -246,7 +246,7 @@ bool Resolver::try_decide(TypeInfo::ID undecided_member_access) {
 		std::stringstream subtitle_stream {};
 		subtitle_stream
 			<< "type `"
-			<< struct_->name.value.name()
+			<< struct_->name.value.name
 			<< "` does not have any field named `"
 			<< member_access.field
 			<< "`";

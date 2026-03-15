@@ -7,9 +7,9 @@
 Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named&& named, Span span, FileContext::ID file_id) {
 	auto const& partial = std::get<TypeInfo::Named::Partial>(named.value);
 	// first, we ignore name resolver issues
-	if (!named.name->id.has_value() || named.name->id.value().empty()) return TypeInfo::make_bottom();
+	if (!named.name->has_at_least_one_id()) return TypeInfo::make_bottom();
 
-	std::vector<AST::SymbolID>              candidate_ids = named.name->id.value();
+	std::vector<AST::SymbolID>              candidate_ids = named.name->ids();
 	std::vector<TypeInfo::Named::Candidate> candidates {};
 
 	// TODO: rejections list for diagnostic
@@ -47,7 +47,7 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named&& named, Span span, Fi
 		under_consideration.reserve(struct_generics.size() - partial.ordered_generics.size());
 		for (size_t i = partial.ordered_generics.size(); i < struct_generics.size(); ++i)
 			if (!struct_generics.at(i).anonymous)
-				under_consideration.push_back(struct_generics.at(i).name.value.name());
+				under_consideration.push_back(struct_generics.at(i).name.value.name);
 
 		if (std::any_of(
 			    partial.labeled_generics.cbegin(),
@@ -76,7 +76,7 @@ Resolver::TypeInfo Resolver::from_partial(TypeInfo::Named&& named, Span span, Fi
 				partial.labeled_generics.cbegin(),
 				partial.labeled_generics.cend(),
 				[&struct_generics, i](auto const& generic) {
-					return std::get<0>(generic) == struct_generics.at(i).name.value.name();
+					return std::get<0>(generic) == struct_generics.at(i).name.value.name;
 				}
 			);
 			generics.push_back(std::get<1>(*corresponding_generic));
@@ -109,20 +109,7 @@ Resolver::TypeInfo Resolver::from_type(AST::Type::Atom::Named& named, FileContex
 	// for named types, we need to extract the generic list first
 	std::vector<TypeInfo::ID>                          ordered_generics {};
 	std::vector<std::tuple<std::string, TypeInfo::ID>> labeled_generics {};
-	if (named.generic_list.has_value()) {
-		ordered_generics.reserve(named.generic_list.value().ordered.size());
-		labeled_generics.reserve(named.generic_list.value().labeled.size());
-		for (auto& generic : named.generic_list.value().ordered) {
-			TypeInfo     type    = from_type(generic.value, file_id, partial);
-			TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
-			ordered_generics.push_back(type_id);
-		}
-		for (auto& [label, generic] : named.generic_list.value().labeled) {
-			TypeInfo     type    = from_type(generic.value, file_id, partial);
-			TypeInfo::ID type_id = register_type(std::move(type), generic.span, file_id);
-			labeled_generics.emplace_back(label.value, type_id);
-		}
-	}
+	// TODO: deal with generics
 
 	TypeInfo::Named partial_named {
 		&named.name.value,

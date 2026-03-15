@@ -22,7 +22,7 @@ Resolver::TypeInfo::Struct Resolver::instantiate_struct(AST::Struct const* struc
 		assert(generic_declaration.size() == struct_->generic_declaration.value().generics.size());
 	}
 
-	return Resolver::TypeInfo::Struct {struct_->name.value.id.value().at(0), std::move(generic_declaration)};
+	return Resolver::TypeInfo::Struct {struct_->name.value.id.value(), std::move(generic_declaration)};
 }
 
 Resolver::TypeInfo::ID
