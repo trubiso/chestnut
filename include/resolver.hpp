@@ -531,12 +531,6 @@ private:
 	/// Gets a symbol from the symbol pool.
 	inline Symbol& get_single_symbol(AST::SymbolID id) { return symbol_pool_.at(id); }
 
-	/// Gets a symbol from the symbol pool, assuming the identifier is fully resolved.
-	inline Symbol& get_single_symbol(AST::OldIdentifier const& identifier) {
-		assert(identifier.id.has_value() && identifier.id.value().size() == 1);
-		return get_single_symbol(identifier.id.value().at(0));
-	}
-
 	/// Gets a symbol from the symbol pool, assuming the identifier is fully decided.
 	inline Symbol& get_single_symbol(AST::Identifier const& identifier) {
 		assert(identifier.is_decided());

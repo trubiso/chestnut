@@ -117,40 +117,6 @@ std::optional<std::string> Parser::consume_bare_unqualified_identifier() {
 	return token.get_identifier();
 }
 
-std::optional<OldIdentifier> Parser::consume_old_unqualified_identifier() {
-	return SPANNED(consume_bare_unqualified_identifier).transform([](auto&& value) {
-		return OldIdentifier(std::move(value));
-	});
-}
-
-std::optional<OldIdentifier> Parser::consume_old_identifier() {
-	// NOTE: in the future, we will have to account for static members (T::a) and potentially discarded identifiers
-	// at the beginning (_::a)
-
-	// if a :: can be consumed before the qualified identifier, it will be consumed and will turn the qualified
-	// identifier absolute
-	bool absolute = consume_symbol(Token::Symbol::ColonColon);
-	// if :: was consumed, that means this is definitely and unambiguously a qualified identifier now
-	std::optional<Spanned<std::string>> root
-		= absolute ? SPANNED_REASON(
-				     expect_bare_unqualified_identifier,
-				     "expected an identifier (`::` starts an absolute qualified identifier)"
-			     )
-	                   : SPANNED(consume_bare_unqualified_identifier);
-	// now if we didn't find the root we can safely return because, if :: has been parsed, we'll have skipped it :-)
-	if (!root.has_value()) return {};
-	std::vector<Spanned<std::string>> path {root.value()};
-	while (consume_symbol(Token::Symbol::ColonColon)) {
-		std::optional<Spanned<std::string>> piece = SPANNED_REASON(
-			expect_bare_unqualified_identifier,
-			"expected an identifier (there is a trailing `::` in a preceding qualified identifier)"
-		);
-		if (!piece.has_value()) return OldIdentifier(absolute, std::move(path));
-		path.push_back(piece.value());
-	}
-	return OldIdentifier(absolute, std::move(path));
-}
-
 std::optional<Identifier::Segment> Parser::consume_identifier_segment() {
 	if (!tokens_.peek().has_value()) return {};
 	size_t begin = tokens_.peek().value().begin;
@@ -1252,14 +1218,6 @@ std::optional<std::string> Parser::expect_label(std::string_view reason) {
 
 std::optional<std::string> Parser::expect_bare_unqualified_identifier(std::string_view reason) {
 	EXPECT(consume_bare_unqualified_identifier, "identifier");
-}
-
-std::optional<OldIdentifier> Parser::expect_old_unqualified_identifier(std::string_view reason) {
-	EXPECT(consume_old_unqualified_identifier, "identifier");
-}
-
-std::optional<OldIdentifier> Parser::expect_old_identifier(std::string_view reason) {
-	EXPECT(consume_old_identifier, "(qualified) identifier");
 }
 
 std::optional<Identifier::Segment> Parser::expect_identifier_segment(std::string_view reason) {

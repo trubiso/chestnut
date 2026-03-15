@@ -103,9 +103,7 @@ private:
 	std::optional<std::string> consume_string_literal();
 	std::optional<std::string> consume_char_literal();
 
-	std::optional<std::string>   consume_bare_unqualified_identifier();
-	std::optional<OldIdentifier> consume_old_unqualified_identifier();
-	std::optional<OldIdentifier> consume_old_identifier();
+	std::optional<std::string> consume_bare_unqualified_identifier();
 
 	std::optional<Identifier::Segment> consume_identifier_segment();
 	std::optional<Identifier>          consume_identifier();
@@ -190,9 +188,7 @@ private:
 
 	std::optional<std::string> expect_label(std::string_view reason);
 
-	std::optional<std::string>   expect_bare_unqualified_identifier(std::string_view reason);
-	std::optional<OldIdentifier> expect_old_unqualified_identifier(std::string_view reason);
-	std::optional<OldIdentifier> expect_old_identifier(std::string_view reason);
+	std::optional<std::string> expect_bare_unqualified_identifier(std::string_view reason);
 
 	std::optional<Identifier::Segment> expect_identifier_segment(std::string_view reason);
 	std::optional<Identifier>          expect_identifier(std::string_view reason);
