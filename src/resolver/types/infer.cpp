@@ -130,8 +130,18 @@ Resolver::aggregate_generics(AST::Identifier& identifier, FileContext::ID file_i
 
 		// otherwise we add the newly learnt generics
 		for (auto& [name, type] : segment.generic_bindings.value()) {
-			assert(!std::get<1>(global_map.insert_or_assign(name, type))
-			       && "we mapped a generic twice when traversing an identifier, isn't that odd?");
+			if (global_map.contains(name)) {
+				std::cout
+					<< "conflict! want to bind @"
+					<< name
+					<< " to $"
+					<< type
+					<< " when it's already bound to $"
+					<< global_map.at(name)
+					<< std::endl;
+				assert(false);
+			}
+			global_map.insert_or_assign(name, type);
 		}
 	}
 	return global_map;
