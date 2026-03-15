@@ -65,6 +65,18 @@ void Resolver::constrain_candidate(UndecidedOverload& undecided_overload) {
 			undecided_overload.identifier.value()->force_ids(
 				{type_symbol_mapping_.at(candidate.function).value()}
 			);
+			auto& item = symbol_pool_.at(undecided_overload.identifier.value()->id()).item;
+			std::unordered_map<AST::SymbolID, TypeInfo::ID> map {};
+			if (std::holds_alternative<AST::Function*>(item)) {
+				auto& generics = std::get<AST::Function*>(item)->generic_declaration;
+				for (size_t i = 0; i < call.generics.size(); ++i) {
+					map.insert_or_assign(
+						generics.value().generics.at(i).name.value.id.value(),
+						std::get<1>(call.generics.at(i))
+					);
+				}
+			}
+			undecided_overload.identifier.value()->path().back().generic_bindings = map;
 		}
 	}
 

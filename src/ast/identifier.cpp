@@ -166,6 +166,19 @@ Identifier::Identifier(Span span, Name name) : absolute_ {false}, path_ {} {
 std::ostream& operator<<(std::ostream& os, Identifier::Segment const& segment) {
 	os << segment.name;
 	if (segment.generic_list.has_value()) os << *segment.generic_list.value();
+	if (segment.generic_bindings.has_value()) {
+		if (segment.generic_bindings.value().empty()) {
+			os << " (bound)";
+		} else {
+			os << " (bindings: ";
+			size_t count = 0;
+			for (auto [a, b] : segment.generic_bindings.value()) {
+				os << '@' << a << " -> $" << b;
+				if (++count < segment.generic_bindings.value().size()) os << ", ";
+			}
+			os << ')';
+		}
+	}
 	if (segment.is_unreached()) return os;
 	if (segment.is_error()) return os << " (error)";
 	os << " (";
