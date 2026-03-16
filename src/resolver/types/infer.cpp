@@ -7,9 +7,9 @@
 #include <variant>
 
 std::optional<std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID>> Resolver::try_reconstruct_generics(
-	AST::GenericList*              generic_list,
-	AST::GenericDeclaration const* generic_declaration,
-	FileContext::ID                file_id
+	AST::GenericList*        generic_list,
+	AST::GenericDeclaration* generic_declaration,
+	FileContext::ID          file_id
 ) {
 	if (!generic_list || (generic_list->ordered.empty() && generic_list->labeled.empty())) {
 		// if we don't have any generics, the declaration must have no generics
@@ -73,13 +73,37 @@ std::optional<std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID>> Resolve
 			);
 	}
 
+	// before we return, though, we must generify and add trait bounds
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+	for (auto& generic : generic_declaration->generics) {
+		auto& pre_generic = map.at(generic.name.value.id.value());
+		auto  generified  = generify_type(pre_generic, generic.name.value.id.value());
+		pre_generic       = generified;
+		generic_map.insert_or_assign(get_single_symbol(generic.name.value).type, pre_generic);
+	}
+	for (auto& generic : generic_declaration->generics) {
+		ensure_has_constraints(generic, file_id);
+		auto& generic_type       = type_pool_.at(get_single_symbol(generic.name.value).type).get_generic();
+		auto& corresponding_type = map.at(generic.name.value.id.value());
+		if (!type_pool_.at(corresponding_type).is_generic()) continue;
+		auto& generified_type = type_pool_.at(corresponding_type).get_generic();
+		std::transform(
+			generic_type.declared_constraints.cbegin(),
+			generic_type.declared_constraints.cend(),
+			std::back_inserter(generified_type.imposed_constraints),
+			[this, generic_map](TypeInfo::Generic::TraitConstraint const& constraint) {
+				return instantiate_constraint(constraint, generic_map);
+			}
+		);
+	}
+
 	return std::move(map);
 }
 
 std::optional<std::unordered_map<AST::SymbolID, Resolver::TypeInfo::ID>> Resolver::try_reconstruct_generics(
-	std::optional<AST::GenericList>&              generic_list,
-	std::optional<AST::GenericDeclaration> const& generic_declaration,
-	FileContext::ID                               file_id
+	std::optional<AST::GenericList>&        generic_list,
+	std::optional<AST::GenericDeclaration>& generic_declaration,
+	FileContext::ID                         file_id
 ) {
 	return try_reconstruct_generics(
 		generic_list.has_value() ? &generic_list.value() : nullptr,

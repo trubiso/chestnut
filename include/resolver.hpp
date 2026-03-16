@@ -798,8 +798,8 @@ private:
 	bool check_generic_type(TypeInfo::ID);
 
 	/// Same as below, but use nullptr for null.
-	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> try_reconstruct_generics(AST::GenericList*, AST::GenericDeclaration const*, FileContext::ID);
-	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> try_reconstruct_generics(std::optional<AST::GenericList>&, std::optional<AST::GenericDeclaration> const&, FileContext::ID);
+	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> try_reconstruct_generics(AST::GenericList*, AST::GenericDeclaration*, FileContext::ID);
+	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> try_reconstruct_generics(std::optional<AST::GenericList>&, std::optional<AST::GenericDeclaration>&, FileContext::ID);
 	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> aggregate_generics(AST::Identifier&, FileContext::ID, bool include_last_segment);
 
 	TypeInfo::ID infer(AST::Expression::Atom::StructLiteral&, Span, FileContext::ID);
