@@ -277,5 +277,43 @@ void Resolver::decide_remaining_types() {
 		}
 	}
 
-	// TODO: diagnostic for undecided/unchecked generics
+	if (!undecided_generics.empty()) {
+		for (TypeInfo::ID undecided_generic : undecided_generics) {
+			parsed_files.at(get_type_file_id(undecided_generic))
+				.diagnostics.push_back(
+					Diagnostic::error(
+						"could not decide generic",
+						{get_type_sample(undecided_generic, OutFmt::Color::Red)}
+					)
+				);
+			type_pool_.at(undecided_generic) = TypeInfo::make_bottom();
+		}
+	}
+
+	if (!unchecked_generics.empty()) {
+		for (TypeInfo::ID unchecked_generic : unchecked_generics) {
+			parsed_files.at(get_type_file_id(unchecked_generic))
+				.diagnostics.push_back(
+					Diagnostic::error(
+						"could not check generic",
+						{get_type_sample(unchecked_generic, OutFmt::Color::Red)}
+					)
+				);
+			type_pool_.at(unchecked_generic) = TypeInfo::make_bottom();
+		}
+	}
+
+	if (!undecided_derefs.empty()) {
+		for (auto const& deref : undecided_derefs) {
+			TypeInfo::ID type = deref.result_type;
+			parsed_files.at(get_type_file_id(type))
+				.diagnostics.push_back(
+					Diagnostic::error(
+						"could not decide dereference",
+						{get_type_sample(type, OutFmt::Color::Red)}
+					)
+				);
+			type_pool_.at(type) = TypeInfo::make_bottom();
+		}
+	}
 }
