@@ -441,23 +441,49 @@ std::optional<Expression> Parser::consume_expression_function_call() {
 	std::optional<Spanned<Expression>> maybe_callee = SPANNED(consume_expression_atom);
 	if (!maybe_callee.has_value()) return {};
 	Spanned<Expression> callee = std::move(maybe_callee.value());
+	// TODO: more exhaustive check
+	bool no_first_generics = false;
+	if (callee.value.get_atom().is_identifier()
+	    && callee.value.get_atom().get_identifier().path().back().generic_list.has_value())
+		no_first_generics = true;
 
 	while (peek_symbol(Token::Symbol::Lt) || peek_symbol(Token::Symbol::LParen)) {
 		std::optional<GenericList> generic_list = std::nullopt;
-		// if we got a generic list, handle it and get us past the opening parenthesis
-		if (peek_symbol(Token::Symbol::Lt)) {
-			// disambiguate via whitespace :o
-			if (callee.span.end != tokens_.peek().value().span().start) break;
-			generic_list = expect_generic_list(
-				"expected generic list after opening angle bracket (if you wanted a comparison operator, add a space before `<`)"
+		if (no_first_generics) {
+			generic_list = std::move(
+				*callee.value.get_atom().get_identifier().path().back().generic_list.value()
 			);
-			if (!generic_list.has_value()) break;
-			if (!expect_symbol(
-				    "expected opening parenthesis to begin argument list",
-				    Token::Symbol::LParen
-			    ))
-				break;
-		} else consume_symbol(Token::Symbol::LParen);
+			callee.value.get_atom().get_identifier().path().back().generic_list = std::nullopt;
+			if (peek_symbol(Token::Symbol::Lt)) {
+				if (callee.span.end != tokens_.peek().value().span().start) break;
+				diagnostics_.push_back(
+					Diagnostic::error(
+						"specified generic list twice",
+						"if you wanted a comparison operator, add a space before `<`",
+						{Diagnostic::Sample(
+							context_,
+							tokens_.peek().value().span(),
+							OutFmt::Color::Red
+						)}
+					)
+				);
+			} else consume_symbol(Token::Symbol::LParen);
+		} else {
+			// if we got a generic list, handle it and get us past the opening parenthesis
+			if (peek_symbol(Token::Symbol::Lt)) {
+				// disambiguate via whitespace :o
+				if (callee.span.end != tokens_.peek().value().span().start) break;
+				generic_list = expect_generic_list(
+					"expected generic list after opening angle bracket (if you wanted a comparison operator, add a space before `<`)"
+				);
+				if (!generic_list.has_value()) break;
+				if (!expect_symbol(
+					    "expected opening parenthesis to begin argument list",
+					    Token::Symbol::LParen
+				    ))
+					break;
+			} else consume_symbol(Token::Symbol::LParen);
+		}
 		std::optional<Expression::FunctionCall::Argument> argument {};
 		Expression::FunctionCall::Arguments               arguments {};
 
