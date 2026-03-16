@@ -171,6 +171,20 @@ Resolver::aggregate_generics(AST::Identifier& identifier, FileContext::ID file_i
 	return global_map;
 }
 
+std::optional<std::unordered_map<Resolver::TypeInfo::ID, Resolver::TypeInfo::ID>>
+Resolver::aggregate_generics_as_generic_map(
+	AST::Identifier& identifier,
+	FileContext::ID  file_id,
+	bool             include_last_segment
+) {
+	auto map = aggregate_generics(identifier, file_id, include_last_segment);
+	if (!map.has_value()) return std::nullopt;
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> new_map {};
+	new_map.reserve(map.value().size());
+	for (auto& [name, type] : map.value()) { new_map.insert_or_assign(get_single_symbol(name).type, type); }
+	return new_map;
+}
+
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::Atom::StructLiteral& struct_literal, Span span, FileContext::ID file_id) {
 	TypeInfo named_type = from_type(struct_literal.type.value, file_id, false);
@@ -301,6 +315,10 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileContext::ID file_id) {
+	if (function_call.callee->value.is_atom() && function_call.callee->value.get_atom().is_identifier()) {
+		aggregate_generics(function_call.callee->value.get_atom().get_identifier(), file_id, false);
+	}
+
 	// for function calls, we need to resolve or partially resolve the overload
 	TypeInfo::ID callee_id = infer(function_call.callee->value, function_call.callee->span, file_id);
 
@@ -326,7 +344,7 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	size_t provided_arguments = function_call.arguments.labeled.size() + function_call.arguments.ordered.size();
 	size_t provided_generics  = function_call.generic_list.has_value()
 	                                  ? (function_call.generic_list.value().labeled.size()
-	                                     + function_call.generic_list.value().ordered.size())
+                                            + function_call.generic_list.value().ordered.size())
 	                                  : 0;
 	std::vector<TypeInfo::ID> callable_filtered {};
 	// this list holds all function rejections as code samples so we can provide a rich diagnostic
@@ -546,7 +564,6 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 			arguments.push_back({name, labeled_arguments.at(name.value())});
 		}
 
-		// TODO: bind generics from identifier
 		auto function_generics = type_pool_.at(callable_id).get_function().generics;
 		assert(function_generics.size() >= provided_generics);
 		std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
@@ -592,8 +609,6 @@ Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileCon
 	if (function_call.callee->value.is_atom()) {
 		if (function_call.callee->value.get_atom().is_identifier()) {
 			identifier = &function_call.callee->value.get_atom().get_identifier();
-			// FIXME: we actually need to use these generics!!
-			aggregate_generics(*identifier.value(), file_id, false);
 		}
 	}
 

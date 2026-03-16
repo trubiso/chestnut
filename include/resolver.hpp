@@ -744,7 +744,7 @@ private:
 
 	bool try_decide(UndecidedDeref&);
 	/// Returns whether an overload candidate satisfies trait bounds, or null if it cannot yet be decided.
-	std::optional<bool> does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candidate const&);
+	std::optional<bool> does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candidate const&, std::unordered_map<TypeInfo::ID, TypeInfo::ID> const&);
 	/// Tries to decide an undecided overload. Returns whether the overload was successfully decided (that
 	/// includes the case in which it is determined that no function meets the constraints!)
 	bool try_decide(UndecidedOverload&);
@@ -801,6 +801,7 @@ private:
 	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> try_reconstruct_generics(AST::GenericList*, AST::GenericDeclaration*, FileContext::ID);
 	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> try_reconstruct_generics(std::optional<AST::GenericList>&, std::optional<AST::GenericDeclaration>&, FileContext::ID);
 	std::optional<std::unordered_map<AST::SymbolID, TypeInfo::ID>> aggregate_generics(AST::Identifier&, FileContext::ID, bool include_last_segment);
+	std::optional<std::unordered_map<TypeInfo::ID, TypeInfo::ID>> aggregate_generics_as_generic_map(AST::Identifier&, FileContext::ID, bool include_last_segment);
 
 	TypeInfo::ID infer(AST::Expression::Atom::StructLiteral&, Span, FileContext::ID);
 	TypeInfo::ID infer(AST::Expression::Atom&, Span, FileContext::ID);

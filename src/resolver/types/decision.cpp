@@ -43,8 +43,10 @@ bottom:
 	return true;
 }
 
-std::optional<bool>
-Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candidate const& candidate) {
+std::optional<bool> Resolver::does_overload_candidate_satisfy_trait_bounds(
+	UndecidedOverload::Candidate const&                   candidate,
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> const& more_generics
+) {
 	// we first copy the functions
 	// TODO: delete everything afterwards
 	TypeInfo::ID function_id = copy_type(candidate.function);
@@ -55,7 +57,7 @@ Resolver::does_overload_candidate_satisfy_trait_bounds(UndecidedOverload::Candid
 
 	// let's bind the explicit generics
 	assert(call_function.generics.size() == function.generics.size());
-	std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map {};
+	std::unordered_map<TypeInfo::ID, TypeInfo::ID> generic_map = more_generics;
 	for (size_t i = 0; i < call_function.generics.size(); ++i) {
 		TypeInfo::ID generic_id          = std::get<1>(call_function.generics.at(i));
 		TypeInfo::ID function_generic_id = std::get<1>(function.generics.at(i));
@@ -145,7 +147,18 @@ bool Resolver::try_decide(UndecidedOverload& undecided_overload) {
 			continue;
 		}
 
-		auto satisfies = does_overload_candidate_satisfy_trait_bounds(candidate);
+		auto maybe_map = undecided_overload.identifier.has_value()
+		                       ? aggregate_generics_as_generic_map(
+						 *undecided_overload.identifier.value(),
+						 undecided_overload.file_id,
+						 false
+					 )
+		                       : std::nullopt;
+
+		auto satisfies = does_overload_candidate_satisfy_trait_bounds(
+			candidate,
+			maybe_map.value_or(std::unordered_map<TypeInfo::ID, TypeInfo::ID> {})
+		);
 		if (satisfies.has_value() && !satisfies.value()) {
 			// TODO: specify exactly which generic does not satisfy trait bounds
 			std::stringstream text {};

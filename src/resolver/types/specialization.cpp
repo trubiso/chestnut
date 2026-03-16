@@ -38,7 +38,18 @@ std::unordered_set<size_t> Resolver::specialize_overload(std::vector<std::vector
 bool Resolver::specialize_overload(UndecidedOverload& undecided_overload) {
 	// we can only specialize if all candidates are known to satisfy trait bounds
 	for (UndecidedOverload::Candidate const& candidate : undecided_overload.candidates) {
-		auto satisfies = does_overload_candidate_satisfy_trait_bounds(candidate);
+		auto maybe_map = undecided_overload.identifier.has_value()
+		                       ? aggregate_generics_as_generic_map(
+						 *undecided_overload.identifier.value(),
+						 undecided_overload.file_id,
+						 false
+					 )
+		                       : std::nullopt;
+
+		auto satisfies = does_overload_candidate_satisfy_trait_bounds(
+			candidate,
+			maybe_map.value_or(std::unordered_map<TypeInfo::ID, TypeInfo::ID> {})
+		);
 		if (!satisfies.has_value()) return false;
 		// we should satisfy if we made it to specialization
 		assert(satisfies.value());
