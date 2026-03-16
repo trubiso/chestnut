@@ -297,13 +297,14 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 
 	// for identifiers, we match the type in the symbol pool
 	// TODO: bind generics
-	AST::Identifier const& identifier = atom.get_identifier();
+	AST::Identifier& identifier = atom.get_identifier();
 	if (!identifier.has_at_least_one_id())
 		return register_type(
 			TypeInfo::make_bottom(),
 			span,
 			file_id
 		);  // if we don't know what this is, let's ignore
+	aggregate_generics(identifier, file_id, false);
 	std::vector<AST::SymbolID> const& ids = identifier.ids();
 	std::vector<TypeInfo::ID>         type_ids {};
 	type_ids.reserve(ids.size());
@@ -315,10 +316,6 @@ Resolver::TypeInfo::ID Resolver::infer(AST::Expression::Atom& atom, Span span, F
 
 Resolver::TypeInfo::ID
 Resolver::infer(AST::Expression::FunctionCall& function_call, Span span, FileContext::ID file_id) {
-	if (function_call.callee->value.is_atom() && function_call.callee->value.get_atom().is_identifier()) {
-		aggregate_generics(function_call.callee->value.get_atom().get_identifier(), file_id, false);
-	}
-
 	// for function calls, we need to resolve or partially resolve the overload
 	TypeInfo::ID callee_id = infer(function_call.callee->value, function_call.callee->span, file_id);
 
