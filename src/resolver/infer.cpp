@@ -132,4 +132,12 @@ Resolver::TypeVar Resolver::from_type(AST::Type const& type, FileContext::ID fil
 	}
 }
 
+IR::Type Resolver::reconstruct_type(TypeVar::ID type_id, TypeVar::ID type_origin, bool allow_functions) {
+	assert(false && "TODO: type reconstruction");
+}
+
+IR::Type Resolver::reconstruct_type(TypeVar::ID, bool allow_functions) {
+	assert(false && "TODO: type reconstruction");
+}
+
 void Resolver::infer() {}
