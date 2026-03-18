@@ -94,3 +94,42 @@ Resolver::create_name(std::string_view name, TypeVar type, bool mutable_, Span s
 	var.id = {id};
 	return var;
 }
+
+Resolver::TypeVar Resolver::from_type(AST::Type::Atom const& atom, FileContext::ID file_id) {
+	switch (atom.kind()) {
+	case AST::Type::Atom::Kind::Float: return TypeVar::make_float(TypeVar::KnownFloat {atom.get_float().width});
+	case AST::Type::Atom::Kind::Void:  return TypeVar::make_void();
+	case AST::Type::Atom::Kind::Char:  return TypeVar::make_char();
+	case AST::Type::Atom::Kind::Bool:  return TypeVar::make_bool();
+	case AST::Type::Atom::Kind::Named: {
+		// FIXME: this does not resolve the identifier!!! we need to create all appropriate branches
+		NameVar::ID name = register_name(NameVar(), atom.get_named().name.span, file_id);
+		return TypeVar::make_named(name);
+	}
+	case AST::Type::Atom::Kind::Inferred: return TypeVar::make_unknown();
+	case AST::Type::Atom::Kind::Integer:  {
+		// for integers, we need to determine how much information we know
+		AST::Type::Atom::Integer const& integer = atom.get_integer();
+		if (integer.width_type() != AST::Type::Atom::Integer::WidthType::Any)
+			return TypeVar::make_integer(TypeVar::KnownInteger {integer});
+		else return TypeVar::make_partial_integer(TypeVar::PartialInteger {integer, true});
+	}
+	}
+}
+
+Resolver::TypeVar Resolver::from_type(AST::Type const& type, FileContext::ID file_id) {
+	switch (type.kind()) {
+	case AST::Type::Kind::Atom: return from_type(type.get_atom(), file_id);
+	case AST::Type::Kind::Pointer:
+		return TypeVar::make_pointer(
+			register_type(
+				from_type(type.get_pointer().type->value, file_id),
+				type.get_pointer().type->span,
+				file_id
+			),
+			type.get_pointer().mutable_
+		);
+	}
+}
+
+void Resolver::infer() {}

@@ -189,8 +189,8 @@ private:
 			return TypeVar(value_t {std::in_place_index<(size_t) Kind::Named>, Named {name}});
 		}
 
-		inline static TypeVar make_pointer(Pointer&& pointer) {
-			return TypeVar(value_t {std::in_place_index<(size_t) Kind::Pointer>, std::move(pointer)});
+		inline static TypeVar make_pointer(ID pointee, bool mutable_) {
+			return TypeVar(value_t {std::in_place_index<(size_t) Kind::Pointer>, Pointer {pointee, mutable_}});
 		}
 
 		inline static TypeVar make_void() {
@@ -571,6 +571,7 @@ private:
 
 	void add_unknown_symbol_diagnostic(std::string_view symbol, Span, std::vector<std::string> const& possibilities, std::string_view scope_type, FileContext::ID, bool add_import_suggestion = false);
 
+	TypeVar from_type(AST::Type::Atom const&, FileContext::ID);
 	TypeVar from_type(AST::Type const&, FileContext::ID);
 
 	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
