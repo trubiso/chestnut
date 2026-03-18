@@ -16,7 +16,7 @@ void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file
 	                module.name.span,
 	                module.name.value.name,
 	                &module,
-	                register_type(TypeInfo::make_module(), module.name.span, file_id, module.name.value.id.value()),
+	                register_type(TypeVar::make_module(), module.name.span, file_id),
 	                false,
 	                exported,
 	                {}}
@@ -83,16 +83,15 @@ void Resolver::identify(AST::TraitImplementation& trait_implementation, bool exp
 }
 
 void Resolver::identify(AST::Function& function, bool exported, FileContext::ID file_id) {
-	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> arguments {};
+	std::vector<std::tuple<std::optional<std::string>, TypeVar::ID>> arguments {};
 	arguments.reserve(function.arguments.size());
 
 	for (auto& argument : function.arguments) {
 		identify(argument.name.value);
-		TypeInfo::ID type_id = register_type(
+		TypeVar::ID type_id = register_type(
 			from_type(argument.type.value, file_id),
 			argument.type.span,
-			file_id,
-			argument.name.value.id.value()
+			file_id
 		);
 		symbol_pool_.push_back(
 			Symbol {argument.name.value.id.value(),
@@ -110,7 +109,7 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 		);
 	}
 
-	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	std::vector<std::tuple<std::optional<std::string>, TypeVar::ID>> generics {};
 	if (function.generic_declaration.has_value()) {
 		identify(function.generic_declaration.value(), file_id);
 		for (auto& generic : function.generic_declaration.value().generics)
@@ -120,9 +119,10 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 			);
 	}
 
-	TypeInfo::ID return_
+	TypeVar::ID return_
 		= register_type(from_type(function.return_type.value, file_id), function.return_type.span, file_id);
 
+	/*
 	identify(function.name.value);
 	symbol_pool_.push_back(
 		Symbol {function.name.value.id.value(),
@@ -131,8 +131,8 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 	                function.name.value.name,
 	                &function,
 	                register_type(
-				TypeInfo::make_function(
-					TypeInfo::Function {std::move(arguments), std::move(generics), return_}
+				TypeVar::make_function(
+					TypeVar::Function {std::move(arguments), std::move(generics), return_}
 				),
 				function.name.span,
 				file_id,
@@ -142,13 +142,15 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 	                exported,
 	                {}}
 	);
+	*/
 }
 
 void Resolver::identify(AST::GenericDeclaration& generic_declaration, FileContext::ID file_id) {
+	/*
 	for (auto& generic : generic_declaration.generics) {
 		identify(generic.name.value);
-		TypeInfo::ID stub_type = register_type(
-			TypeInfo::make_bottom(),
+		TypeVar::ID stub_type = register_type(
+			TypeVar::make_bottom(),
 			generic.name.span,
 			file_id,
 			generic.name.value.id.value()
@@ -165,13 +167,15 @@ void Resolver::identify(AST::GenericDeclaration& generic_declaration, FileContex
 		                {}}
 		);
 	}
+	*/
 }
 
 void Resolver::identify_module_items() {
 	for (ParsedFile& file : parsed_files) { identify(file.module, true, file.file_id); }
 }
 
-void Resolver::identify_built_in_operator(IR::BuiltInFunction function, Token::Symbol operator_, TypeInfo::ID type) {
+void Resolver::identify_built_in_operator(IR::BuiltInFunction function, Token::Symbol operator_, TypeVar::ID type) {
+	/*
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
@@ -180,82 +184,88 @@ void Resolver::identify_built_in_operator(IR::BuiltInFunction function, Token::S
 	symbol_pool_.push_back(
 		Symbol {id, file_id, span, get_variant_name(operator_), function, type, false, true, {}}
 	);
-
-	type_symbol_mapping_.at(type) = id;
+	*/
 }
 
 void Resolver::identify_built_in_unary_operator(
 	IR::BuiltInFunction function,
 	Token::Symbol       operator_,
-	TypeInfo::ID        type,
+	TypeVar::ID        type,
 	bool                generic
 ) {
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
-	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	std::vector<std::tuple<std::optional<std::string>, TypeVar::ID>> generics {};
 	if (generic) generics.emplace_back(std::nullopt, type);
 
-	TypeInfo function_type
-		= TypeInfo::make_function(TypeInfo::Function {{{std::nullopt, type}}, std::move(generics), type});
+	/*
+	TypeVar function_type
+		= TypeVar::make_function(TypeVar::Function {{{std::nullopt, type}}, std::move(generics), type});
 	identify_built_in_operator(function, operator_, register_type(std::move(function_type), span, file_id));
+	*/
 }
 
 void Resolver::identify_built_in_binary_operator(
 	IR::BuiltInFunction function,
 	Token::Symbol       operator_,
-	TypeInfo::ID        type,
+	TypeVar::ID        type,
 	bool                generic
 ) {
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
-	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	std::vector<std::tuple<std::optional<std::string>, TypeVar::ID>> generics {};
 	if (generic) generics.emplace_back(std::nullopt, type);
 
-	TypeInfo function_type = TypeInfo::make_function(
-		TypeInfo::Function {
+	/*
+	TypeVar function_type = TypeVar::make_function(
+		TypeVar::Function {
 			{{std::nullopt, type}, {std::nullopt, type}},
 			std::move(generics),
 			type
         }
 	);
 	identify_built_in_operator(function, operator_, register_type(std::move(function_type), span, file_id));
+	*/
 }
 
 void Resolver::identify_built_in_binary_comparison_operator(
 	IR::BuiltInFunction function,
 	Token::Symbol       operator_,
-	TypeInfo::ID        type,
+	TypeVar::ID        type,
 	bool                generic
 ) {
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
-	std::vector<std::tuple<std::optional<std::string>, TypeInfo::ID>> generics {};
+	std::vector<std::tuple<std::optional<std::string>, TypeVar::ID>> generics {};
 	if (generic) generics.emplace_back(std::nullopt, type);
 
-	TypeInfo::ID return_id     = register_type(TypeInfo::make_known_bool(), span, file_id);
-	TypeInfo     function_type = TypeInfo::make_function(
-                TypeInfo::Function {
+	TypeVar::ID return_id     = register_type(TypeVar::make_bool(), span, file_id);
+	/*
+	TypeVar     function_type = TypeVar::make_function(
+                TypeVar::Function {
 			    {{std::nullopt, type}, {std::nullopt, type}},
                         std::move(generics),
                         return_id
         }
         );
 	identify_built_in_operator(function, operator_, register_type(std::move(function_type), span, file_id));
+	*/
 }
 
-Resolver::TypeInfo::ID Resolver::create_built_in_generic(std::string&& name, std::string&& trait_bound) {
+Resolver::TypeVar::ID Resolver::create_built_in_generic(std::string&& name, std::string&& trait_bound) {
 	Span            span    = Span::zero();
 	FileContext::ID file_id = FileContext::BUILT_IN_ID;
 
 	AST::SymbolID trait_symbol = built_in_traits_.at(trait_bound).name.value.id.value();
 	AST::SymbolID symbol_id    = symbol_next();
 
-	TypeInfo::ID type_id = register_type(
-		TypeInfo::make_generic(
-			TypeInfo::Generic {symbol_id, {TypeInfo::Generic::TraitConstraint {trait_symbol, {}}}, {}}
+	/*
+	TypeVar::ID type_id = register_type(
+		TypeVar::make_generic(
+			TypeVar::Generic {symbol_id, {TypeVar::Generic::TraitConstraint {trait_symbol, {}}}, {}}
 		),
 		span,
 		file_id
@@ -275,6 +285,7 @@ Resolver::TypeInfo::ID Resolver::create_built_in_generic(std::string&& name, std
 	);
 
 	return type_id;
+	*/
 }
 
 void Resolver::identify_built_in_operators() {
@@ -368,39 +379,40 @@ void Resolver::identify_built_in_operators() {
 	identify_built_in_binary_comparison_operator(
 		IR::BuiltInFunction::EqChars,
 		Token::Symbol::EqEq,
-		register_type(TypeInfo::make_known_char(), span, file_id)
+		register_type(TypeVar::make_char(), span, file_id)
 	);
 	identify_built_in_binary_comparison_operator(
 		IR::BuiltInFunction::EqBools,
 		Token::Symbol::EqEq,
-		register_type(TypeInfo::make_known_bool(), span, file_id)
+		register_type(TypeVar::make_bool(), span, file_id)
 	);
 	identify_built_in_binary_comparison_operator(
 		IR::BuiltInFunction::NeChars,
 		Token::Symbol::Ne,
-		register_type(TypeInfo::make_known_char(), span, file_id)
+		register_type(TypeVar::make_char(), span, file_id)
 	);
 	identify_built_in_binary_comparison_operator(
 		IR::BuiltInFunction::NeBools,
 		Token::Symbol::Ne,
-		register_type(TypeInfo::make_known_bool(), span, file_id)
+		register_type(TypeVar::make_bool(), span, file_id)
 	);
 	// identify unary boolean negation
 	identify_built_in_unary_operator(
 		IR::BuiltInFunction::NegateBool,
 		Token::Symbol::Bang,
-		register_type(TypeInfo::make_known_bool(), span, file_id)
+		register_type(TypeVar::make_bool(), span, file_id)
 	);
 }
 
 void Resolver::push_built_in_trait(AST::Name const& name, std::vector<AST::SymbolID>&& constraints) {
-	std::vector<TypeInfo::Generic::TraitConstraint> trait_constraints {};
+	/*
+	std::vector<TypeVar::Generic::TraitConstraint> trait_constraints {};
 	trait_constraints.reserve(constraints.size());
 	std::transform(
 		constraints.cbegin(),
 		constraints.cend(),
 		std::back_inserter(trait_constraints),
-		[](AST::SymbolID id) { return TypeInfo::Generic::TraitConstraint {id, {}}; }
+		[](AST::SymbolID id) { return TypeVar::Generic::TraitConstraint {id, {}}; }
 	);
 
 	Span            span    = Span::zero();
@@ -417,6 +429,7 @@ void Resolver::push_built_in_trait(AST::Name const& name, std::vector<AST::Symbo
 	                {},
 	                std::move(trait_constraints)}
 	);
+	*/
 }
 
 Spanned<AST::Name> Resolver::make_built_in_name(std::string name_string) {

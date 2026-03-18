@@ -7,170 +7,6 @@
 #include <sstream>
 #include <variant>
 
-IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, TypeInfo::ID type_origin, bool allow_functions) {
-	TypeInfo const& type = type_pool_.at(type_id);
-	switch (type.kind()) {
-	// bottoms directly correspond to overconstrained types
-	case TypeInfo::Kind::Bottom:    return IR::Type::make_atom(IR::Type::Atom::make_error());
-	case TypeInfo::Kind::KnownVoid: return IR::Type::make_atom(IR::Type::Atom::make_void());
-	case TypeInfo::Kind::KnownChar: return IR::Type::make_atom(IR::Type::Atom::make_char());
-	case TypeInfo::Kind::KnownBool: return IR::Type::make_atom(IR::Type::Atom::make_bool());
-	case TypeInfo::Kind::KnownFloat:
-		return IR::Type::make_atom(
-			IR::Type::Atom::make_float((IR::Type::Atom::Float::Width) type.get_known_float().width)
-		);
-	case TypeInfo::Kind::PartialFloat:
-		return IR::Type::make_atom(IR::Type::Atom::make_float(IR::DEFAULT_FLOAT_WIDTH));
-	case TypeInfo::Kind::Unknown:
-	case TypeInfo::Kind::Module:
-	case TypeInfo::Kind::Function:
-	case TypeInfo::Kind::SameAs:
-	case TypeInfo::Kind::Generic:
-	case TypeInfo::Kind::MemberAccess:
-	case TypeInfo::Kind::Named:
-	case TypeInfo::Kind::Pointer:
-	case TypeInfo::Kind::KnownInteger:
-	case TypeInfo::Kind::PartialInteger: break;
-	}
-
-	// FIXME: we throw a million diagnostics when there are resolved type cycles
-	auto [span, file_id] = type_span_pool_.at(type_origin);
-	if (type.is_unknown() || type.is_member_access()) {
-		// member accesses shouldn't make it to lowering, but you never know!
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"unknown type",
-				"this type cannot be inferred automatically",
-				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
-			)
-		);
-		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.is_module()) {
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"invalid type",
-				"modules cannot be used as values",
-				{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
-			)
-		);
-		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.is_function()) {
-		if (!allow_functions)
-			parsed_files.at(file_id).diagnostics.push_back(
-				Diagnostic::error(
-					"invalid type",
-					"functions cannot be used as values",
-					{Diagnostic::Sample(get_context(file_id), span, OutFmt::Color::Red)}
-				)
-			);
-		// even if we allow functions, we don't have a type for them :P
-		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.is_same_as()) {
-		TypeInfo::SameAs const& same_as = type.get_same_as();
-		// we should never reach this case
-		assert(!same_as.ids.empty());
-		if (same_as.ids.size() == 1) return reconstruct_type(same_as.ids.at(0), type_origin);
-		parsed_files.at(file_id).diagnostics.push_back(
-			Diagnostic::error(
-				"unknown type",
-				"this type cannot be decided from its possibilities",
-				{get_type_sample(type_origin, OutFmt::Color::Red)}
-			)
-		);
-		return IR::Type::make_atom(IR::Type::Atom::make_error());
-	} else if (type.is_generic()) {
-		return IR::Type::make_atom(
-			IR::Type::Atom::make_named(Spanned {get_type_span(type_origin), type.get_generic().name}, {})
-		);
-	} else if (type.is_named()) {
-		assert(type.get_named().candidates().size() == 1 && "this named type should've become a bottom!");
-		auto const&     candidate = type.get_named().candidates().at(0);
-		IR::GenericList generic_list {};
-		generic_list.reserve(candidate.generics.size());
-		std::transform(
-			candidate.generics.cbegin(),
-			candidate.generics.cend(),
-			std::back_inserter(generic_list),
-			[this](TypeInfo::ID type) {
-				return Spanned {get_type_span(type), reconstruct_type(type, true)};
-			}
-		);
-		return IR::Type::make_atom(
-			IR::Type::Atom::make_named(
-				Spanned {get_type_span(type_origin), candidate.name},
-				std::move(generic_list)
-			)
-		);
-	} else if (type.is_pointer()) {
-		return IR::Type::make_pointer(
-			IR::Type::Pointer {
-				std::make_unique<Spanned<IR::Type>>(Spanned {
-					get_type_span(type_id),
-					reconstruct_type(type.get_pointer().pointee, type_origin)
-				}),
-				type.get_pointer().mutable_
-			}
-		);
-	} else if (type.is_known_integer()) {
-		auto const& integer = type.get_known_integer().integer;
-		switch (integer.width_type()) {
-		case AST::Type::Atom::Integer::WidthType::Fixed:
-			return IR::Type::make_atom(
-				IR::Type::Atom::make_integer(integer.bit_width().value(), integer.is_signed())
-			);
-		case AST::Type::Atom::Integer::WidthType::Ptr:
-			return IR::Type::make_atom(
-				// FIXME: get size from target!!!
-			        // program_.getDataLayout().getAddressSizeInBits((unsigned) 0)
-				IR::Type::Atom::make_integer(64, integer.is_signed())
-			);
-		case AST::Type::Atom::Integer::WidthType::Size:
-			return IR::Type::make_atom(
-				// FIXME: get size from target!!!
-			        // program_.getDataLayout().getPointerSizeInBits(0)
-				IR::Type::Atom::make_integer(64, integer.is_signed())
-			);
-		case AST::Type::Atom::Integer::WidthType::Any: [[assume(false)]]; break;
-		}
-	} else if (type.is_partial_integer()) {
-		// default is signed!
-		bool        signed_ = true;
-		auto const& integer = type.get_partial_integer().integer;
-		if (type.get_partial_integer().signed_is_known) signed_ = integer.is_signed();
-		switch (integer.width_type()) {
-		case AST::Type::Atom::Integer::WidthType::Any:
-		case AST::Type::Atom::Integer::WidthType::Fixed:
-			return IR::Type::make_atom(
-				IR::Type::Atom::make_integer(
-					integer.width_type() == AST::Type::Atom::Integer::WidthType::Any
-						? IR::DEFAULT_INTEGER_WIDTH
-						: integer.bit_width().value(),
-					signed_
-				)
-			);
-		case AST::Type::Atom::Integer::WidthType::Ptr:
-			return IR::Type::make_atom(
-				// FIXME: get size from target!!!
-			        // program_.getDataLayout().getAddressSizeInBits((unsigned) 0)
-				IR::Type::Atom::make_integer(64, signed_)
-			);
-		case AST::Type::Atom::Integer::WidthType::Size:
-			return IR::Type::make_atom(
-				// FIXME: get size from target!!!
-			        // program_.getDataLayout().getPointerSizeInBits(0)
-				IR::Type::Atom::make_integer(64, signed_)
-			);
-		}
-	}
-
-	[[assume(false)]];
-	return IR::Type::make_atom(IR::Type::Atom::make_error());
-}
-
-IR::Type Resolver::reconstruct_type(TypeInfo::ID type_id, bool allow_functions) {
-	return reconstruct_type(type_id, type_id, allow_functions);
-}
-
 Spanned<IR::Value> Resolver::lower_get_default_value(IR::Type const& type, Span span, FileContext::ID file_id) {
 	// TODO: default values for structs (for now, just default value for each field)
 	if (!type.is_atom()) goto diagnostic;
@@ -293,7 +129,7 @@ Spanned<IR::Identifier> Resolver::extract_value_id(
 	IR::Value&&                  expression,
 	Span                         span,
 	IR::Type&&                   type,
-	TypeInfo::ID                 type_id,
+	TypeVar::ID                  type_id,
 	std::vector<IR::BasicBlock>& basic_blocks,
 	FileContext::ID              file_id
 ) {
@@ -331,7 +167,7 @@ Spanned<IR::Identifier> Resolver::extract_value_id(
 Spanned<IR::Place> Resolver::place_from_value(
 	Spanned<IR::Value>&&         value,
 	IR::Type&&                   type,
-	TypeInfo::ID                 type_id,
+	TypeVar::ID                  type_id,
 	std::vector<IR::BasicBlock>& basic_blocks,
 	FileContext::ID              file_id
 ) {
@@ -382,7 +218,7 @@ Spanned<IR::Value::Atom> Resolver::extract_value(
 
 IR::Value::Atom Resolver::lower_atom(
 	AST::Expression::Atom::StructLiteral const& struct_literal,
-	TypeInfo::ID                                type_id,
+	TypeVar::ID                                 type_id,
 	Span                                        span,
 	std::vector<IR::BasicBlock>&                basic_blocks,
 	FileContext::ID                             file_id,
@@ -421,7 +257,7 @@ IR::Value::Atom Resolver::lower_atom(
 
 IR::Value::Atom Resolver::lower_atom(
 	AST::Expression::Atom const& atom,
-	TypeInfo::ID                 type_id,
+	TypeVar::ID                  type_id,
 	Span                         span,
 	std::vector<IR::BasicBlock>& basic_blocks,
 	FileContext::ID              file_id,
@@ -502,7 +338,7 @@ IR::Value::Atom Resolver::lower_atom(
 
 Spanned<IR::Value> Resolver::lower_value(
 	AST::Expression::Atom const& atom,
-	TypeInfo::ID                 type_id,
+	TypeVar::ID                  type_id,
 	Span                         span,
 	std::vector<IR::BasicBlock>& basic_blocks,
 	FileContext::ID              file_id,
@@ -522,6 +358,9 @@ Spanned<IR::Value> Resolver::lower_value(
 
 	if (!function_call.call_type.has_value()) return error;
 
+	return error;
+
+	/*
 	auto callee = lower_value(*function_call.callee, basic_blocks, file_id, true);
 	// if the callee is not valid, we've already thrown diagnostics about it
 	if (!callee.value.is_atom() || !callee.value.get_atom().is_identifier()) return error;
@@ -529,34 +368,34 @@ Spanned<IR::Value> Resolver::lower_value(
 
 	// now we need to reconstruct the argument order from the type
 	// these assertions shouldn't fail if we've successfully resolved, but you never know!
-	TypeInfo::ID function_id = symbol_pool_.at(callee_identifier.value).type;
+	TypeVar::ID function_id = symbol_pool_.at(callee_identifier.value).type;
 	if (!type_pool_.at(function_id).is_function()) return error;
-	TypeInfo::Function const& function = type_pool_.at(function_id).get_function();
+	TypeVar::Function const& function = type_pool_.at(function_id).get_function();
 	size_t argument_count = function_call.arguments.ordered.size() + function_call.arguments.labeled.size();
 	assert(function.arguments.size() == argument_count);
 	std::vector<Spanned<IR::Value::Atom>> arguments {};
 	arguments.reserve(argument_count);
 	// ordered arguments are freebies
 	std::transform(
-		function_call.arguments.ordered.cbegin(),
-		function_call.arguments.ordered.cend(),
-		std::back_inserter(arguments),
-		[this, &basic_blocks, file_id](auto const& ordered_argument) {
-			return extract_value(ordered_argument, basic_blocks, file_id);
-		}
+	        function_call.arguments.ordered.cbegin(),
+	        function_call.arguments.ordered.cend(),
+	        std::back_inserter(arguments),
+	        [this, &basic_blocks, file_id](auto const& ordered_argument) {
+	                return extract_value(ordered_argument, basic_blocks, file_id);
+	        }
 	);
 	// labeled arguments have to be reordered according to the function call type
 	for (size_t i = function_call.arguments.ordered.size(); i < argument_count; ++i) {
-		assert(std::get<0>(function.arguments.at(i)).has_value());
-		std::string argument_name  = std::get<0>(function.arguments.at(i)).value();
-		bool        argument_found = false;
-		for (auto const& [label, argument] : function_call.arguments.labeled) {
-			if (label.value == argument_name) {
-				arguments.push_back(extract_value(argument, basic_blocks, file_id));
-				argument_found = true;
-			}
-		}
-		assert(argument_found);
+	        assert(std::get<0>(function.arguments.at(i)).has_value());
+	        std::string argument_name  = std::get<0>(function.arguments.at(i)).value();
+	        bool        argument_found = false;
+	        for (auto const& [label, argument] : function_call.arguments.labeled) {
+	                if (label.value == argument_name) {
+	                        arguments.push_back(extract_value(argument, basic_blocks, file_id));
+	                        argument_found = true;
+	                }
+	        }
+	        assert(argument_found);
 	}
 	assert(arguments.size() == argument_count);
 
@@ -564,54 +403,55 @@ Spanned<IR::Value> Resolver::lower_value(
 	IR::GenericList generic_list {};
 	auto const&     function_generics = type_pool_.at(function_call.call_type.value()).get_function().generics;
 	if (!function_generics.empty()) {
-		assert(function.generics.size() == function_generics.size());
-		generic_list.reserve(function_generics.size());
+	        assert(function.generics.size() == function_generics.size());
+	        generic_list.reserve(function_generics.size());
 
-		size_t ordered_amt = function_call.generic_list.has_value()
-		                           ? function_call.generic_list.value().ordered.size()
-		                           : 0;
-		size_t total_amt   = function_call.generic_list.has_value()
-		                           ? (ordered_amt + function_call.generic_list.value().labeled.size())
-		                           : 0;
+	        size_t ordered_amt = function_call.generic_list.has_value()
+	                                   ? function_call.generic_list.value().ordered.size()
+	                                   : 0;
+	        size_t total_amt   = function_call.generic_list.has_value()
+	                                   ? (ordered_amt + function_call.generic_list.value().labeled.size())
+	                                   : 0;
 
-		for (size_t i = 0; i < function_generics.size(); ++i) {
-			auto type = reconstruct_type(std::get<1>(function_generics.at(i)));
-			if (i < ordered_amt) {
-				// ordered generics are freebies
-				generic_list.emplace_back(
-					function_call.generic_list.value().ordered.at(i).span,
-					std::move(type)
-				);
-			} else if (i < total_amt) {
-				// we must find the labeled generic span
-				assert(std::get<0>(function.generics.at(i)).has_value());
-				std::string generic_name  = std::get<0>(function.generics.at(i)).value();
-				bool        generic_found = false;
-				Span        generic_span(0);
-				for (auto& [label, generic] : function_call.generic_list.value().labeled) {
-					if (label.value == generic_name) {
-						assert(!generic_found);
-						generic_span  = generic.span;
-						generic_found = true;
-					}
-				}
-				assert(generic_found);
-				generic_list.emplace_back(generic_span, std::move(type));
-			} else {
-				generic_list.emplace_back(span, std::move(type));
-			}
-		}
-		assert(generic_list.size() == function.generics.size());
+	        for (size_t i = 0; i < function_generics.size(); ++i) {
+	                auto type = reconstruct_type(std::get<1>(function_generics.at(i)));
+	                if (i < ordered_amt) {
+	                        // ordered generics are freebies
+	                        generic_list.emplace_back(
+	                                function_call.generic_list.value().ordered.at(i).span,
+	                                std::move(type)
+	                        );
+	                } else if (i < total_amt) {
+	                        // we must find the labeled generic span
+	                        assert(std::get<0>(function.generics.at(i)).has_value());
+	                        std::string generic_name  = std::get<0>(function.generics.at(i)).value();
+	                        bool        generic_found = false;
+	                        Span        generic_span(0);
+	                        for (auto& [label, generic] : function_call.generic_list.value().labeled) {
+	                                if (label.value == generic_name) {
+	                                        assert(!generic_found);
+	                                        generic_span  = generic.span;
+	                                        generic_found = true;
+	                                }
+	                        }
+	                        assert(generic_found);
+	                        generic_list.emplace_back(generic_span, std::move(type));
+	                } else {
+	                        generic_list.emplace_back(span, std::move(type));
+	                }
+	        }
+	        assert(generic_list.size() == function.generics.size());
 	}
 
 	// finally, we have the callee and the arguments
 	// TODO: check if the result is a function for allow_functions
 	return {span,
 	        IR::Value::make_function_call(
-			std::move(callee_identifier),
-			std::move(generic_list),
-			std::move(arguments)
-		)};
+	                std::move(callee_identifier),
+	                std::move(generic_list),
+	                std::move(arguments)
+	        )};
+	*/
 }
 
 Spanned<IR::Value> Resolver::lower_value(
@@ -685,7 +525,7 @@ Spanned<IR::Value> Resolver::lower_value(
 
 Spanned<IR::Place> Resolver::lower_place(
 	AST::Expression::AddressOperation const& address_operation,
-	TypeInfo::ID                             type_id,
+	TypeVar::ID                              type_id,
 	Span                                     span,
 	std::vector<IR::BasicBlock>&             basic_blocks,
 	FileContext::ID                          file_id,
@@ -702,7 +542,7 @@ Spanned<IR::Place> Resolver::lower_place(
 
 Spanned<IR::Place> Resolver::lower_place(
 	AST::Expression::FunctionCall const& function_call,
-	TypeInfo::ID                         type_id,
+	TypeVar::ID                          type_id,
 	Span                                 span,
 	std::vector<IR::BasicBlock>&         basic_blocks,
 	FileContext::ID                      file_id,
@@ -726,7 +566,7 @@ Spanned<IR::Place> Resolver::lower_place(
 
 Spanned<IR::Place> Resolver::lower_place(
 	AST::Expression::UnaryOperation const& unary_operation,
-	TypeInfo::ID                           type_id,
+	TypeVar::ID                            type_id,
 	Span                                   span,
 	std::vector<IR::BasicBlock>&           basic_blocks,
 	FileContext::ID                        file_id,
@@ -745,7 +585,7 @@ Spanned<IR::Place> Resolver::lower_place(
 
 Spanned<IR::Place> Resolver::lower_place(
 	AST::Expression::Atom const& atom,
-	TypeInfo::ID                 type_id,
+	TypeVar::ID                  type_id,
 	Span                         span,
 	std::vector<IR::BasicBlock>& basic_blocks,
 	FileContext::ID              file_id,
@@ -762,7 +602,7 @@ Spanned<IR::Place> Resolver::lower_place(
 
 Spanned<IR::Place> Resolver::lower_place(
 	AST::Expression::MemberAccess const& member_access,
-	TypeInfo::ID                         type_id,
+	TypeVar::ID                          type_id,
 	Span                                 span,
 	std::vector<IR::BasicBlock>&         basic_blocks,
 	FileContext::ID                      file_id,
@@ -1072,45 +912,47 @@ Resolver::lower(std::optional<AST::GenericDeclaration>& maybe_generic_declaratio
 		auto const& symbol = get_single_symbol(generic.name.value);
 		if (type_pool_.at(symbol.type).is_bottom()) goto bail;
 
+		/*
 		{
-			auto const& trait_constraints = type_pool_.at(symbol.type).get_generic().declared_constraints;
+		        auto const& trait_constraints = type_pool_.at(symbol.type).get_generic().declared_constraints;
 
-			// PERF: we should maybe pre-expand these beforehand instead of doing it so many times
-			std::vector<TypeInfo::Generic::TraitConstraint> expanded_list {};
+		        // PERF: we should maybe pre-expand these beforehand instead of doing it so many times
+		        std::vector<TypeVar::Generic::TraitConstraint> expanded_list {};
 
-			for (auto const& trait_constraint : trait_constraints) {
-				std::vector<TypeInfo::Generic::TraitConstraint> expanded
-					= expand_trait(trait_constraint);
-				std::move(expanded.begin(), expanded.end(), std::back_inserter(expanded_list));
-			}
+		        for (auto const& trait_constraint : trait_constraints) {
+		                std::vector<TypeVar::Generic::TraitConstraint> expanded
+		                        = expand_trait(trait_constraint);
+		                std::move(expanded.begin(), expanded.end(), std::back_inserter(expanded_list));
+		        }
 
-			auto maybe_expanded = reduce_to_unique(std::move(expanded_list));
-			if (!maybe_expanded.has_value()) goto bail;
-			expanded_list = std::move(maybe_expanded.value());
+		        auto maybe_expanded = reduce_to_unique(std::move(expanded_list));
+		        if (!maybe_expanded.has_value()) goto bail;
+		        expanded_list = std::move(maybe_expanded.value());
 
-			constraints.reserve(expanded_list.size());
-			std::transform(
-				expanded_list.begin(),
-				expanded_list.end(),
-				std::back_inserter(constraints),
-				[this](TypeInfo::Generic::TraitConstraint& constraint) {
-					IR::GenericList generic_list {};
-					generic_list.reserve(constraint.arguments.size());
-					std::transform(
-						constraint.arguments.cbegin(),
-						constraint.arguments.cend(),
-						std::back_inserter(generic_list),
-						[this](TypeInfo::ID type_id) {
-							return Spanned {
-								get_type_span(type_id),
-								reconstruct_type(type_id)
-							};
-						}
-					);
-					return IR::Generic::Constraint {constraint.name, std::move(generic_list)};
-				}
-			);
+		        constraints.reserve(expanded_list.size());
+		        std::transform(
+		                expanded_list.begin(),
+		                expanded_list.end(),
+		                std::back_inserter(constraints),
+		                [this](TypeVar::Generic::TraitConstraint& constraint) {
+		                        IR::GenericList generic_list {};
+		                        generic_list.reserve(constraint.arguments.size());
+		                        std::transform(
+		                                constraint.arguments.cbegin(),
+		                                constraint.arguments.cend(),
+		                                std::back_inserter(generic_list),
+		                                [this](TypeVar::ID type_id) {
+		                                        return Spanned {
+		                                                get_type_span(type_id),
+		                                                reconstruct_type(type_id)
+		                                        };
+		                                }
+		                        );
+		                        return IR::Generic::Constraint {constraint.name, std::move(generic_list)};
+		                }
+		        );
 		}
+		*/
 	bail:
 		new_declaration.emplace_back(generic.name.value.id.value(), std::move(constraints));
 	}
@@ -1119,7 +961,7 @@ Resolver::lower(std::optional<AST::GenericDeclaration>& maybe_generic_declaratio
 }
 
 IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
-	auto const& function_type = type_pool_.at(get_single_symbol(function.name.value).type).get_function();
+	// auto const& function_type = type_pool_.at(get_single_symbol(function.name.value).type).get_function();
 	std::vector<IR::Function::Argument> arguments {};
 	arguments.reserve(function.arguments.size());
 	for (auto& [name, type, _, mutable_] : function.arguments) {
@@ -1131,69 +973,72 @@ IR::Function Resolver::lower(AST::Function& function, FileContext::ID file_id) {
                 }
 		);
 	}
-	Spanned<IR::Type>           return_type = {function.return_type.span, reconstruct_type(function_type.return_)};
+	// Spanned<IR::Type>           return_type = {function.return_type.span,
+	// reconstruct_type(function_type.return_)};
 	std::vector<IR::BasicBlock> basic_blocks {};
+	/*
 	if (function.body.has_value()) {
-		basic_blocks.push_back(IR::BasicBlock {0, {}, std::monostate {}});
-		lower(function.body.value(), function, basic_blocks, file_id);
-		// after lowering, we need to ensure that all of these basic blocks are valid IR
-		bool returns = std::any_of(
-			     basic_blocks.cbegin(),
-			     basic_blocks.cend(),
-			     [](IR::BasicBlock const& basic_block) {
-				     return std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump);
-			     }
-		     ),
-		     needs_to_return = !return_type.value.get_atom().is_void();
-		if (!returns) {
-			// if it doesn't need to return, we can add the return manually
-			if (!needs_to_return) {
-				// this is the only place where we could have a monostate!
-				if (std::holds_alternative<std::monostate>(
-					    basic_blocks.at(basic_blocks.size() - 1).jump
-				    )) {
-					// we can automatically add a return void
-					basic_blocks.at(basic_blocks.size() - 1).jump
-						= IR::BasicBlock::Return {std::nullopt};
-				} else {
-					// otherwise, this function actually never returns
-					parsed_files.at(file_id).diagnostics.push_back(
-						Diagnostic::warning(
-							"function never returns",
-							"there is no way for this function to ever return. if this is intentional, you should mark the function as such (there is no way to do so currently)",
-							{Diagnostic::Sample(
-								get_context(file_id),
-								function.name.span,
-								OutFmt::Color::Yellow
-							)}
-						)
-					);
-				}
-			} else {
-				// if it does, we need to add an error. this will prevent codegen from running
-				parsed_files.at(file_id).diagnostics.push_back(
-					Diagnostic::error(
-						"non-void function has no return statement",
-						"there is no way for this non-void function to ever return a value",
-						{Diagnostic::Sample(
-							get_context(file_id),
-							function.name.span,
-							OutFmt::Color::Red
-						)}
-					)
-				);
-			}
-		}
+	        basic_blocks.push_back(IR::BasicBlock {0, {}, std::monostate {}});
+	        lower(function.body.value(), function, basic_blocks, file_id);
+	        // after lowering, we need to ensure that all of these basic blocks are valid IR
+	        bool returns = std::any_of(
+	                     basic_blocks.cbegin(),
+	                     basic_blocks.cend(),
+	                     [](IR::BasicBlock const& basic_block) {
+	                             return std::holds_alternative<IR::BasicBlock::Return>(basic_block.jump);
+	                     }
+	             ),
+	             needs_to_return = !return_type.value.get_atom().is_void();
+	        if (!returns) {
+	                // if it doesn't need to return, we can add the return manually
+	                if (!needs_to_return) {
+	                        // this is the only place where we could have a monostate!
+	                        if (std::holds_alternative<std::monostate>(
+	                                    basic_blocks.at(basic_blocks.size() - 1).jump
+	                            )) {
+	                                // we can automatically add a return void
+	                                basic_blocks.at(basic_blocks.size() - 1).jump
+	                                        = IR::BasicBlock::Return {std::nullopt};
+	                        } else {
+	                                // otherwise, this function actually never returns
+	                                parsed_files.at(file_id).diagnostics.push_back(
+	                                        Diagnostic::warning(
+	                                                "function never returns",
+	                                                "there is no way for this function to ever return. if this is
+	intentional, you should mark the function as such (there is no way to do so currently)", {Diagnostic::Sample(
+	                                                        get_context(file_id),
+	                                                        function.name.span,
+	                                                        OutFmt::Color::Yellow
+	                                                )}
+	                                        )
+	                                );
+	                        }
+	                } else {
+	                        // if it does, we need to add an error. this will prevent codegen from running
+	                        parsed_files.at(file_id).diagnostics.push_back(
+	                                Diagnostic::error(
+	                                        "non-void function has no return statement",
+	                                        "there is no way for this non-void function to ever return a value",
+	                                        {Diagnostic::Sample(
+	                                                get_context(file_id),
+	                                                function.name.span,
+	                                                OutFmt::Color::Red
+	                                        )}
+	                                )
+	                        );
+	                }
+	        }
 	};
 	auto generic_declaration = lower(function.generic_declaration, file_id);
 	return IR::Function {
-		{function.name.span, function.name.value.id.value()},
-		std::move(generic_declaration),
-		std::move(arguments),
-		std::move(return_type),
-		std::move(basic_blocks),
-		false
+	        {function.name.span, function.name.value.id.value()},
+	        std::move(generic_declaration),
+	        std::move(arguments),
+	        std::move(return_type),
+	        std::move(basic_blocks),
+	        false
 	};
+	*/
 }
 
 IR::Struct Resolver::lower(AST::Struct& struct_, FileContext::ID file_id) {
@@ -1224,7 +1069,7 @@ IR::Module Resolver::lower(AST::Module& original_module, FileContext::ID file_id
 		auto& value = std::get<AST::Module::InnerItem>(item.value);
 		if (std::holds_alternative<AST::Function>(value)) {
 			AST::Function& function = std::get<AST::Function>(value);
-			if (!type_pool_.at(get_single_symbol(function.name.value).type).is_function()) continue;
+			// if (!type_pool_.at(get_single_symbol(function.name.value).type).is_function()) continue;
 			// TODO: make a more sophisticated system for these kinds of things
 			IR::Function lowered_function = lower(function, file_id);
 			for (AST::Tag const& tag : std::get<std::vector<AST::Tag>>(item.value)) {

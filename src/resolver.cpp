@@ -11,12 +11,8 @@ std::vector<IR::Module> Resolver::resolve(bool print_ir) {
 	populate_module_table();  // population
 	identify_module_items();
 
-	// symbols
-	resolve_identifiers();
-	prune_named_partial_types();
-
-	// type inference
-	infer_types();
+	// infer
+	infer();
 
 	// lowering
 	auto lowered = lower();

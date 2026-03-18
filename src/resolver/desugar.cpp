@@ -117,11 +117,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_binop(
 	// FIXME: these spans are not correct
 	Span stub_span = span;
 
-	AST::SymbolID new_id  = symbol_next();
-	TypeInfo::ID  type_id = register_type(TypeInfo::make_known_bool(), stub_span, file_id, new_id);
-	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, true, false, {}});
-	AST::Name new_var {"_"};
-	new_var.id = {new_id};
+	AST::Name new_var = create_name("_", TypeVar::make_bool(), true, stub_span, file_id);
 
 	AST::Expression value = AST::Expression::make_atom(AST::Expression::Atom::make_bool_literal(is_or));
 
@@ -191,11 +187,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 	// FIXME: these spans are not correct
 	Span stub_span = span;
 
-	AST::SymbolID new_id  = symbol_next();
-	TypeInfo::ID  type_id = register_type(TypeInfo::make_unknown(), stub_span, file_id, new_id);
-	symbol_pool_.push_back(Symbol {new_id, file_id, stub_span, "_", std::monostate {}, type_id, false, false, {}});
-	AST::Name new_var {"_"};
-	new_var.id = {new_id};
+	AST::Name new_var = create_name("_", TypeVar::make_unknown(), false, stub_span, file_id);
 
 	stmts.emplace_back(
 		stub_span,
@@ -234,7 +226,7 @@ std::vector<Spanned<AST::Statement>> Resolver::desugar_control_flow_expr_if(
 	AST::Expression new_var_expr2 = AST::Expression::make_atom(
 		AST::Expression::Atom::make_identifier(AST::Identifier {stub_span, new_var})
 	);
-	new_var_expr.type = new_var_expr1.type = new_var_expr2.type = type_id;
+	new_var_expr.type = new_var_expr1.type = new_var_expr2.type = get_single_symbol(new_var).type;
 
 	AST::Statement::Set set_true {
 		{stub_span, std::move(new_var_expr1)},
