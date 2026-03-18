@@ -503,6 +503,9 @@ private:
 	/// Gets a symbol from the symbol pool.
 	inline Symbol& get_single_symbol(AST::SymbolID id) { return symbol_pool_.at(id); }
 
+	/// Gets a symbol from the symbol pool.
+	inline Symbol const& get_single_symbol(AST::SymbolID id) const { return symbol_pool_.at(id); }
+
 	/// Gets a symbol from the symbol pool, assuming the identifier is fully decided.
 	inline Symbol& get_single_symbol(AST::Identifier const& identifier) {
 		assert(identifier.is_decided() && "attempted to obtain corresponding symbol for non-decided identifier");
