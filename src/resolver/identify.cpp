@@ -8,7 +8,8 @@ void Resolver::identify(
 	decltype(Symbol::item) item,
 	bool                   exported,
 	TypeVar                type,
-	FileContext::ID        file_id
+	FileContext::ID        file_id,
+	bool                   mutable_
 ) {
 	assert(!name.value.id.has_value());
 	name.value.id = register_symbol(
@@ -18,12 +19,43 @@ void Resolver::identify(
 	                name.value.name,
 	                std::move(item),
 	                register_type(std::move(type), name.span, file_id),
-	                false,
+	                mutable_,
 	                exported,
 	                {}},
 		name.span,
 		file_id
 	);
+}
+
+void Resolver::identify(AST::Statement& statement, FileContext::ID file_id) {
+	switch (statement.kind()) {
+	case AST::Statement::Kind::Declare: {
+		auto& declare = statement.get_declare();
+		identify(
+			declare.name,
+			std::monostate {},
+			false,
+			declare.type
+				.transform([this, file_id](auto const& type) { return from_type(type.value, file_id); })
+				.value_or(TypeVar::make_unknown()),
+			file_id,
+			declare.mutable_.value
+		);
+	} break;
+	case AST::Statement::Kind::Scope: {
+		for (auto& statement : statement.get_scope()) identify(statement.value, file_id);
+	} break;
+	case AST::Statement::Kind::Set:
+	case AST::Statement::Kind::Expression:
+	case AST::Statement::Kind::Return:
+	case AST::Statement::Kind::Label:
+	case AST::Statement::Kind::Goto:
+	case AST::Statement::Kind::Branch:
+	case AST::Statement::Kind::If:
+	case AST::Statement::Kind::While:
+	case AST::Statement::Kind::Break:
+	case AST::Statement::Kind::Continue:   break;
+	}
 }
 
 void Resolver::identify(AST::Module& module, bool exported, FileContext::ID file_id) {
@@ -93,7 +125,8 @@ void Resolver::identify(AST::Function& function, bool exported, FileContext::ID 
 	TypeVar::ID return_
 		= register_type(from_type(function.return_type.value, file_id), function.return_type.span, file_id);
 
-	// TODO: identify declarations
+	if (function.body.has_value())
+		for (auto& statement : function.body.value()) identify(statement.value, file_id);
 
 	// TODO: do something with these types above maybe?
 

@@ -358,7 +358,9 @@ private:
 	std::unordered_map<std::string, AST::Trait> built_in_traits_ {};
 
 	/// Registers a symbol for the provided name and sets its ID to the registered symbol's ID.
-	void identify(Spanned<AST::Name>&, decltype(Symbol::item), bool exported, TypeVar, FileContext::ID);
+	void identify(Spanned<AST::Name>&, decltype(Symbol::item), bool exported, TypeVar, FileContext::ID, bool mutable_ = false);
+	/// Identifies all variable declarations.
+	void identify(AST::Statement&, FileContext::ID);
 	/// Identifies the module with an ID and its non-alias items.
 	void identify(AST::Module&, bool exported, FileContext::ID);
 	/// Identifies the struct with an ID.
