@@ -17,6 +17,7 @@ AST::SymbolID Resolver::register_symbol(Symbol symbol, Span span, FileContext::I
 	symbol.span    = span;
 	symbol.file_id = file_id;
 	symbol_pool_.push_back(std::move(symbol));
+	return symbol.id;
 }
 
 Resolver::NameVar::ID Resolver::register_name(NameVar name, Span span, FileContext::ID file_id) {

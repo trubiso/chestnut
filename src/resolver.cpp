@@ -4,8 +4,8 @@
 
 std::vector<IR::Module> Resolver::resolve(bool print_ir) {
 	// identification
-	identify_built_in_traits();
-	identify_built_in_operators();
+	// identify_built_in_traits();
+	// identify_built_in_operators();
 	desugar_control_flow();  // desugar
 	identify_labels();
 	populate_module_table();  // population
@@ -13,6 +13,16 @@ std::vector<IR::Module> Resolver::resolve(bool print_ir) {
 
 	// infer
 	infer();
+
+	for (auto const& file : parsed_files) {
+		std::cout << "===" << file.name << "===\n" << file.module << "\n";
+		for (auto const& diagnostic : file.diagnostics) diagnostic.print();
+		std::cout << std::endl;
+	}
+
+	dump();
+
+	return {};  // this causes the rest of the program to crash :)
 
 	// lowering
 	auto lowered = lower();
