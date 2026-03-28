@@ -267,30 +267,81 @@ private:
 	};
 
 	struct Constraint {
-		struct NameEquality {
-			NameVar::ID a;
-			NameVar::ID b;
+		struct NameAssg {
+			NameVar::ID to;
+			NameVar::ID from;
 		};
 
-		struct TypeEquality {
-			TypeVar::ID a;
-			TypeVar::ID b;
+		struct TypeAssg {
+			TypeVar::ID to;
+			TypeVar::ID from;
 		};
 
-		struct Subtype {
-			TypeVar::ID a;
-			TypeVar::ID b;
+		struct Deref {
+			TypeVar::ID to;
+			TypeVar::ID from;
 		};
 
-		struct Never {};
+		struct Never {
+			// TODO: hold diagnostic
+		};
 
-		std::variant<NameEquality, TypeEquality, Subtype, Never> value;
+		enum class Kind { NameAssg, TypeAssg, Deref, Never };
+
+		std::variant<NameAssg, TypeAssg, Deref, Never> value;
+
+		inline constexpr Kind kind() const { return (Kind) value.index(); }
+
+		static inline Constraint name_assg(NameVar::ID to, NameVar::ID from) {
+			return {
+				NameAssg {to, from}
+			};
+		}
+
+		static inline Constraint type_assg(TypeVar::ID to, TypeVar::ID from) {
+			return {
+				TypeAssg {to, from}
+			};
+		}
+
+		static inline Constraint deref(TypeVar::ID to, TypeVar::ID from) {
+			return {
+				Deref {to, from}
+			};
+		}
+
+		static inline Constraint never() { return {Never {}}; }
+
+		inline bool is_name_assg() const { return kind() == Kind::NameAssg; }
+
+		inline bool is_type_assg() const { return kind() == Kind::TypeAssg; }
+
+		inline bool is_deref() const { return kind() == Kind::Deref; }
+
+		inline bool is_never() const { return kind() == Kind::Never; }
+
+		inline NameAssg const& get_name_assg() const { return std::get<NameAssg>(value); }
+
+		inline NameAssg& get_name_assg() { return std::get<NameAssg>(value); }
+
+		inline TypeAssg const& get_type_assg() const { return std::get<TypeAssg>(value); }
+
+		inline TypeAssg& get_type_assg() { return std::get<TypeAssg>(value); }
+
+		inline Deref const& get_deref() const { return std::get<Deref>(value); }
+
+		inline Deref& get_deref() { return std::get<Deref>(value); }
+
+		inline Never const& get_never() const { return std::get<Never>(value); }
+
+		inline Never& get_never() { return std::get<Never>(value); }
 	};
 
 	struct Branch;
 
 	struct Statement {
-		std::vector<std::variant<Constraint, Branch>> constraints;
+		std::vector<Constraint> constraints;
+		std::vector<Branch>     branches;
 	};
 
 	struct Branch {
@@ -576,6 +627,32 @@ private:
 
 	void add_unknown_symbol_diagnostic(std::string_view symbol, Span, std::vector<std::string> const& possibilities, std::string_view scope_type, FileContext::ID, bool add_import_suggestion = false);
 
+	// TODO: move all type and namevars to an infer ctx
+	struct InferCtx {
+		Statement program;
+	};
+
+	void resolve_root(AST::Identifier& identifier, Span, Scope const&, FileContext::ID, bool include_unimported);
+	void resolve_next(AST::Identifier& identifier, Span, Scope const&, FileContext::ID, bool include_unimported);
+
+	void resolve(AST::Identifier&, Span, FileContext::ID, Scope const&, bool include_unimported = false);
+	void resolve(Spanned<AST::Identifier>&, FileContext::ID, Scope const&, bool include_unimported = false);
+
+	TypeVar::ID infer(AST::Identifier&, Span, FileContext::ID, Scope const&, InferCtx&);
+
+	TypeVar::ID infer(AST::Expression&, Span, FileContext::ID, Scope const&, InferCtx&);
+	TypeVar::ID infer(Spanned<AST::Expression>&, FileContext::ID, Scope const&, InferCtx&);
+
+	void infer(Spanned<AST::Statement>&, FileContext::ID, Scope&, InferCtx&);
+
+	void infer(AST::TraitImplementation&, FileContext::ID, Scope, InferCtx&);
+	void infer(AST::Trait&, FileContext::ID, Scope, InferCtx&);
+	void infer(AST::Struct&, FileContext::ID, Scope, InferCtx&);
+	void infer(AST::Function&, FileContext::ID, Scope, InferCtx&);
+	void infer(AST::Module&, FileContext::ID, Scope, InferCtx&);
+	/// The "infer" methods create type variables and update the program statement.
+	void infer();
+
 	TypeVar from_type(AST::Type::Atom const&, FileContext::ID);
 	TypeVar from_type(AST::Type const&, FileContext::ID);
 
@@ -586,8 +663,6 @@ private:
 	/// Reconstructs an inferred type, throwing a diagnostic if it is still unknown. This should be used only for
 	/// values and expressions, as it does not allow functions or modules to be values directly.
 	IR::Type reconstruct_type(TypeVar::ID, bool allow_functions = false);
-
-	void infer();
 
 	// === LOWERING ===
 
