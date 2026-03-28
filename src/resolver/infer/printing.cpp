@@ -11,8 +11,7 @@ std::ostream& Resolver::debug_print(std::ostream& os, TypeVar const& type) const
 	case TypeVar::Kind::Module:  return os << "(module)";
 	case TypeVar::Kind::Named:   {
 		TypeVar::Named const& named = type.get_named();
-		debug_print_name(os, named.name);
-		return os;
+		return os << '@' << named.name;
 	}
 	case TypeVar::Kind::Pointer: {
 		TypeVar::Pointer const& pointer = type.get_pointer();
@@ -49,15 +48,6 @@ void Resolver::debug_print(TypeVar const& type) const {
 	debug_print(std::cout, type);
 }
 
-std::ostream& Resolver::debug_print(std::ostream& os, NameVar const& name) const {
-	if (name.has_value()) return os << '@' << name.value();
-	else return os << "@(unknown)";
-}
-
-void Resolver::debug_print(NameVar const& name) const {
-	debug_print(std::cout, name);
-}
-
 std::ostream& Resolver::debug_print_type(std::ostream& os, TypeVar::ID id) const {
 	os << "$" << id << " ";
 	return debug_print(os, get_type_var(id));
@@ -68,16 +58,6 @@ void Resolver::debug_print_type(TypeVar::ID id) const {
 	debug_print(get_type_var(id));
 }
 
-std::ostream& Resolver::debug_print_name(std::ostream& os, NameVar::ID id) const {
-	os << "?@" << id << " ";
-	return debug_print(os, get_name_var(id));
-}
-
-void Resolver::debug_print_name(NameVar::ID id) const {
-	std::cout << "?@" << id << " ";
-	debug_print(get_name_var(id));
-}
-
 std::ostream& Resolver::get_name(std::ostream& os, TypeVar const& type) const {
 	switch (type.kind()) {
 	case TypeVar::Kind::Unknown: return os << "unknown";
@@ -85,8 +65,7 @@ std::ostream& Resolver::get_name(std::ostream& os, TypeVar const& type) const {
 	case TypeVar::Kind::Module:  return os << "module";
 	case TypeVar::Kind::Named:   {
 		TypeVar::Named const& named = type.get_named();
-		get_name_name(os, named.name);
-		return os;
+		return os << '@' << named.name;
 	}
 	case TypeVar::Kind::Pointer: {
 		TypeVar::Pointer const& pointer = type.get_pointer();
@@ -125,29 +104,10 @@ std::string Resolver::get_name(TypeVar const& type) const {
 	return output.str();
 }
 
-std::ostream& Resolver::get_name(std::ostream& os, NameVar const& name) const {
-	if (name.has_value()) return os << get_single_symbol(name.value()).name;
-	else return os << "(unknown)";
-}
-
-std::string Resolver::get_name(NameVar const& name) const {
-	std::stringstream output {};
-	get_name(output, name);
-	return output.str();
-}
-
 std::ostream& Resolver::get_type_name(std::ostream& os, TypeVar::ID id) const {
 	return get_name(os, get_type_var(id));
 }
 
 std::string Resolver::get_type_name(TypeVar::ID id) const {
 	return get_name(get_type_var(id));
-}
-
-std::ostream& Resolver::get_name_name(std::ostream& os, NameVar::ID id) const {
-	return get_name(os, get_name_var(id));
-}
-
-std::string Resolver::get_name_name(NameVar::ID id) const {
-	return get_name(get_name_var(id));
 }

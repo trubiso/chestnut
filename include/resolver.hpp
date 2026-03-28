@@ -71,37 +71,12 @@ private:
 
 	// TODO: hold generics in named types
 
-	/// Holds information for a name during inference.
-	struct NameVar {
-		typedef uint32_t ID;
-
-		inline bool has_value() const { return value_.has_value(); }
-
-		inline AST::SymbolID value() const {
-			assert(has_value());
-			return value_.value();
-		}
-
-		inline void set(AST::SymbolID value) {
-			assert(!has_value());
-			value_ = value;
-		}
-
-		inline NameVar() : value_ {std::nullopt} {}
-
-		explicit inline NameVar(AST::SymbolID value) : value_ {value} {}
-
-	private:
-		/// The concrete symbol that this name points to.
-		std::optional<AST::SymbolID> value_;
-	};
-
 	/// Holds information for a type during inference.
 	struct TypeVar {
 		typedef uint32_t ID;
 
 		struct Named {
-			NameVar::ID name;
+			AST::SymbolID name;
 		};
 
 		struct Pointer {
@@ -185,7 +160,7 @@ private:
 			return TypeVar(value_t {std::in_place_index<(size_t) Kind::Module>, std::monostate {}});
 		}
 
-		inline static TypeVar make_named(NameVar::ID name) {
+		inline static TypeVar make_named(AST::SymbolID name) {
 			return TypeVar(value_t {std::in_place_index<(size_t) Kind::Named>, Named {name}});
 		}
 
@@ -267,11 +242,6 @@ private:
 	};
 
 	struct Constraint {
-		struct NameAssg {
-			NameVar::ID to;
-			NameVar::ID from;
-		};
-
 		struct TypeAssg {
 			TypeVar::ID to;
 			TypeVar::ID from;
@@ -282,17 +252,11 @@ private:
 			TypeVar::ID from;
 		};
 
-		enum class Kind { NameAssg, TypeAssg, Deref };
+		enum class Kind { TypeAssg, Deref };
 
-		std::variant<NameAssg, TypeAssg, Deref> value;
+		std::variant<TypeAssg, Deref> value;
 
 		inline constexpr Kind kind() const { return (Kind) value.index(); }
-
-		static inline Constraint name_assg(NameVar::ID to, NameVar::ID from) {
-			return {
-				NameAssg {to, from}
-			};
-		}
 
 		static inline Constraint type_assg(TypeVar::ID to, TypeVar::ID from) {
 			return {
@@ -306,15 +270,9 @@ private:
 			};
 		}
 
-		inline bool is_name_assg() const { return kind() == Kind::NameAssg; }
-
 		inline bool is_type_assg() const { return kind() == Kind::TypeAssg; }
 
 		inline bool is_deref() const { return kind() == Kind::Deref; }
-
-		inline NameAssg const& get_name_assg() const { return std::get<NameAssg>(value); }
-
-		inline NameAssg& get_name_assg() { return std::get<NameAssg>(value); }
 
 		inline TypeAssg const& get_type_assg() const { return std::get<TypeAssg>(value); }
 
@@ -493,11 +451,7 @@ private:
 
 	/// Substitution list for types.
 	SubstList type_substs_ {};
-	/// Substitution list for names.
-	SubstList name_substs_ {};
 
-	/// Mapping from NameVar::ID to NameVar. Ensure to apply substitutions before accessing.
-	std::vector<NameVar> name_pool_ {};
 	/// Mapping from TypeVar::ID to TypeVar. Ensure to apply substitutions before accessing.
 	std::vector<TypeVar> type_pool_ {};
 
@@ -506,12 +460,6 @@ private:
 
 	/// Returns an ID to create a symbol (based on the current amount of symbols on the pool!)
 	inline AST::SymbolID symbol_next() { return symbol_pool_.size(); };
-	/// Returns an ID to create a name (based on the name substitution list)
-	inline NameVar::ID name_next() {
-		NameVar::ID id = name_substs_.push();
-		assert(name_pool_.size() == id && "a name variable was created but not added to the pool");
-		return id;	
-	}
 	/// Returns an ID to create a type (based on the type substitution list)
 	inline TypeVar::ID type_next() {
 		TypeVar::ID id = type_substs_.push();
@@ -522,8 +470,6 @@ private:
 
 	/// Registers a symbol and returns its ID (the ID, span and file ID fields are overwritten).
 	AST::SymbolID register_symbol(Symbol, Span, FileContext::ID);
-	/// Registers a name and returns its ID.
-	NameVar::ID register_name(NameVar, Span, FileContext::ID);
 	/// Registers a type and returns its ID.
 	TypeVar::ID register_type(TypeVar, Span, FileContext::ID);
 
@@ -548,14 +494,8 @@ private:
 		return get_single_symbol(name.id.value());
 	}
 
-	/// Gets the corresponding name variable for the provided name variable ID.
-	inline NameVar& get_name_var(NameVar::ID id) { return name_pool_.at(name_substs_.get(id)); }
 	/// Gets the corresponding type variable for the provided type variable ID.
 	inline TypeVar& get_type_var(TypeVar::ID id) { return type_pool_.at(type_substs_.get(id)); }
-	/// Gets the corresponding name variable for the provided name variable ID.
-	inline NameVar const& get_name_var(NameVar::ID id) const {
-		return name_pool_.at(const_cast<Resolver*>(this)->name_substs_.get(id));
-	}
 	/// Gets the corresponding type variable for the provided type variable ID.
 	inline TypeVar const& get_type_var(TypeVar::ID id) const {
 		return type_pool_.at(const_cast<Resolver*>(this)->type_substs_.get(id));
@@ -569,35 +509,19 @@ private:
 	std::ostream& debug_print(std::ostream&, TypeVar const&) const;
 	/// Prints debug info for a type, without a newline.
 	void debug_print(TypeVar const&) const;
-	/// Adds debug info for a name given its ID to the provided stream.
-	std::ostream& debug_print(std::ostream&, NameVar const&) const;
-	/// Prints debug info for a name, without a newline.
-	void debug_print(NameVar const&) const;
 	/// Adds debug info for a type given its ID to the provided stream.
 	std::ostream& debug_print_type(std::ostream&, TypeVar::ID) const;
 	/// Prints debug info for a type given its ID, without a newline.
 	void debug_print_type(TypeVar::ID) const;
-	/// Adds debug info for a name given its ID to the provided stream.
-	std::ostream& debug_print_name(std::ostream&, NameVar::ID) const;
-	/// Prints debug info for a name given its ID, without a newline.
-	void debug_print_name(NameVar::ID) const;
 
 	/// Adds a name for a type suitable for a diagnostic to the provided stream.
 	std::ostream& get_name(std::ostream&, TypeVar const&) const;
 	/// Returns a name for a type suitable for a diagnostic.
 	std::string get_name(TypeVar const&) const;
-	/// Adds a name for a name suitable for a diagnostic to the provided stream.
-	std::ostream& get_name(std::ostream&, NameVar const&) const;
-	/// Returns a name for a name suitable for a diagnostic.
-	std::string get_name(NameVar const&) const;
 	/// Adds a name for a type suitable for a diagnostic to the provided stream.
 	std::ostream& get_type_name(std::ostream&, TypeVar::ID) const;
 	/// Returns a name for a type suitable for a diagnostic.
 	std::string get_type_name(TypeVar::ID) const;
-	/// Adds a name for a name suitable for a diagnostic to the provided stream.
-	std::ostream& get_name_name(std::ostream&, NameVar::ID) const;
-	/// Returns a name for a name suitable for a diagnostic.
-	std::string get_name_name(NameVar::ID) const;
 
 	/// Returns a type sample for the provided type ID.
 	Diagnostic::Sample get_type_sample(TypeVar::ID, OutFmt::Color) const;

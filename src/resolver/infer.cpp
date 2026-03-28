@@ -20,13 +20,6 @@ AST::SymbolID Resolver::register_symbol(Symbol symbol, Span span, FileContext::I
 	return symbol.id;
 }
 
-Resolver::NameVar::ID Resolver::register_name(NameVar name, Span span, FileContext::ID file_id) {
-	// span and file_id are unused, but they could prove useful later on, so we ask for them
-	NameVar::ID id = name_next();
-	name_pool_.push_back(std::move(name));
-	return id;
-}
-
 Resolver::TypeVar::ID Resolver::register_type(TypeVar type, Span span, FileContext::ID file_id) {
 	TypeVar::ID id = type_next();
 	type_pool_.push_back(std::move(type));
@@ -103,9 +96,8 @@ Resolver::TypeVar Resolver::from_type(AST::Type::Atom const& atom, FileContext::
 	case AST::Type::Atom::Kind::Char:  return TypeVar::make_char();
 	case AST::Type::Atom::Kind::Bool:  return TypeVar::make_bool();
 	case AST::Type::Atom::Kind::Named: {
-		// FIXME: this does not resolve the identifier!!! we need to create all appropriate branches
-		NameVar::ID name = register_name(NameVar(), atom.get_named().name.span, file_id);
-		return TypeVar::make_named(name);
+		// TODO: we require scope information and mutability for the atom to resolve :P
+		return TypeVar::make_bottom();
 	}
 	case AST::Type::Atom::Kind::Inferred: return TypeVar::make_unknown();
 	case AST::Type::Atom::Kind::Integer:  {
@@ -677,11 +669,6 @@ void Resolver::infer() {
 	for (ParsedFile& file : parsed_files) infer(file.module, file.file_id, {}, ctx);
 
 	for (auto const& constraint : ctx.program) switch (constraint.kind()) {
-		case Constraint::Kind::NameAssg: {
-			auto const& name_assg = constraint.get_name_assg();
-			debug_print_name(std::cout, name_assg.to) << " <- ";
-			debug_print_name(std::cout, name_assg.from) << '\n';
-		} break;
 		case Constraint::Kind::TypeAssg: {
 			auto const& type_assg = constraint.get_type_assg();
 			debug_print_type(std::cout, type_assg.to) << " <- ";
