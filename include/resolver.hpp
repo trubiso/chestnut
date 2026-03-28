@@ -282,13 +282,9 @@ private:
 			TypeVar::ID from;
 		};
 
-		struct Never {
-			// TODO: hold diagnostic
-		};
+		enum class Kind { NameAssg, TypeAssg, Deref };
 
-		enum class Kind { NameAssg, TypeAssg, Deref, Never };
-
-		std::variant<NameAssg, TypeAssg, Deref, Never> value;
+		std::variant<NameAssg, TypeAssg, Deref> value;
 
 		inline constexpr Kind kind() const { return (Kind) value.index(); }
 
@@ -310,15 +306,11 @@ private:
 			};
 		}
 
-		static inline Constraint never() { return {Never {}}; }
-
 		inline bool is_name_assg() const { return kind() == Kind::NameAssg; }
 
 		inline bool is_type_assg() const { return kind() == Kind::TypeAssg; }
 
 		inline bool is_deref() const { return kind() == Kind::Deref; }
-
-		inline bool is_never() const { return kind() == Kind::Never; }
 
 		inline NameAssg const& get_name_assg() const { return std::get<NameAssg>(value); }
 
@@ -331,21 +323,6 @@ private:
 		inline Deref const& get_deref() const { return std::get<Deref>(value); }
 
 		inline Deref& get_deref() { return std::get<Deref>(value); }
-
-		inline Never const& get_never() const { return std::get<Never>(value); }
-
-		inline Never& get_never() { return std::get<Never>(value); }
-	};
-
-	struct Branch;
-
-	struct Statement {
-		std::vector<Constraint> constraints;
-		std::vector<Branch>     branches;
-	};
-
-	struct Branch {
-		std::vector<Statement> statements;
 	};
 
 	struct Generic {};
@@ -629,7 +606,7 @@ private:
 
 	// TODO: move all type and namevars to an infer ctx
 	struct InferCtx {
-		Statement program;
+		std::vector<Constraint> program;
 	};
 
 	void resolve_root(AST::Identifier& identifier, Span, Scope const&, FileContext::ID, bool include_unimported);

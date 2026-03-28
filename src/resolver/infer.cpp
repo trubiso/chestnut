@@ -422,7 +422,7 @@ Resolver::infer(AST::Expression& expression, Span span, FileContext::ID file_id,
 			TypeVar::ID ptr_type  = infer(*operation.operand, file_id, scope, ctx);
 			TypeVar::ID expr_type = register_type(TypeVar::make_unknown(), span, file_id);
 			// $expr <- *(...: $ptr)
-			ctx.program.constraints.push_back(Constraint::deref(expr_type, ptr_type));
+			ctx.program.push_back(Constraint::deref(expr_type, ptr_type));
 			expression.type = expr_type;
 			break;
 		}
@@ -472,7 +472,7 @@ void Resolver::infer(Spanned<AST::Statement>& statement, FileContext::ID file_id
 		TypeVar::ID var_type = get_single_symbol(declare.name.value).type;
 		TypeVar::ID val_type = infer(declare.value.value(), file_id, scope, ctx);
 		// $var <- $val
-		ctx.program.constraints.push_back(Constraint::type_assg(var_type, val_type));
+		ctx.program.push_back(Constraint::type_assg(var_type, val_type));
 		return;
 	}
 	case AST::Statement::Kind::Set: {
@@ -482,7 +482,7 @@ void Resolver::infer(Spanned<AST::Statement>& statement, FileContext::ID file_id
 		TypeVar::ID lhs_type = infer(set.lhs, file_id, scope, ctx);
 		TypeVar::ID rhs_type = infer(set.rhs, file_id, scope, ctx);
 		// $lhs <- $rhs
-		ctx.program.constraints.push_back(Constraint::type_assg(lhs_type, rhs_type));
+		ctx.program.push_back(Constraint::type_assg(lhs_type, rhs_type));
 		return;
 	}
 	case AST::Statement::Kind::Expression: {
@@ -520,7 +520,7 @@ void Resolver::infer(Spanned<AST::Statement>& statement, FileContext::ID file_id
 		// TODO: signal that this is a built-in requirement, maybe through the constraint
 		TypeVar::ID bool_type = register_type(TypeVar::make_bool(), branch.condition.span, file_id);
 		// bool <- $cond
-		ctx.program.constraints.push_back(Constraint::type_assg(bool_type, cond_type));
+		ctx.program.push_back(Constraint::type_assg(bool_type, cond_type));
 		return;
 	}
 	case AST::Statement::Kind::If:
@@ -676,28 +676,21 @@ void Resolver::infer() {
 	InferCtx ctx {};
 	for (ParsedFile& file : parsed_files) infer(file.module, file.file_id, {}, ctx);
 
-	auto print_stmt = [&](Statement const& stmt) {
-		for (auto const& constraint : stmt.constraints) switch (constraint.kind()) {
-			case Constraint::Kind::NameAssg: {
-				auto const& name_assg = constraint.get_name_assg();
-				debug_print_name(std::cout, name_assg.to) << " <- ";
-				debug_print_name(std::cout, name_assg.from) << '\n';
-			} break;
-			case Constraint::Kind::TypeAssg: {
-				auto const& type_assg = constraint.get_type_assg();
-				debug_print_type(std::cout, type_assg.to) << " <- ";
-				debug_print_type(std::cout, type_assg.from) << '\n';
-			} break;
-			case Constraint::Kind::Deref: {
-				auto const& deref = constraint.get_deref();
-				debug_print_type(std::cout, deref.to) << " <- *";
-				debug_print_type(std::cout, deref.from) << '\n';
-			} break;
-			case Constraint::Kind::Never: {
-				std::cout << "never\n";
-			} break;
-			}
-	};
-
-	print_stmt(ctx.program);
+	for (auto const& constraint : ctx.program) switch (constraint.kind()) {
+		case Constraint::Kind::NameAssg: {
+			auto const& name_assg = constraint.get_name_assg();
+			debug_print_name(std::cout, name_assg.to) << " <- ";
+			debug_print_name(std::cout, name_assg.from) << '\n';
+		} break;
+		case Constraint::Kind::TypeAssg: {
+			auto const& type_assg = constraint.get_type_assg();
+			debug_print_type(std::cout, type_assg.to) << " <- ";
+			debug_print_type(std::cout, type_assg.from) << '\n';
+		} break;
+		case Constraint::Kind::Deref: {
+			auto const& deref = constraint.get_deref();
+			debug_print_type(std::cout, deref.to) << " <- *";
+			debug_print_type(std::cout, deref.from) << '\n';
+		} break;
+		}
 }
